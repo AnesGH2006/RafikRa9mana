@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { GradeAnalysisResult } from "@workspace/api-client-react/src/generated/api.schemas";
+import { GradeAnalysisResult } from "@workspace/api-client-react";
 import { motion } from "framer-motion";
 import { 
   GraduationCap, 
@@ -28,8 +28,8 @@ interface ResultsViewProps {
 }
 
 export function ResultsView({ data, onReset }: ResultsViewProps) {
-  const { t, dir } = useLanguage();
-  const { summary, students } = data;
+  const { t } = useLanguage();
+  const { summary, students, subjects } = data;
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -46,7 +46,7 @@ export function ResultsView({ data, onReset }: ResultsViewProps) {
     visible: {
       y: 0,
       opacity: 1,
-      transition: { type: "spring", stiffness: 100 },
+      transition: { type: "spring" as const, stiffness: 100 },
     },
   };
 
@@ -55,7 +55,7 @@ export function ResultsView({ data, onReset }: ResultsViewProps) {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-8"
+      className="space-y-8 w-full"
       data-testid="results-container"
     >
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -170,9 +170,11 @@ export function ResultsView({ data, onReset }: ResultsViewProps) {
                 <TableRow>
                   <TableHead className="w-16">{t("rank")}</TableHead>
                   <TableHead>{t("name")}</TableHead>
-                  <TableHead className="text-right rtl:text-left">{t("math")}</TableHead>
-                  <TableHead className="text-right rtl:text-left">{t("arabic")}</TableHead>
-                  <TableHead className="text-right rtl:text-left">{t("science")}</TableHead>
+                  {subjects.map((sub) => (
+                    <TableHead key={sub} className="text-right rtl:text-left">
+                      {t(`subject.${sub}` as keyof ReturnType<typeof useLanguage>["t"])}
+                    </TableHead>
+                  ))}
                   <TableHead className="text-right rtl:text-left font-bold">{t("average")}</TableHead>
                   <TableHead className="text-right rtl:text-left">{t("status")}</TableHead>
                 </TableRow>
@@ -183,7 +185,7 @@ export function ResultsView({ data, onReset }: ResultsViewProps) {
                     key={index}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    transition={{ delay: Math.min(index * 0.02, 1) }}
                     className={`border-b transition-colors ${
                       student.passed 
                         ? "hover:bg-emerald-500/5 dark:hover:bg-emerald-500/10" 
@@ -193,10 +195,14 @@ export function ResultsView({ data, onReset }: ResultsViewProps) {
                   >
                     <TableCell className="font-medium text-muted-foreground">#{student.rank}</TableCell>
                     <TableCell className="font-semibold">{student.name}</TableCell>
-                    <TableCell className="text-right rtl:text-left">{student.math}</TableCell>
-                    <TableCell className="text-right rtl:text-left">{student.arabic}</TableCell>
-                    <TableCell className="text-right rtl:text-left">{student.science}</TableCell>
-                    <TableCell className="text-right rtl:text-left font-bold">{student.average.toFixed(1)}</TableCell>
+                    
+                    {subjects.map((sub) => (
+                      <TableCell key={sub} className="text-right rtl:text-left">
+                        {student.subjects[sub]?.toFixed(2) || "-"}
+                      </TableCell>
+                    ))}
+
+                    <TableCell className="text-right rtl:text-left font-bold">{student.average.toFixed(2)}</TableCell>
                     <TableCell className="text-right rtl:text-left">
                       {student.passed ? (
                         <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-200">

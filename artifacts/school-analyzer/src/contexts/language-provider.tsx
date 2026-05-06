@@ -32,7 +32,7 @@ export function LanguageProvider({
     () => (localStorage.getItem(storageKey) as Language) || defaultLang
   );
 
-  const dir = language === "ar" ? "rtl" : "ltr";
+  const dir: "ltr" | "rtl" = language === "ar" ? "rtl" : "ltr";
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -40,8 +40,8 @@ export function LanguageProvider({
     root.setAttribute("lang", language);
   }, [language, dir]);
 
-  const t = (key: keyof typeof translations) => {
-    if (!translations[key]) return key;
+  const t = (key: keyof typeof translations): string => {
+    if (!translations[key]) return String(key);
     return translations[key][language];
   };
 

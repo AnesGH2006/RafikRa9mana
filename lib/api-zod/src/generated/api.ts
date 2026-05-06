@@ -8,7 +8,6 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -16,16 +15,156 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Accepts an xlsx or xls file (multipart/form-data, field name "file") and returns grade analysis
+ * @summary Get the currently authenticated user
+ */
+export const GetCurrentAuthUserHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — Bearer <sid>."),
+});
+
+export const GetCurrentAuthUserResponse = zod.object({
+  user: zod.union([
+    zod.object({
+      id: zod.string(),
+      email: zod.string().email().nullable(),
+      firstName: zod.string().nullable(),
+      lastName: zod.string().nullable(),
+      profileImageUrl: zod.string().nullable(),
+    }),
+    zod.null(),
+  ]),
+});
+
+/**
+ * @summary Start the browser OIDC login flow
+ */
+export const BeginBrowserLoginQueryParams = zod.object({
+  returnTo: zod.coerce.string().optional(),
+});
+
+/**
+ * @summary Complete the browser OIDC login flow
+ */
+export const HandleBrowserLoginCallbackQueryParams = zod.object({
+  code: zod.coerce.string().optional(),
+  state: zod.coerce.string().optional(),
+  iss: zod.coerce.string().url().optional(),
+});
+
+/**
+ * @summary Clear the session and begin OIDC logout
+ */
+export const LogoutBrowserSessionHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — Bearer <sid>."),
+});
+
+/**
+ * @summary Exchange a mobile OIDC code for a session token
+ */
+
+export const ExchangeMobileAuthorizationCodeBody = zod.object({
+  code: zod.string().min(1),
+  code_verifier: zod.string().min(1),
+  redirect_uri: zod.string().url().min(1),
+  state: zod.string().min(1),
+  nonce: zod.string().min(1).optional(),
+});
+
+export const ExchangeMobileAuthorizationCodeResponse = zod.object({
+  token: zod.string(),
+});
+
+/**
+ * @summary Delete a mobile session token
+ */
+export const LogoutMobileSessionHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — Bearer <sid>."),
+});
+
+export const LogoutMobileSessionResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary List all available subscription plans
+ */
+export const ListSubscriptionPlansResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  nameAr: zod.string(),
+  nameFr: zod.string(),
+  priceDA: zod.number(),
+  priceYear: zod.string(),
+  features: zod.array(zod.string()),
+  featuresAr: zod.array(zod.string()),
+  featuresFr: zod.array(zod.string()),
+});
+export const ListSubscriptionPlansResponse = zod.array(
+  ListSubscriptionPlansResponseItem,
+);
+
+/**
+ * @summary Get current user's subscription
+ */
+export const GetMySubscriptionHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — Bearer <sid>."),
+});
+
+export const GetMySubscriptionResponse = zod.object({
+  plan: zod.string(),
+  schoolMode: zod.string(),
+  activatedAt: zod.string(),
+  expiresAt: zod.string().nullish(),
+});
+
+/**
+ * @summary Activate a subscription plan (demo payment)
+ */
+export const ActivateSubscriptionHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — Bearer <sid>."),
+});
+
+export const ActivateSubscriptionBody = zod.object({
+  plan: zod.enum(["gratuit", "standard", "pro", "max"]),
+  schoolMode: zod.enum(["cem", "lycee"]),
+});
+
+export const ActivateSubscriptionResponse = zod.object({
+  plan: zod.string(),
+  schoolMode: zod.string(),
+  activatedAt: zod.string(),
+  expiresAt: zod.string().nullish(),
+});
+
+/**
  * @summary Upload Excel file for grade analysis
  */
+export const UploadGradesHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — Bearer <sid>."),
+});
+
 export const UploadGradesResponse = zod.object({
   students: zod.array(
     zod.object({
       name: zod.string(),
-      math: zod.number(),
-      arabic: zod.number(),
-      science: zod.number(),
+      subjects: zod.record(zod.string(), zod.number()),
       average: zod.number(),
       passed: zod.boolean(),
       rank: zod.number(),
@@ -43,4 +182,6 @@ export const UploadGradesResponse = zod.object({
   }),
   fileName: zod.string(),
   totalStudents: zod.number(),
+  schoolMode: zod.string(),
+  subjects: zod.array(zod.string()),
 });

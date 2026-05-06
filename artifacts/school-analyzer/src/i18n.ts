@@ -99,21 +99,6 @@ export const translations: TranslationMap = {
     ar: "الاسم",
     fr: "Nom",
   },
-  math: {
-    en: "Math",
-    ar: "الرياضيات",
-    fr: "Mathématiques",
-  },
-  arabic: {
-    en: "Arabic",
-    ar: "اللغة العربية",
-    fr: "Arabe",
-  },
-  science: {
-    en: "Science",
-    ar: "العلوم",
-    fr: "Sciences",
-  },
   average: {
     en: "Average",
     ar: "المتوسط",
@@ -145,5 +130,187 @@ export const translations: TranslationMap = {
     en: "Toggle Theme",
     ar: "تبديل المظهر",
     fr: "Changer de thème",
-  }
+  },
+  
+  // New translations for T001
+  "nav.analyzer": {
+    en: "Analyzer",
+    ar: "المحلل",
+    fr: "Analyseur",
+  },
+  "nav.myPlan": {
+    en: "My Plan",
+    ar: "اشتراكي",
+    fr: "Mon Abonnement",
+  },
+  "nav.logout": {
+    en: "Log Out",
+    ar: "تسجيل الخروج",
+    fr: "Déconnexion",
+  },
+  "login.hero": {
+    en: "Analyze class grades instantly",
+    ar: "حلّل نتائج قسمك في ثوانٍ",
+    fr: "Analysez les notes instantanément",
+  },
+  "login.subtitle": {
+    en: "The smartest tool for modern educators.",
+    ar: "الأداة الأذكى للمعلمين المعاصرين.",
+    fr: "L'outil le plus intelligent pour les éducateurs modernes.",
+  },
+  "login.cta": {
+    en: "Log In",
+    ar: "دخول",
+    fr: "Se connecter",
+  },
+  "login.feature1": {
+    en: "Upload Excel gradebooks easily",
+    ar: "تحميل سجلات الدرجات بسهولة",
+    fr: "Téléchargez des carnets de notes Excel facilement",
+  },
+  "login.feature2": {
+    en: "Instant statistical insights",
+    ar: "رؤى إحصائية فورية",
+    fr: "Aperçus statistiques instantanés",
+  },
+  "login.feature3": {
+    en: "CEM & Lycée modes supported",
+    ar: "يدعم التعليم المتوسط والثانوي",
+    fr: "Modes CEM et Lycée pris en charge",
+  },
+  "login.feature4": {
+    en: "Exportable analytics reports",
+    ar: "تقارير تحليلية قابلة للتصدير",
+    fr: "Rapports d'analyse exportables",
+  },
+  "pricing.title": {
+    en: "Choose Your Plan",
+    ar: "اختر باقتك",
+    fr: "Choisissez votre abonnement",
+  },
+  "pricing.subtitle": {
+    en: "Unlock the full potential of your grade analysis.",
+    ar: "أطلق العنان للإمكانيات الكاملة لتحليل الدرجات.",
+    fr: "Libérez tout le potentiel de votre analyse de notes.",
+  },
+  "pricing.currentPlan": {
+    en: "Current Plan",
+    ar: "الباقة الحالية",
+    fr: "Abonnement actuel",
+  },
+  "pricing.activate": {
+    en: "Activate",
+    ar: "تفعيل",
+    fr: "Activer",
+  },
+  "pricing.mostPopular": {
+    en: "Most Popular",
+    ar: "الأكثر شيوعاً",
+    fr: "Le plus populaire",
+  },
+  "pricing.schoolMode": {
+    en: "School Mode:",
+    ar: "الطور التعليمي:",
+    fr: "Niveau Scolaire:",
+  },
+  "pricing.cem": {
+    en: "CEM (Middle School)",
+    ar: "التعليم المتوسط",
+    fr: "CEM (Collège)",
+  },
+  "pricing.lycee": {
+    en: "Lycée (High School)",
+    ar: "التعليم الثانوي",
+    fr: "Lycée",
+  },
+  "pricing.free": {
+    en: "Free",
+    ar: "مجاني",
+    fr: "Gratuit",
+  },
+  "mode.title": {
+    en: "School Mode",
+    ar: "الطور التعليمي",
+    fr: "Niveau Scolaire",
+  },
+  "mode.cem": {
+    en: "CEM",
+    ar: "المتوسط",
+    fr: "CEM",
+  },
+  "mode.lycee": {
+    en: "Lycée",
+    ar: "الثانوي",
+    fr: "Lycée",
+  },
+  "mode.upgradeRequired": {
+    en: "Upgrade to Pro",
+    ar: "رقّ للاحترافية",
+    fr: "Passez à Pro",
+  },
+  "subject.arabic": {
+    en: "Arabic",
+    ar: "العربية",
+    fr: "Arabe",
+  },
+  "subject.french": {
+    en: "French",
+    ar: "الفرنسية",
+    fr: "Français",
+  },
+  "subject.math": {
+    en: "Math",
+    ar: "الرياضيات",
+    fr: "Mathématiques",
+  },
+  "subject.science": {
+    en: "Science",
+    ar: "العلوم",
+    fr: "Sciences",
+  },
+  "subject.islamic": {
+    en: "Islamic Ed.",
+    ar: "التربية الإسلامية",
+    fr: "Éd. islamique",
+  },
+  "subject.history": {
+    en: "History/Geo",
+    ar: "التاريخ والجغرافيا",
+    fr: "Histoire-Géo",
+  },
+  "subject.physics": {
+    en: "Physics",
+    ar: "الفيزياء",
+    fr: "Physique-Chimie",
+  },
+  "subject.english": {
+    en: "English",
+    ar: "الإنجليزية",
+    fr: "Anglais",
+  },
+  "subject.philosophy": {
+    en: "Philosophy",
+    ar: "الفلسفة",
+    fr: "Philosophie",
+  },
+  "plan.gratuit": {
+    en: "Trial",
+    ar: "تجريبي",
+    fr: "Essai",
+  },
+  "plan.standard": {
+    en: "Standard",
+    ar: "العادية",
+    fr: "Standard",
+  },
+  "plan.pro": {
+    en: "Pro",
+    ar: "الاحترافية",
+    fr: "Pro",
+  },
+  "plan.max": {
+    en: "Max",
+    ar: "الشاملة",
+    fr: "Max",
+  },
 };

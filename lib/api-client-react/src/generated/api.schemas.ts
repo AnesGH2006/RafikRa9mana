@@ -13,11 +13,96 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface ErrorEnvelope {
+  error: string;
+}
+
+export interface AuthUser {
+  id: string;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  firstName: string | null;
+  /** @nullable */
+  lastName: string | null;
+  /** @nullable */
+  profileImageUrl: string | null;
+}
+
+export interface AuthUserEnvelope {
+  user: AuthUser | null;
+}
+
+export interface MobileTokenExchangeRequest {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  code_verifier: string;
+  /** @minLength 1 */
+  redirect_uri: string;
+  /** @minLength 1 */
+  state: string;
+  /** @minLength 1 */
+  nonce?: string;
+}
+
+export interface MobileTokenExchangeSuccess {
+  token: string;
+}
+
+export const LogoutSuccessValue = {
+  success: true,
+} as const;
+export type LogoutSuccess = typeof LogoutSuccessValue;
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  nameAr: string;
+  nameFr: string;
+  priceDA: number;
+  priceYear: string;
+  features: string[];
+  featuresAr: string[];
+  featuresFr: string[];
+}
+
+export interface MySubscription {
+  plan: string;
+  schoolMode: string;
+  activatedAt: string;
+  /** @nullable */
+  expiresAt?: string | null;
+}
+
+export type ActivateSubscriptionBodyPlan =
+  (typeof ActivateSubscriptionBodyPlan)[keyof typeof ActivateSubscriptionBodyPlan];
+
+export const ActivateSubscriptionBodyPlan = {
+  gratuit: "gratuit",
+  standard: "standard",
+  pro: "pro",
+  max: "max",
+} as const;
+
+export type ActivateSubscriptionBodySchoolMode =
+  (typeof ActivateSubscriptionBodySchoolMode)[keyof typeof ActivateSubscriptionBodySchoolMode];
+
+export const ActivateSubscriptionBodySchoolMode = {
+  cem: "cem",
+  lycee: "lycee",
+} as const;
+
+export interface ActivateSubscriptionBody {
+  plan: ActivateSubscriptionBodyPlan;
+  schoolMode: ActivateSubscriptionBodySchoolMode;
+}
+
+export type StudentResultSubjects = { [key: string]: number };
+
 export interface StudentResult {
   name: string;
-  math: number;
-  arabic: number;
-  science: number;
+  subjects: StudentResultSubjects;
   average: number;
   passed: boolean;
   rank: number;
@@ -39,4 +124,21 @@ export interface GradeAnalysisResult {
   summary: GradeSummary;
   fileName: string;
   totalStudents: number;
+  schoolMode: string;
+  subjects: string[];
 }
+
+/**
+ * Opaque session token — Bearer <sid>.
+ */
+export type AuthorizationSessionHeaderParameter = string;
+
+export type BeginBrowserLoginParams = {
+  returnTo?: string;
+};
+
+export type HandleBrowserLoginCallbackParams = {
+  code?: string;
+  state?: string;
+  iss?: string;
+};
