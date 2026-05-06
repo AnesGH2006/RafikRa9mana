@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: School Grade Analyzer API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: grades
+    description: Grade analysis operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /grades/upload:
+    post:
+      operationId: uploadGrades
+      tags: [grades]
+      summary: Upload Excel file for grade analysis
+      description: Accepts an xlsx or xls file (multipart/form-data, field name "file") and returns grade analysis
+      responses:
+        "200":
+          description: Successfully parsed and analyzed grades
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GradeAnalysisResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +63,84 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    StudentResult:
+      type: object
+      properties:
+        name:
+          type: string
+        math:
+          type: number
+        arabic:
+          type: number
+        science:
+          type: number
+        average:
+          type: number
+        passed:
+          type: boolean
+        rank:
+          type: integer
+      required:
+        - name
+        - math
+        - arabic
+        - science
+        - average
+        - passed
+        - rank
+
+    GradeAnalysisResult:
+      type: object
+      properties:
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentResult"
+        summary:
+          $ref: "#/components/schemas/GradeSummary"
+        fileName:
+          type: string
+        totalStudents:
+          type: integer
+      required:
+        - students
+        - summary
+        - fileName
+        - totalStudents
+
+    GradeSummary:
+      type: object
+      properties:
+        classAverage:
+          type: number
+        highestAverage:
+          type: number
+        lowestAverage:
+          type: number
+        passRate:
+          type: number
+        passCount:
+          type: integer
+        failCount:
+          type: integer
+        topStudent:
+          type: string
+        weakestStudent:
+          type: string
+      required:
+        - classAverage
+        - highestAverage
+        - lowestAverage
+        - passRate
+        - passCount
+        - failCount
+        - topStudent
+        - weakestStudent
