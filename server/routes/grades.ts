@@ -1,154 +1,213 @@
+import crypto from "crypto";
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import multer from "multer";
-import * as XLSX from "xlsx";
-import { db, subscriptionsTable } from "../../shared/db.js";
-import { UploadGradesResponse } from "../../shared/schemas.js";
+import { and, eq, inArray } from "drizzle-orm";
+import { db, gradesTable, absencesTable, studentsTable } from "../../shared/db.js";
+import { UpsertGradesBulkBody, UpsertAbsenceBody } from "../../shared/schemas.js";
+import { getSubjectsForLevel, calcWeightedAvg } from "../../shared/subjects.js";
+import type { Niveau } from "../../shared/types.js";
 
 const router: IRouter = Router();
 
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = [
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "application/vnd.ms-excel",
-    ];
-    const allowedExt = /\.(xlsx|xls)$/i;
-    if (allowed.includes(file.mimetype) || allowedExt.test(file.originalname)) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only .xlsx and .xls files are allowed"));
-    }
-  },
+// ── GET /api/grades?studentId=&annee=&trimestre= ──────────────────────────────
+router.get("/grades", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const { studentId, annee, trimestre } = req.query as Record<string,string>;
+  const conds = [eq(gradesTable.userId, userId)];
+  if (studentId) conds.push(eq(gradesTable.studentId, studentId));
+  if (annee) conds.push(eq(gradesTable.annee, annee));
+  if (trimestre) conds.push(eq(gradesTable.trimestre, parseInt(trimestre)));
+  const rows = await db.select().from(gradesTable).where(and(...conds));
+  res.json(rows.map(r => ({ ...r, score: parseFloat(String(r.score)) })));
 });
 
-const SUBJECT_KEYS: Record<string, string[]> = {
-  name: ["name", "Name", "الاسم", "اسم", "Nom", "النقب واللقب", "prenom nom"],
-  arabic: ["arabic", "Arabic", "عربية", "اللغة العربية", "Arabe", "arab"],
-  french: ["french", "French", "فرنسية", "اللغة الفرنسية", "Français", "francais"],
-  math: ["math", "Math", "رياضيات", "Mathématiques", "maths", "mathematiques"],
-  science: ["science", "Science", "علوم", "Sciences", "sciences naturelles"],
-  islamic: ["islamic", "Islamic", "تربية إسلامية", "التربية الإسلامية", "education islamique", "islam"],
-  history: ["history", "History", "تاريخ", "التاريخ والجغرافيا", "Histoire-Géographie", "histoire"],
-  physics: ["physics", "Physics", "فيزياء", "الفيزياء والكيمياء", "Physique-Chimie", "physique"],
-  philosophy: ["philosophy", "Philosophy", "فلسفة", "الفلسفة", "Philosophie"],
-  english: ["english", "English", "إنجليزية", "اللغة الإنجليزية", "Anglais"],
-};
+// ── POST /api/grades/bulk — upsert all subjects for one student/trimestre ─────
+router.post("/grades/bulk", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const body = UpsertGradesBulkBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: "Invalid data", details: body.error.flatten() }); return; }
+  const { studentId, annee, trimestre, grades } = body.data;
 
-const CEM_SUBJECTS = ["arabic", "french", "math", "science", "islamic", "history"];
-const LYCEE_SUBJECTS = ["arabic", "french", "math", "science", "physics", "english"];
+  // Verify student belongs to user
+  const [student] = await db.select().from(studentsTable)
+    .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId)));
+  if (!student) { res.status(404).json({ error: "Student not found" }); return; }
 
-function getVal(row: Record<string, unknown>, keys: string[]): unknown {
-  for (const key of keys) {
-    if (row[key] !== undefined && row[key] !== "") return row[key];
-    const found = Object.keys(row).find((k) => k.toLowerCase() === key.toLowerCase());
-    if (found !== undefined && row[found] !== "") return row[found];
-  }
-  return undefined;
-}
+  // Delete existing grades for this student/trimestre/annee then re-insert
+  await db.delete(gradesTable).where(and(
+    eq(gradesTable.userId, userId),
+    eq(gradesTable.studentId, studentId),
+    eq(gradesTable.annee, annee),
+    eq(gradesTable.trimestre, trimestre),
+  ));
 
-const parseNum = (val: unknown): number => {
-  const n = parseFloat(String(val));
-  return isNaN(n) ? 0 : Math.max(0, Math.min(20, n));
-};
-
-const PASS_THRESHOLD = 10;
-
-router.post("/grades/upload", upload.single("file"), async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) {
-    res.status(401).json({ error: "Unauthorized. Please log in." });
-    return;
+  if (Object.keys(grades).length > 0) {
+    await db.insert(gradesTable).values(
+      Object.entries(grades).map(([subject, score]) => ({
+        id: crypto.randomBytes(8).toString("hex"),
+        userId, studentId, annee, trimestre, subject,
+        score: String(Math.max(0, Math.min(20, score))),
+      }))
+    );
   }
 
-  const [sub] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.userId, req.user.id));
-  const plan = sub?.plan ?? "gratuit";
-  const schoolMode = (req.query.mode as string) || sub?.schoolMode || "cem";
+  req.log.info({ studentId, trimestre, count: Object.keys(grades).length }, "Grades saved");
+  res.json({ success: true });
+});
 
-  if (schoolMode === "lycee" && plan !== "pro" && plan !== "max") {
-    res.status(403).json({ error: "Lycée mode requires a Pro or Max subscription." });
-    return;
+// ── GET /api/results — computed results for all students ──────────────────────
+router.get("/results", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const { annee, niveau, classe } = req.query as Record<string,string>;
+
+  const studentConds = [eq(studentsTable.userId, userId)];
+  if (annee) studentConds.push(eq(studentsTable.annee, annee));
+  if (niveau) studentConds.push(eq(studentsTable.niveau, niveau as Niveau));
+  if (classe) studentConds.push(eq(studentsTable.classe, classe));
+
+  const students = await db.select().from(studentsTable).where(and(...studentConds))
+    .orderBy(studentsTable.niveau, studentsTable.classe, studentsTable.nomPrenom);
+
+  if (!students.length) { res.json([]); return; }
+
+  const studentIds = students.map(s => s.id);
+  const allGrades = await db.select().from(gradesTable).where(
+    and(eq(gradesTable.userId, userId), inArray(gradesTable.studentId, studentIds))
+  );
+  const allAbsences = await db.select().from(absencesTable).where(
+    and(eq(absencesTable.userId, userId), inArray(absencesTable.studentId, studentIds))
+  );
+
+  // Build grade map: studentId → trimestre → subject → score
+  const gradeMap: Record<string, Record<string, Record<string, number>>> = {};
+  for (const g of allGrades) {
+    gradeMap[g.studentId] ??= {};
+    gradeMap[g.studentId][String(g.trimestre)] ??= {};
+    gradeMap[g.studentId][String(g.trimestre)]![g.subject] = parseFloat(String(g.score));
   }
 
-  if (!req.file) {
-    res.status(400).json({ error: "No file uploaded. Please upload an Excel file (.xlsx or .xls)." });
-    return;
+  // Build absence map: studentId → totals
+  const absMap: Record<string, { j: number; u: number }> = {};
+  for (const a of allAbsences) {
+    absMap[a.studentId] ??= { j: 0, u: 0 };
+    absMap[a.studentId]!.j += a.justifiedHours;
+    absMap[a.studentId]!.u += a.unjustifiedHours;
   }
 
-  let workbook: XLSX.WorkBook;
-  try {
-    workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-  } catch {
-    res.status(400).json({ error: "Could not read the file. Please ensure it is a valid Excel file." });
-    return;
-  }
+  const results = students.map(s => {
+    const scores = gradeMap[s.id] ?? {};
+    const subs = getSubjectsForLevel(s.niveau as Niveau);
 
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) {
-    res.status(400).json({ error: "The Excel file is empty or has no sheets." });
-    return;
-  }
+    const t1Avg = calcWeightedAvg(scores["1"] ?? {}, subs);
+    const t2Avg = calcWeightedAvg(scores["2"] ?? {}, subs);
+    const t3Avg = calcWeightedAvg(scores["3"] ?? {}, subs);
 
-  const sheet = workbook.Sheets[sheetName];
-  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    const avgs = [t1Avg, t2Avg, t3Avg].filter((v): v is number => v !== null);
+    const annualAvg = avgs.length > 0 ? Math.round((avgs.reduce((a, b) => a + b, 0) / avgs.length) * 100) / 100 : null;
+    const passed = annualAvg !== null ? annualAvg >= 10 : null;
+    const abs = absMap[s.id] ?? { j: 0, u: 0 };
 
-  if (!rawRows || rawRows.length === 0) {
-    res.status(400).json({ error: "The sheet has no data." });
-    return;
-  }
-
-  const rows = plan === "gratuit" ? rawRows.slice(0, 15) : rawRows;
-  const activeSubjects = schoolMode === "lycee" ? LYCEE_SUBJECTS : CEM_SUBJECTS;
-
-  const students = rows.map((row, i) => {
-    const nameVal = getVal(row, SUBJECT_KEYS["name"]!);
-    const name = String(nameVal ?? "").trim() || `Student ${i + 1}`;
-    const subjects: Record<string, number> = {};
-    for (const subj of activeSubjects) {
-      subjects[subj] = parseNum(getVal(row, SUBJECT_KEYS[subj]!));
-    }
-    const vals = Object.values(subjects);
-    const average = Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100;
-    return { name, subjects, average, passed: average >= PASS_THRESHOLD };
+    return {
+      student: s,
+      scores,
+      t1Avg, t2Avg, t3Avg, annualAvg, passed,
+      rank: null as number | null,
+      totalJustified: abs.j,
+      totalUnjustified: abs.u,
+    };
   });
 
-  if (students.length === 0) {
-    res.status(400).json({ error: "No valid student data found." });
-    return;
+  // Rank within each class
+  const byClass: Record<string, typeof results> = {};
+  for (const r of results) {
+    const key = `${r.student.niveau}-${r.student.classe}`;
+    byClass[key] ??= [];
+    byClass[key]!.push(r);
+  }
+  for (const group of Object.values(byClass)) {
+    const sorted = [...group].filter(r => r.annualAvg !== null).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+    sorted.forEach((r, i) => { r.rank = i + 1; });
   }
 
-  const sorted = [...students].sort((a, b) => b.average - a.average);
-  const ranked = students.map((s) => ({
-    ...s,
-    rank: sorted.findIndex((x) => x.name === s.name && x.average === s.average) + 1,
-  }));
+  res.json(results);
+});
 
-  const averages = students.map((s) => s.average);
-  const classAverage = Math.round((averages.reduce((a, b) => a + b, 0) / averages.length) * 100) / 100;
-  const passCount = students.filter((s) => s.passed).length;
+// ── GET /api/results/subjects ─────────────────────────────────────────────────
+router.get("/results/subjects", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const { annee, niveau, classe, trimestre } = req.query as Record<string,string>;
 
-  const result = UploadGradesResponse.parse({
-    students: ranked,
-    summary: {
-      classAverage,
-      highestAverage: Math.max(...averages),
-      lowestAverage: Math.min(...averages),
-      passRate: Math.round((passCount / students.length) * 10000) / 100,
-      passCount,
-      failCount: students.length - passCount,
-      topStudent: sorted[0]?.name ?? "",
-      weakestStudent: sorted[sorted.length - 1]?.name ?? "",
-    },
-    fileName: req.file.originalname,
-    totalStudents: students.length,
-    schoolMode,
-    subjects: activeSubjects,
-  });
+  const studentConds = [eq(studentsTable.userId, userId)];
+  if (annee) studentConds.push(eq(studentsTable.annee, annee));
+  if (niveau) studentConds.push(eq(studentsTable.niveau, niveau as Niveau));
+  if (classe) studentConds.push(eq(studentsTable.classe, classe));
+  const students = await db.select().from(studentsTable).where(and(...studentConds));
+  if (!students.length) { res.json([]); return; }
 
-  req.log.info({ fileName: req.file.originalname, totalStudents: students.length, plan, schoolMode }, "Grades analyzed");
+  const studentIds = students.map(s => s.id);
+  const gradeConds = [eq(gradesTable.userId, userId), inArray(gradesTable.studentId, studentIds)];
+  if (trimestre) gradeConds.push(eq(gradesTable.trimestre, parseInt(trimestre)));
+  const grades = await db.select().from(gradesTable).where(and(...gradeConds));
+
+  const bySubject: Record<string, number[]> = {};
+  for (const g of grades) {
+    bySubject[g.subject] ??= [];
+    bySubject[g.subject]!.push(parseFloat(String(g.score)));
+  }
+
+  const subs = getSubjectsForLevel(niveau as Niveau ?? "4AM");
+  const result = subs.map(s => {
+    const scores = bySubject[s.key] ?? [];
+    const avg = scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100 : 0;
+    return {
+      subject: s.key,
+      arLabel: s.arLabel,
+      avg,
+      min: scores.length ? Math.min(...scores) : 0,
+      max: scores.length ? Math.max(...scores) : 0,
+      passCount: scores.filter(v => v >= 10).length,
+      total: scores.length,
+    };
+  }).filter(s => s.total > 0);
+
   res.json(result);
+});
+
+// ── Absences ──────────────────────────────────────────────────────────────────
+router.get("/absences", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const { annee, studentId } = req.query as Record<string,string>;
+  const conds = [eq(absencesTable.userId, userId)];
+  if (annee) conds.push(eq(absencesTable.annee, annee));
+  if (studentId) conds.push(eq(absencesTable.studentId, studentId));
+  const rows = await db.select().from(absencesTable).where(and(...conds));
+  res.json(rows);
+});
+
+router.post("/absences", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const body = UpsertAbsenceBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: "Invalid data" }); return; }
+  const { studentId, annee, trimestre, justifiedHours, unjustifiedHours } = body.data;
+
+  await db.delete(absencesTable).where(and(
+    eq(absencesTable.userId, userId),
+    eq(absencesTable.studentId, studentId),
+    eq(absencesTable.annee, annee),
+    eq(absencesTable.trimestre, trimestre),
+  ));
+
+  const [row] = await db.insert(absencesTable).values({
+    id: crypto.randomBytes(8).toString("hex"),
+    userId, studentId, annee, trimestre, justifiedHours, unjustifiedHours,
+  }).returning();
+
+  res.json(row);
 });
 
 export default router;

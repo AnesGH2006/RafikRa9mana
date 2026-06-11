@@ -33,6 +33,8 @@ export const SchoolInfoSchema = zod.object({
   wilaya: zod.string(),
   commune: zod.string(),
   annee: zod.string(),
+  directeur: zod.string().nullable().optional(),
+  phone: zod.string().nullable().optional(),
 });
 
 export const UpsertSchoolInfoBody = zod.object({
@@ -40,6 +42,8 @@ export const UpsertSchoolInfoBody = zod.object({
   wilaya: zod.string().min(1),
   commune: zod.string().min(1),
   annee: zod.string().min(1),
+  directeur: zod.string().optional(),
+  phone: zod.string().optional(),
 });
 
 export const NiveauEnum = zod.enum(["1AM", "2AM", "3AM", "4AM"]);
@@ -87,4 +91,70 @@ export const DashboardStatsResponse = zod.object({
   admis: zod.number(),
   nonAdmis: zod.number(),
   byLevel: zod.array(LevelStatsSchema),
+});
+
+export const GradeSchema = zod.object({
+  id: zod.string(),
+  studentId: zod.string(),
+  annee: zod.string(),
+  trimestre: zod.number().int().min(1).max(3),
+  subject: zod.string(),
+  score: zod.number().min(0).max(20),
+});
+
+export const UpsertGradeBody = zod.object({
+  studentId: zod.string(),
+  annee: zod.string(),
+  trimestre: zod.number().int().min(1).max(3),
+  subject: zod.string(),
+  score: zod.number().min(0).max(20),
+});
+
+export const UpsertGradesBulkBody = zod.object({
+  studentId: zod.string(),
+  annee: zod.string(),
+  trimestre: zod.number().int().min(1).max(3),
+  grades: zod.record(zod.string(), zod.number().min(0).max(20)),
+});
+
+export const AbsenceSchema = zod.object({
+  id: zod.string(),
+  studentId: zod.string(),
+  annee: zod.string(),
+  trimestre: zod.number(),
+  justifiedHours: zod.number(),
+  unjustifiedHours: zod.number(),
+});
+
+export const UpsertAbsenceBody = zod.object({
+  studentId: zod.string(),
+  annee: zod.string(),
+  trimestre: zod.number().int().min(1).max(3),
+  justifiedHours: zod.number().int().min(0),
+  unjustifiedHours: zod.number().int().min(0),
+});
+
+// Legacy (kept for compat)
+export const UploadGradesResponse = zod.object({
+  students: zod.array(zod.object({
+    name: zod.string(),
+    subjects: zod.record(zod.number()),
+    average: zod.number(),
+    passed: zod.boolean(),
+    rank: zod.number(),
+  })),
+  summary: zod.object({
+    classAverage: zod.number(),
+    highestAverage: zod.number(),
+    lowestAverage: zod.number(),
+    passRate: zod.number(),
+    passCount: zod.number(),
+    failCount: zod.number(),
+    topStudent: zod.string(),
+    weakestStudent: zod.string(),
+  }),
+  fileName: zod.string(),
+  totalStudents: zod.number(),
+  schoolMode: zod.string(),
+  subjects: zod.array(zod.string()),
 });

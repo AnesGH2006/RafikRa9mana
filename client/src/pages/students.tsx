@@ -17,7 +17,7 @@ const LEVEL_LABELS: Record<Niveau, string> = { "1AM": "1ère AM", "2AM": "2ème 
 
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as any } },
   exit:    { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
 
@@ -308,7 +308,7 @@ export default function Students() {
                   <motion.div className="h-full bg-emerald-500 rounded-full"
                     initial={{ width: 0 }}
                     animate={{ width: `${(importResult.imported / (importResult.imported + importResult.skipped)) * 100}%` }}
-                    transition={{ duration: 1, delay: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    transition={{ duration: 1, delay: 0.35, ease: "easeOut" as any }}
                   />
                 </motion.div>
               )}

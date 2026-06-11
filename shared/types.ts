@@ -13,6 +13,8 @@ export interface SchoolInfo {
   wilaya: string;
   commune: string;
   annee: string;
+  directeur?: string | null;
+  phone?: string | null;
 }
 
 export type Niveau = "1AM" | "2AM" | "3AM" | "4AM";
@@ -58,4 +60,57 @@ export interface StudentsFilter {
   sexe?: Sexe;
   statut?: Statut;
   q?: string;
+}
+
+export interface Grade {
+  id: string;
+  studentId: string;
+  annee: string;
+  trimestre: number;
+  subject: string;
+  score: number;
+}
+
+export interface Absence {
+  id: string;
+  studentId: string;
+  annee: string;
+  trimestre: number;
+  justifiedHours: number;
+  unjustifiedHours: number;
+}
+
+// Computed student result with trimester averages
+export interface StudentResult {
+  student: Student;
+  // scores per trimestre per subject: { "1": { arabic: 14.5, ... }, "2": {...}, "3": {...} }
+  scores: Record<string, Record<string, number>>;
+  // trimester averages (weighted)
+  t1Avg: number | null;
+  t2Avg: number | null;
+  t3Avg: number | null;
+  annualAvg: number | null;
+  passed: boolean | null;
+  rank: number | null;
+  // absences
+  totalJustified: number;
+  totalUnjustified: number;
+}
+
+// Subject with metadata
+export interface SubjectDef {
+  key: string;
+  arLabel: string;
+  coef: number;
+  levels?: Niveau[]; // if undefined, all levels
+}
+
+export interface SubjectAverage {
+  subject: string;
+  arLabel: string;
+  avg: number;
+  min: number;
+  max: number;
+  passCount: number;
+  total: number;
 }

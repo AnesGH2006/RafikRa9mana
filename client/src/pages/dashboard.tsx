@@ -17,7 +17,7 @@ const LEVEL_LABELS: Record<Niveau, string> = { "1AM": "1ère AM", "2AM": "2ème 
 // ── Animation variants ────────────────────────────────────────────────────────
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as const } },
   exit:    { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
 
@@ -28,10 +28,11 @@ const containerVariants = {
 
 const cardVariants = {
   initial: { opacity: 0, y: 24, scale: 0.97 },
-  animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] } },
+  animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: "easeOut" as const } },
 };
 
-const tableRowVariants = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const tableRowVariants: any = {
   initial: { opacity: 0, x: -16 },
   animate: (i: number) => ({
     opacity: 1, x: 0,
@@ -158,7 +159,7 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: 20, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.4, ease: "easeOut" as any }}
           >
             {school ? (
               <Card className="border-blue-200 dark:border-blue-800 overflow-hidden relative bg-gradient-to-br from-blue-50 via-indigo-50/50 to-violet-50/30 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-violet-950/20">
@@ -242,12 +243,12 @@ export default function Dashboard() {
                       <motion.div
                         className="h-full bg-emerald-500 rounded-full"
                         initial={{ width: 0 }} animate={{ width: `${(stats.admis / stats.total) * 100}%` }}
-                        transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.3 }}
+                        transition={{ duration: 1.2, ease: "easeOut" as any, delay: 0.3 }}
                       />
                       <motion.div
                         className="h-full bg-red-400 rounded-full"
                         initial={{ width: 0 }} animate={{ width: `${(stats.nonAdmis / stats.total) * 100}%` }}
-                        transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.4 }}
+                        transition={{ duration: 1.2, ease: "easeOut" as any, delay: 0.4 }}
                       />
                     </div>
                   </CardContent>

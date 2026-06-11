@@ -1,0 +1,2 @@
+- [CEM App Architecture](cem-app-architecture.md) — flat client/server/shared structure; subjects + DB tables defined; sidebar sections config
+- [Framer Motion TS Quirks](framer-motion-ts.md) — ease arrays and custom variant functions cause tsc errors; use "easeOut" string + `as any` for custom variants

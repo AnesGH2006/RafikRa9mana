@@ -19,7 +19,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 // ─── Normalisation ─────────────────────────────────────────────────────────────
 function norm(s: string): string {
   return String(s ?? "")
-    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")   // diacritics + tatweel
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/\u200B|\u200C|\u200D|\uFEFF/g, "")
     .replace(/[أإآا]/g, "ا")
     .replace(/[ةه]/g, "ه")
     .replace(/ى/g, "ي")
@@ -40,7 +41,7 @@ const NOM_N    = ["اللقب","nom de famille","last name","lname","family"];
 const BIRTH_N  = ["ميلاد","naissance","birth","dob","تاريخ"];
 const LEVEL_N  = ["مستوى","niveau","level","year","grade","السنة","الصف","المستوى","الصف الدراسي"];
 const CLASS_N  = ["فوج","قسم","classe","section","class","division","group","الفوج","القسم"];
-const GENDER_N = ["جنس","sexe","genre","gender","sex","النوع","الجنس"];
+const GENDER_N = ["جنس","sexe","genre","gender","sex","النوع","الجنس","الجنس"];
 const STATUS_N = ["وضعية","حاله","حالة","statut","status","situation","انتساب","الوضعية"];
 const RESULT_N = ["نتيجه","نتيجة","résultat","resultat","result","mention","قرار","النتيجة"];
 
@@ -55,7 +56,6 @@ function cellStr(row: Record<string, unknown>, key: string | null): string {
   return String(v).trim();
 }
 
-// Detect if a row looks like a real header row (has at least level+gender or name signals)
 function isHeaderRow(row: unknown[]): boolean {
   const cells = row.map(c => norm(String(c ?? "")));
   const joined = cells.join(" ");
@@ -67,15 +67,34 @@ function isHeaderRow(row: unknown[]): boolean {
 
 // ─── Value normalisers ────────────────────────────────────────────────────────
 function normalizeGender(val: string): "M" | "F" | null {
-  const v = norm(val);
-  if (!v) return null;
-  if (/^(م$|ذ|ذكر|m|male|masculin|garcon|h\b|homme)/.test(v)) return "M";
-  if (/^(أ|انثى|اناث|f|female|feminin|fille|girl|femme)/.test(v)) return "F";
-  // single char
-  if (v.length === 1) {
-    if (["ذ","م","m","h"].includes(v)) return "M";
-    if (["ا","أ","f"].includes(v)) return "F";
+  // Strip ALL whitespace and zero-width chars before norming
+  const raw = String(val ?? "")
+    .replace(/[\u0009\u000A\u000D\u0020\u00A0\u200B\u200C\u200D\uFEFF\u3000]/g, "")
+    .trim();
+  if (!raw) return null;
+
+  const v = norm(raw);
+
+  // ── Male ──────────────────────────────────────────────────────────────────
+  if (/ذكر/.test(v))  return "M";
+  if (/^ذ$/.test(v))  return "M";
+  if (/^م$/.test(v))  return "M";   // م for مذكر
+  if (/^(m|male|masculin|garcon|garçon|homme|h)$/.test(v)) return "M";
+  if (v === "1")      return "M";   // 1=ذكر in some files
+
+  // ── Female ────────────────────────────────────────────────────────────────
+  if (/انثي|انثى|اناث|انوثه|انوثة/.test(v)) return "F";
+  if (/^ا$/.test(v))  return "F";   // ا for أنثى
+  if (/^أ$/.test(v))  return "F";
+  if (/^(f|female|feminin|féminin|fille|femme)$/.test(v)) return "F";
+  if (v === "2")      return "F";   // 2=أنثى in some files
+
+  // ── Single latin char fallback ─────────────────────────────────────────────
+  if (raw.length === 1) {
+    if (["m","h","1"].includes(raw.toLowerCase())) return "M";
+    if (["f","2"].includes(raw.toLowerCase()))     return "F";
   }
+
   return null;
 }
 
@@ -83,13 +102,11 @@ function normalizeLevel(val: string): "1AM" | "2AM" | "3AM" | "4AM" | null {
   if (!val) return null;
   const v = norm(val);
 
-  // Arabic ordinal words (most common in Algerian school files)
   if (/^(اول|اولي|اولى|سنه اول|سنة اول|premiere|1ere|1ère)/.test(v)) return "1AM";
   if (/^(ثان|ثاني|ثانيه|ثانية|deuxieme|2eme|2ème)/.test(v))          return "2AM";
   if (/^(ثالث|ثالثه|ثالثة|troisieme|3eme|3ème)/.test(v))              return "3AM";
   if (/^(رابع|رابعه|رابعة|quatrieme|4eme|4ème)/.test(v))              return "4AM";
 
-  // Extract first digit (latin or arabic-indic)
   const digits = v
     .replace(/١/g,"1").replace(/٢/g,"2").replace(/٣/g,"3").replace(/٤/g,"4")
     .replace(/[^\d]/g," ")
@@ -120,12 +137,10 @@ function normalizeResultat(val: string): "admis" | "non_admis" | null {
   return null;
 }
 
-// Arabic class letters → Latin
 const AR_CLASS: Record<string,string> = {"أ":"A","ا":"A","ب":"B","ج":"C","د":"D","ه":"E","هـ":"E","و":"F","ز":"G"};
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
-/** POST /api/students/preview — returns detected headers + 3 sample rows */
 router.post("/students/preview", upload.single("file"), async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   if (!req.file) { res.status(400).json({ error: "No file" }); return; }
@@ -136,7 +151,6 @@ router.post("/students/preview", upload.single("file"), async (req, res): Promis
   const ws = wb.Sheets[wb.SheetNames[0]!];
   const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: false, blankrows: false });
 
-  // Find header row
   let headerRowIdx = 0;
   for (let i = 0; i < Math.min(10, raw.length); i++) {
     if (isHeaderRow(raw[i] as unknown[])) { headerRowIdx = i; break; }
@@ -210,12 +224,10 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
   catch { res.status(400).json({ error: "Invalid Excel file" }); return; }
 
   const ws = wb.Sheets[wb.SheetNames[0]!];
-  // Read as 2D array first — lets us find the real header row
   const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: false, blankrows: false });
 
   if (!raw.length) { res.status(400).json({ error: "Empty file" }); return; }
 
-  // ── Find the real header row (skip school-name / logo / merged-cell rows) ──
   let headerRowIdx = 0;
   for (let i = 0; i < Math.min(10, raw.length); i++) {
     if (isHeaderRow(raw[i] as unknown[])) { headerRowIdx = i; break; }
@@ -224,13 +236,11 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
   const headerCells = (raw[headerRowIdx] as unknown[]).map(c => String(c ?? "").trim());
   const dataRows = raw.slice(headerRowIdx + 1);
 
-  // Build header→index map
   const headerIdx: Record<string, number> = {};
   headerCells.forEach((h, i) => { if (h) headerIdx[h] = i; });
 
   req.log.info({ headerRowIdx, headers: headerCells }, "Excel headers detected");
 
-  // ── Detect columns ────────────────────────────────────────────────────────
   const colName   = findCol(headerCells, NAME_N);
   const colNom    = findCol(headerCells, NOM_N);
   const colPrenom = findCol(headerCells, PRENOM_N);
@@ -243,7 +253,6 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
 
   req.log.info({ colName, colNom, colPrenom, colLevel, colClass, colGender, colStatus }, "Detected column mapping");
 
-  // Convert 2D row to object using our headers
   function rowToObj(r: unknown[]): Record<string, unknown> {
     const obj: Record<string, unknown> = {};
     headerCells.forEach((h, i) => { if (h) obj[h] = (r as unknown[])[i] ?? ""; });
@@ -256,13 +265,11 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
 
   for (let i = 0; i < dataRows.length; i++) {
     const rawRow = dataRows[i] as unknown[];
-    // Skip blank rows
     if (!rawRow || rawRow.every(c => !c || String(c).trim() === "")) { skipped++; continue; }
 
     const row = rowToObj(rawRow);
 
-    // ── Name ─────────────────────────────────────────────────────────────────
-    // Prefer colNom + colPrenom combination (e.g. اللقب + الاسم columns)
+    // ── Name ──────────────────────────────────────────────────────────────────
     let nomPrenom = "";
     if (colNom && colPrenom) {
       nomPrenom = [cellStr(row, colNom), cellStr(row, colPrenom)].filter(Boolean).join(" ");
@@ -273,7 +280,6 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
     } else if (colName) {
       nomPrenom = cellStr(row, colName);
     }
-    // Last resort: use first non-numeric string cell in the row
     if (!nomPrenom) {
       for (const h of headerCells) {
         const v = cellStr(row, h);
@@ -300,9 +306,18 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
 
     // ── Gender ────────────────────────────────────────────────────────────────
     const genderRaw = cellStr(row, colGender);
+
+    // Debug log — remove after confirming fix
+    req.log.info({
+      genderRaw,
+      genderRawHex: Buffer.from(genderRaw, "utf8").toString("hex"),
+      normed: norm(genderRaw),
+      student: nomPrenom,
+    }, "Gender debug");
+
     const sexe = normalizeGender(genderRaw);
     if (!sexe) {
-      if (errors.length < 30) errors.push(`صف ${i + headerRowIdx + 2}: جنس غير صحيح "${genderRaw}" ← "${nomPrenom}"`);
+      if (errors.length < 30) errors.push(`صف ${i + headerRowIdx + 2}: جنس غير صحيح "${genderRaw}" (hex: ${Buffer.from(genderRaw,"utf8").toString("hex")}) ← "${nomPrenom}"`);
       skipped++; continue;
     }
 
