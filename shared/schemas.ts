@@ -1,8 +1,6 @@
 import * as zod from "zod";
 
-export const HealthCheckResponse = zod.object({
-  status: zod.string(),
-});
+export const HealthCheckResponse = zod.object({ status: zod.string() });
 
 export const GetCurrentAuthUserResponse = zod.object({
   user: zod.union([
@@ -25,76 +23,68 @@ export const ExchangeMobileAuthorizationCodeBody = zod.object({
   nonce: zod.string().min(1).optional(),
 });
 
-export const ExchangeMobileAuthorizationCodeResponse = zod.object({
-  token: zod.string(),
-});
+export const ExchangeMobileAuthorizationCodeResponse = zod.object({ token: zod.string() });
+export const LogoutMobileSessionResponse = zod.object({ success: zod.boolean() });
 
-export const LogoutMobileSessionResponse = zod.object({
-  success: zod.boolean(),
-});
-
-export const ListSubscriptionPlansResponseItem = zod.object({
+export const SchoolInfoSchema = zod.object({
   id: zod.string(),
-  name: zod.string(),
-  nameAr: zod.string(),
-  nameFr: zod.string(),
-  priceDA: zod.number(),
-  priceYear: zod.string(),
-  features: zod.array(zod.string()),
-  featuresAr: zod.array(zod.string()),
-  featuresFr: zod.array(zod.string()),
-});
-export const ListSubscriptionPlansResponse = zod.array(ListSubscriptionPlansResponseItem);
-
-export const GetMySubscriptionResponse = zod.object({
-  plan: zod.string(),
-  schoolMode: zod.string(),
-  activatedAt: zod.string(),
-  expiresAt: zod.string().nullish(),
+  userId: zod.string(),
+  nom: zod.string(),
+  wilaya: zod.string(),
+  commune: zod.string(),
+  annee: zod.string(),
 });
 
-export const ActivateSubscriptionBody = zod.object({
-  plan: zod.enum(["gratuit", "standard", "pro", "max"]),
-  schoolMode: zod.enum(["cem", "lycee"]),
+export const UpsertSchoolInfoBody = zod.object({
+  nom: zod.string().min(1),
+  wilaya: zod.string().min(1),
+  commune: zod.string().min(1),
+  annee: zod.string().min(1),
 });
 
-export const ActivateSubscriptionResponse = zod.object({
-  plan: zod.string(),
-  schoolMode: zod.string(),
-  activatedAt: zod.string(),
-  expiresAt: zod.string().nullish(),
+export const NiveauEnum = zod.enum(["1AM", "2AM", "3AM", "4AM"]);
+export const SexeEnum = zod.enum(["M", "F"]);
+export const StatutEnum = zod.enum(["nouveau", "redoublant"]);
+export const ResultatEnum = zod.enum(["admis", "non_admis"]);
+
+export const StudentSchema = zod.object({
+  id: zod.string(),
+  userId: zod.string(),
+  nomPrenom: zod.string(),
+  dateNaissance: zod.string().nullable(),
+  niveau: NiveauEnum,
+  classe: zod.string(),
+  sexe: SexeEnum,
+  statut: StatutEnum,
+  resultat: ResultatEnum.nullable(),
+  annee: zod.string(),
 });
 
-export const UploadGradesResponse = zod.object({
-  students: zod.array(
-    zod.object({
-      name: zod.string(),
-      subjects: zod.record(zod.string(), zod.number()),
-      average: zod.number(),
-      passed: zod.boolean(),
-      rank: zod.number(),
-    }),
-  ),
-  summary: zod.object({
-    classAverage: zod.number(),
-    highestAverage: zod.number(),
-    lowestAverage: zod.number(),
-    passRate: zod.number(),
-    passCount: zod.number(),
-    failCount: zod.number(),
-    topStudent: zod.string(),
-    weakestStudent: zod.string(),
-  }),
-  fileName: zod.string(),
-  totalStudents: zod.number(),
-  schoolMode: zod.string(),
-  subjects: zod.array(zod.string()),
+export const ListStudentsResponse = zod.object({
+  students: zod.array(StudentSchema),
+  total: zod.number(),
 });
 
-export type AuthUser = {
-  id: string;
-  email: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  profileImageUrl: string | null;
-};
+export const ImportStudentsResponse = zod.object({
+  imported: zod.number(),
+  skipped: zod.number(),
+  errors: zod.array(zod.string()),
+});
+
+export const LevelStatsSchema = zod.object({
+  niveau: NiveauEnum,
+  total: zod.number(),
+  boys: zod.number(),
+  girls: zod.number(),
+  admis: zod.number(),
+  nonAdmis: zod.number(),
+});
+
+export const DashboardStatsResponse = zod.object({
+  total: zod.number(),
+  boys: zod.number(),
+  girls: zod.number(),
+  admis: zod.number(),
+  nonAdmis: zod.number(),
+  byLevel: zod.array(LevelStatsSchema),
+});

@@ -6,51 +6,56 @@ export interface AuthUser {
   profileImageUrl: string | null;
 }
 
-export interface SubscriptionPlan {
+export interface SchoolInfo {
   id: string;
-  name: string;
-  nameAr: string;
-  nameFr: string;
-  priceDA: number;
-  priceYear: string;
-  features: string[];
-  featuresAr: string[];
-  featuresFr: string[];
+  userId: string;
+  nom: string;
+  wilaya: string;
+  commune: string;
+  annee: string;
 }
 
-export interface MySubscription {
-  plan: string;
-  schoolMode: string;
-  activatedAt: string;
-  expiresAt?: string | null;
+export type Niveau = "1AM" | "2AM" | "3AM" | "4AM";
+export type Sexe = "M" | "F";
+export type Statut = "nouveau" | "redoublant";
+export type Resultat = "admis" | "non_admis" | null;
+
+export interface Student {
+  id: string;
+  userId: string;
+  nomPrenom: string;
+  dateNaissance: string | null;
+  niveau: Niveau;
+  classe: string;
+  sexe: Sexe;
+  statut: Statut;
+  resultat: Resultat;
+  annee: string;
 }
 
-export type StudentResultSubjects = { [key: string]: number };
-
-export interface StudentResult {
-  name: string;
-  subjects: StudentResultSubjects;
-  average: number;
-  passed: boolean;
-  rank: number;
+export interface LevelStats {
+  niveau: Niveau;
+  total: number;
+  boys: number;
+  girls: number;
+  admis: number;
+  nonAdmis: number;
 }
 
-export interface GradeSummary {
-  classAverage: number;
-  highestAverage: number;
-  lowestAverage: number;
-  passRate: number;
-  passCount: number;
-  failCount: number;
-  topStudent: string;
-  weakestStudent: string;
+export interface DashboardStats {
+  total: number;
+  boys: number;
+  girls: number;
+  admis: number;
+  nonAdmis: number;
+  byLevel: LevelStats[];
 }
 
-export interface GradeAnalysisResult {
-  students: StudentResult[];
-  summary: GradeSummary;
-  fileName: string;
-  totalStudents: number;
-  schoolMode: string;
-  subjects: string[];
+export interface StudentsFilter {
+  annee?: string;
+  niveau?: Niveau;
+  classe?: string;
+  sexe?: Sexe;
+  statut?: Statut;
+  q?: string;
 }

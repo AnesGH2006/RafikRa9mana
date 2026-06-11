@@ -1,316 +1,82 @@
 type TranslationMap = {
-  [key: string]: {
-    en: string;
-    ar: string;
-    fr: string;
-  };
+  [key: string]: { en: string; ar: string; fr: string };
 };
 
 export const translations: TranslationMap = {
-  // App
-  appName: {
-    en: "School Grade Analyzer",
-    ar: "محلل درجات المدرسة",
-    fr: "Analyseur de Notes Scolaires",
-  },
-  
-  // Upload Page
-  uploadTitle: {
-    en: "Upload Gradebook",
-    ar: "تحميل سجل الدرجات",
-    fr: "Télécharger le carnet de notes",
-  },
-  uploadDesc: {
-    en: "Select an Excel file (.xlsx, .xls) to analyze student performance.",
-    ar: "حدد ملف إكسل (.xlsx، .xls) لتحليل أداء الطلاب.",
-    fr: "Sélectionnez un fichier Excel (.xlsx, .xls) pour analyser les performances des élèves.",
-  },
-  dragDrop: {
-    en: "Drag & drop your Excel file here",
-    ar: "اسحب وأفلت ملف الإكسل هنا",
-    fr: "Glissez et déposez votre fichier Excel ici",
-  },
-  orBrowse: {
-    en: "or click to browse",
-    ar: "أو انقر للتصفح",
-    fr: "ou cliquez pour parcourir",
-  },
-  analyzing: {
-    en: "Analyzing grades...",
-    ar: "جاري تحليل الدرجات...",
-    fr: "Analyse des notes en cours...",
-  },
-  uploadError: {
-    en: "Error uploading file",
-    ar: "خطأ في تحميل الملف",
-    fr: "Erreur lors du téléchargement",
-  },
-  
-  // Summary Cards
-  summaryStats: {
-    en: "Summary Statistics",
-    ar: "إحصائيات ملخصة",
-    fr: "Statistiques Résumées",
-  },
-  classAverage: {
-    en: "Class Average",
-    ar: "متوسط الفصل",
-    fr: "Moyenne de la classe",
-  },
-  topStudent: {
-    en: "Top Student",
-    ar: "الطالب المتفوق",
-    fr: "Meilleur élève",
-  },
-  weakestStudent: {
-    en: "Needs Support",
-    ar: "يحتاج إلى دعم",
-    fr: "Besoin de soutien",
-  },
-  passRate: {
-    en: "Pass Rate",
-    ar: "نسبة النجاح",
-    fr: "Taux de réussite",
-  },
-  passCount: {
-    en: "Passed",
-    ar: "الناجحون",
-    fr: "Admis",
-  },
-  failCount: {
-    en: "Failed",
-    ar: "الراسبون",
-    fr: "Échoué",
-  },
-  
-  // Table
-  studentResults: {
-    en: "Student Results",
-    ar: "نتائج الطلاب",
-    fr: "Résultats des élèves",
-  },
-  rank: {
-    en: "Rank",
-    ar: "الرتبة",
-    fr: "Rang",
-  },
-  name: {
-    en: "Name",
-    ar: "الاسم",
-    fr: "Nom",
-  },
-  average: {
-    en: "Average",
-    ar: "المتوسط",
-    fr: "Moyenne",
-  },
-  status: {
-    en: "Status",
-    ar: "الحالة",
-    fr: "Statut",
-  },
-  pass: {
-    en: "Pass",
-    ar: "ناجح",
-    fr: "Admis",
-  },
-  fail: {
-    en: "Fail",
-    ar: "راسب",
-    fr: "Échoué",
-  },
-  
-  // Actions
-  uploadAnother: {
-    en: "Upload Another File",
-    ar: "تحميل ملف آخر",
-    fr: "Télécharger un autre fichier",
-  },
-  toggleTheme: {
-    en: "Toggle Theme",
-    ar: "تبديل المظهر",
-    fr: "Changer de thème",
-  },
-  
-  // New translations for T001
-  "nav.analyzer": {
-    en: "Analyzer",
-    ar: "المحلل",
-    fr: "Analyseur",
-  },
-  "nav.myPlan": {
-    en: "My Plan",
-    ar: "اشتراكي",
-    fr: "Mon Abonnement",
-  },
-  "nav.logout": {
-    en: "Log Out",
-    ar: "تسجيل الخروج",
-    fr: "Déconnexion",
-  },
-  "login.hero": {
-    en: "Analyze class grades instantly",
-    ar: "حلّل نتائج قسمك في ثوانٍ",
-    fr: "Analysez les notes instantanément",
-  },
-  "login.subtitle": {
-    en: "The smartest tool for modern educators.",
-    ar: "الأداة الأذكى للمعلمين المعاصرين.",
-    fr: "L'outil le plus intelligent pour les éducateurs modernes.",
-  },
-  "login.cta": {
-    en: "Log In",
-    ar: "دخول",
-    fr: "Se connecter",
-  },
-  "login.feature1": {
-    en: "Upload Excel gradebooks easily",
-    ar: "تحميل سجلات الدرجات بسهولة",
-    fr: "Téléchargez des carnets de notes Excel facilement",
-  },
-  "login.feature2": {
-    en: "Instant statistical insights",
-    ar: "رؤى إحصائية فورية",
-    fr: "Aperçus statistiques instantanés",
-  },
-  "login.feature3": {
-    en: "CEM & Lycée modes supported",
-    ar: "يدعم التعليم المتوسط والثانوي",
-    fr: "Modes CEM et Lycée pris en charge",
-  },
-  "login.feature4": {
-    en: "Exportable analytics reports",
-    ar: "تقارير تحليلية قابلة للتصدير",
-    fr: "Rapports d'analyse exportables",
-  },
-  "pricing.title": {
-    en: "Choose Your Plan",
-    ar: "اختر باقتك",
-    fr: "Choisissez votre abonnement",
-  },
-  "pricing.subtitle": {
-    en: "Unlock the full potential of your grade analysis.",
-    ar: "أطلق العنان للإمكانيات الكاملة لتحليل الدرجات.",
-    fr: "Libérez tout le potentiel de votre analyse de notes.",
-  },
-  "pricing.currentPlan": {
-    en: "Current Plan",
-    ar: "الباقة الحالية",
-    fr: "Abonnement actuel",
-  },
-  "pricing.activate": {
-    en: "Activate",
-    ar: "تفعيل",
-    fr: "Activer",
-  },
-  "pricing.mostPopular": {
-    en: "Most Popular",
-    ar: "الأكثر شيوعاً",
-    fr: "Le plus populaire",
-  },
-  "pricing.schoolMode": {
-    en: "School Mode:",
-    ar: "الطور التعليمي:",
-    fr: "Niveau Scolaire:",
-  },
-  "pricing.cem": {
-    en: "CEM (Middle School)",
-    ar: "التعليم المتوسط",
-    fr: "CEM (Collège)",
-  },
-  "pricing.lycee": {
-    en: "Lycée (High School)",
-    ar: "التعليم الثانوي",
-    fr: "Lycée",
-  },
-  "pricing.free": {
-    en: "Free",
-    ar: "مجاني",
-    fr: "Gratuit",
-  },
-  "mode.title": {
-    en: "School Mode",
-    ar: "الطور التعليمي",
-    fr: "Niveau Scolaire",
-  },
-  "mode.cem": {
-    en: "CEM",
-    ar: "المتوسط",
-    fr: "CEM",
-  },
-  "mode.lycee": {
-    en: "Lycée",
-    ar: "الثانوي",
-    fr: "Lycée",
-  },
-  "mode.upgradeRequired": {
-    en: "Upgrade to Pro",
-    ar: "رقّ للاحترافية",
-    fr: "Passez à Pro",
-  },
-  "subject.arabic": {
-    en: "Arabic",
-    ar: "العربية",
-    fr: "Arabe",
-  },
-  "subject.french": {
-    en: "French",
-    ar: "الفرنسية",
-    fr: "Français",
-  },
-  "subject.math": {
-    en: "Math",
-    ar: "الرياضيات",
-    fr: "Mathématiques",
-  },
-  "subject.science": {
-    en: "Science",
-    ar: "العلوم",
-    fr: "Sciences",
-  },
-  "subject.islamic": {
-    en: "Islamic Ed.",
-    ar: "التربية الإسلامية",
-    fr: "Éd. islamique",
-  },
-  "subject.history": {
-    en: "History/Geo",
-    ar: "التاريخ والجغرافيا",
-    fr: "Histoire-Géo",
-  },
-  "subject.physics": {
-    en: "Physics",
-    ar: "الفيزياء",
-    fr: "Physique-Chimie",
-  },
-  "subject.english": {
-    en: "English",
-    ar: "الإنجليزية",
-    fr: "Anglais",
-  },
-  "subject.philosophy": {
-    en: "Philosophy",
-    ar: "الفلسفة",
-    fr: "Philosophie",
-  },
-  "plan.gratuit": {
-    en: "Trial",
-    ar: "تجريبي",
-    fr: "Essai",
-  },
-  "plan.standard": {
-    en: "Standard",
-    ar: "العادية",
-    fr: "Standard",
-  },
-  "plan.pro": {
-    en: "Pro",
-    ar: "الاحترافية",
-    fr: "Pro",
-  },
-  "plan.max": {
-    en: "Max",
-    ar: "الشاملة",
-    fr: "Max",
-  },
+  appName: { en: "School Manager", ar: "مدير المدرسة", fr: "Gestionnaire Scolaire" },
+
+  "nav.dashboard": { en: "Dashboard", ar: "لوحة التحكم", fr: "Tableau de bord" },
+  "nav.students": { en: "Student List", ar: "قائمة التلاميذ", fr: "Liste des élèves" },
+  "nav.logout": { en: "Log Out", ar: "تسجيل الخروج", fr: "Déconnexion" },
+
+  "login.hero": { en: "Manage your CEM school efficiently", ar: "أدر متوسطتك بكفاءة", fr: "Gérez votre CEM efficacement" },
+  "login.subtitle": { en: "Student records, statistics and more.", ar: "سجلات التلاميذ والإحصائيات وأكثر.", fr: "Dossiers d'élèves, statistiques et plus." },
+  "login.cta": { en: "Log In", ar: "دخول", fr: "Se connecter" },
+  "login.feature1": { en: "Student registry with filters", ar: "سجل التلاميذ مع فلترة", fr: "Registre des élèves avec filtres" },
+  "login.feature2": { en: "Import from Excel easily", ar: "استيراد من إكسل بسهولة", fr: "Import depuis Excel facilement" },
+  "login.feature3": { en: "Dashboard with live stats", ar: "لوحة تحكم بإحصائيات مباشرة", fr: "Tableau de bord avec stats en direct" },
+  "login.feature4": { en: "CEM & Lycée support", ar: "دعم المتوسطة والثانوية", fr: "Support CEM & Lycée" },
+
+  "dashboard.title": { en: "Dashboard", ar: "لوحة التحكم", fr: "Tableau de bord" },
+  "dashboard.schoolInfo": { en: "School Information", ar: "معلومات المؤسسة", fr: "Informations de l'établissement" },
+  "dashboard.editInfo": { en: "Edit Info", ar: "تعديل المعلومات", fr: "Modifier les infos" },
+  "dashboard.schoolName": { en: "School Name", ar: "اسم المتوسطة", fr: "Nom de l'établissement" },
+  "dashboard.wilaya": { en: "Wilaya", ar: "الولاية", fr: "Wilaya" },
+  "dashboard.commune": { en: "Commune", ar: "البلدية", fr: "Commune" },
+  "dashboard.year": { en: "Academic Year", ar: "السنة الدراسية", fr: "Année scolaire" },
+  "dashboard.save": { en: "Save", ar: "حفظ", fr: "Enregistrer" },
+  "dashboard.cancel": { en: "Cancel", ar: "إلغاء", fr: "Annuler" },
+  "dashboard.noSchool": { en: "Set up your school info to get started", ar: "أدخل معلومات مؤسستك للبدء", fr: "Renseignez votre établissement pour commencer" },
+  "dashboard.setup": { en: "Set Up School", ar: "إعداد المؤسسة", fr: "Configurer l'école" },
+
+  "stats.total": { en: "Total Students", ar: "مجموع التلاميذ", fr: "Total élèves" },
+  "stats.boys": { en: "Boys", ar: "ذكور", fr: "Garçons" },
+  "stats.girls": { en: "Girls", ar: "إناث", fr: "Filles" },
+  "stats.admis": { en: "Admitted", ar: "ناجحون", fr: "Admis" },
+  "stats.nonAdmis": { en: "Failed", ar: "راسبون", fr: "Non admis" },
+  "stats.byLevel": { en: "By Level", ar: "حسب المستوى", fr: "Par niveau" },
+  "stats.level": { en: "Level", ar: "المستوى", fr: "Niveau" },
+  "stats.total_col": { en: "Total", ar: "المجموع", fr: "Total" },
+  "stats.results": { en: "Results", ar: "النتائج", fr: "Résultats" },
+  "stats.noData": { en: "No students yet. Import a file to see stats.", ar: "لا توجد بيانات. استورد ملفًا لعرض الإحصائيات.", fr: "Aucun élève. Importez un fichier pour voir les stats." },
+
+  "students.title": { en: "Student List", ar: "قائمة التلاميذ", fr: "Liste des élèves" },
+  "students.import": { en: "Import Excel", ar: "استيراد Excel", fr: "Importer Excel" },
+  "students.importing": { en: "Importing...", ar: "جارٍ الاستيراد...", fr: "Importation..." },
+  "students.delete": { en: "Delete All", ar: "حذف الكل", fr: "Tout supprimer" },
+  "students.confirmDelete": { en: "Delete all students?", ar: "حذف جميع التلاميذ؟", fr: "Supprimer tous les élèves ?" },
+  "students.confirmDeleteDesc": { en: "This action cannot be undone.", ar: "لا يمكن التراجع عن هذا الإجراء.", fr: "Cette action est irréversible." },
+  "students.confirm": { en: "Confirm", ar: "تأكيد", fr: "Confirmer" },
+  "students.search": { en: "Search by name...", ar: "ابحث بالاسم...", fr: "Rechercher par nom..." },
+  "students.filterLevel": { en: "Level", ar: "المستوى", fr: "Niveau" },
+  "students.filterClass": { en: "Class", ar: "القسم", fr: "Classe" },
+  "students.filterGender": { en: "Gender", ar: "الجنس", fr: "Genre" },
+  "students.filterStatus": { en: "Status", ar: "الحالة", fr: "Statut" },
+  "students.filterYear": { en: "Year", ar: "السنة", fr: "Année" },
+  "students.all": { en: "All", ar: "الكل", fr: "Tous" },
+  "students.allLevels": { en: "All Levels", ar: "كل المستويات", fr: "Tous niveaux" },
+  "students.allClasses": { en: "All Classes", ar: "كل الأقسام", fr: "Toutes classes" },
+  "students.allGenders": { en: "All", ar: "الكل", fr: "Tous" },
+  "students.allStatuts": { en: "All", ar: "الكل", fr: "Tous" },
+  "students.empty": { en: "No students found.", ar: "لم يتم العثور على تلاميذ.", fr: "Aucun élève trouvé." },
+  "students.importSuccess": { en: "Import successful", ar: "تم الاستيراد بنجاح", fr: "Import réussi" },
+  "students.importError": { en: "Import failed", ar: "فشل الاستيراد", fr: "Échec de l'import" },
+
+  "col.name": { en: "Full Name", ar: "الاسم واللقب", fr: "Nom et prénom" },
+  "col.birth": { en: "Date of Birth", ar: "تاريخ الميلاد", fr: "Date de naissance" },
+  "col.level": { en: "Level", ar: "المستوى", fr: "Niveau" },
+  "col.class": { en: "Class", ar: "القسم", fr: "Classe" },
+  "col.gender": { en: "Gender", ar: "الجنس", fr: "Genre" },
+  "col.status": { en: "Status", ar: "الحالة", fr: "Statut" },
+  "col.result": { en: "Result", ar: "النتيجة", fr: "Résultat" },
+
+  "val.male": { en: "Male", ar: "ذكر", fr: "Masculin" },
+  "val.female": { en: "Female", ar: "أنثى", fr: "Féminin" },
+  "val.nouveau": { en: "New", ar: "جديد", fr: "Nouveau" },
+  "val.redoublant": { en: "Repeater", ar: "معيد", fr: "Redoublant" },
+  "val.admis": { en: "Admitted", ar: "ناجح", fr: "Admis" },
+  "val.non_admis": { en: "Failed", ar: "راسب", fr: "Non admis" },
+  "val.na": { en: "—", ar: "—", fr: "—" },
+
+  toggleTheme: { en: "Toggle Theme", ar: "تبديل المظهر", fr: "Changer de thème" },
 };
