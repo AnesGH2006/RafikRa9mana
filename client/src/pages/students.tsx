@@ -49,6 +49,9 @@ export default function Students() {
 
   const classes = [...new Set(students.map(s => s.classe))].sort();
 
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
+  const [importResultOpen, setImportResultOpen] = useState(false);
+
   const handleImport = async (file: File) => {
     setImporting(true);
     const form = new FormData();
@@ -58,7 +61,8 @@ export default function Students() {
       const res = await fetch(`${BASE}api/students/import${params}`, { method: "POST", body: form, credentials: "include" });
       const data = await res.json();
       if (res.ok) {
-        toast({ title: t("students.importSuccess"), description: `${data.imported} ${t("col.name").toLowerCase()} • ${data.skipped} skipped` });
+        setImportResult(data);
+        setImportResultOpen(true);
         fetchStudents();
       } else {
         toast({ variant: "destructive", title: t("students.importError"), description: data.error });
@@ -218,6 +222,50 @@ export default function Students() {
           </div>
         </motion.div>
       )}
+
+      {/* Import Result Dialog */}
+      <Dialog open={importResultOpen} onOpenChange={setImportResultOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{importResult?.imported ? t("students.importSuccess") : t("students.importError")}</DialogTitle>
+          </DialogHeader>
+          {importResult && (
+            <div className="space-y-3">
+              <div className="flex gap-4">
+                <div className="flex-1 rounded-lg bg-green-50 dark:bg-green-950/30 p-3 text-center">
+                  <p className="text-2xl font-bold text-green-600">{importResult.imported}</p>
+                  <p className="text-xs text-muted-foreground">تم الاستيراد</p>
+                </div>
+                <div className="flex-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-600">{importResult.skipped}</p>
+                  <p className="text-xs text-muted-foreground">تم التخطي</p>
+                </div>
+              </div>
+              {importResult.errors.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">أسباب التخطي (أول {importResult.errors.length} خطأ)</p>
+                  <div className="rounded-lg border bg-muted/40 p-3 max-h-48 overflow-y-auto space-y-1">
+                    {importResult.errors.map((e, i) => (
+                      <p key={i} className="text-xs text-red-600 dark:text-red-400 font-mono">{e}</p>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    تأكد أن الملف يحتوي على أعمدة: <span className="font-semibold">الاسم، المستوى، القسم، الجنس</span>
+                  </p>
+                </div>
+              )}
+              {importResult.imported === 0 && importResult.errors.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-2">
+                  لم يتم التعرف على أعمدة الملف. تأكد أن الصف الأول يحتوي على عناوين الأعمدة.
+                </p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setImportResultOpen(false)}>حسناً</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirm Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
