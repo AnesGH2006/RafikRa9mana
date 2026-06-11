@@ -81,8 +81,16 @@ function normalizeGender(val: string): "M" | "F" | null {
 
 function normalizeLevel(val: string): "1AM" | "2AM" | "3AM" | "4AM" | null {
   if (!val) return null;
-  // extract first digit (latin or arabic-indic)
-  const digits = norm(val)
+  const v = norm(val);
+
+  // Arabic ordinal words (most common in Algerian school files)
+  if (/^(اول|اولي|اولى|سنه اول|سنة اول|premiere|1ere|1ère)/.test(v)) return "1AM";
+  if (/^(ثان|ثاني|ثانيه|ثانية|deuxieme|2eme|2ème)/.test(v))          return "2AM";
+  if (/^(ثالث|ثالثه|ثالثة|troisieme|3eme|3ème)/.test(v))              return "3AM";
+  if (/^(رابع|رابعه|رابعة|quatrieme|4eme|4ème)/.test(v))              return "4AM";
+
+  // Extract first digit (latin or arabic-indic)
+  const digits = v
     .replace(/١/g,"1").replace(/٢/g,"2").replace(/٣/g,"3").replace(/٤/g,"4")
     .replace(/[^\d]/g," ")
     .trim();
@@ -254,15 +262,18 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
     const row = rowToObj(rawRow);
 
     // ── Name ─────────────────────────────────────────────────────────────────
-    let nomPrenom = cellStr(row, colName);
-    if (!nomPrenom && colNom && colPrenom) {
+    // Prefer colNom + colPrenom combination (e.g. اللقب + الاسم columns)
+    let nomPrenom = "";
+    if (colNom && colPrenom) {
       nomPrenom = [cellStr(row, colNom), cellStr(row, colPrenom)].filter(Boolean).join(" ");
-    } else if (!nomPrenom && colNom) {
+    } else if (colNom) {
       nomPrenom = cellStr(row, colNom);
-    } else if (!nomPrenom && colPrenom) {
+    } else if (colPrenom) {
       nomPrenom = cellStr(row, colPrenom);
+    } else if (colName) {
+      nomPrenom = cellStr(row, colName);
     }
-    // Last resort: use first non-numeric string column
+    // Last resort: use first non-numeric string cell in the row
     if (!nomPrenom) {
       for (const h of headerCells) {
         const v = cellStr(row, h);
