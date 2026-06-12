@@ -263,7 +263,7 @@ export default function BEMPage() {
                   { ar: "اللغة الفرنسية",    coef: 3, color: "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300" },
                   { ar: "علوم الطبيعة",      coef: 2, color: "bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300" },
                   { ar: "العلوم الفيزيائية", coef: 2, color: "bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300" },
-                  { ar: "التاريخ والجغرافيا",coef: 2, color: "bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300" },
+                  { ar: "التاريخ والجغرافيا",coef: 3, color: "bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300" },
                   { ar: "التربية الإسلامية", coef: 2, color: "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300" },
                   { ar: "اللغة الإنجليزية", coef: 2, color: "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300" },
                   { ar: "التربية المدنية",   coef: 1, color: "bg-slate-100 dark:bg-slate-950/40 text-slate-600 dark:text-slate-300" },
