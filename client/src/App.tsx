@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, Users, Moon, Sun, LogOut, BookOpen, Menu, X,
   ClipboardList, GraduationCap, Compass, Database, Settings,
-  ChevronDown, FileSpreadsheet, BarChart3, UserX, UserMinus,
-  CalendarOff, List, CheckSquare, Archive, User,
+  ChevronDown, FileSpreadsheet, BarChart3, UserX, List, CheckSquare, User,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -19,6 +18,7 @@ import SubjectsPage from "@/pages/subjects";
 import YearEnd from "@/pages/yearend";
 import ImportPage from "@/pages/import";
 import SettingsPage from "@/pages/settings";
+import BEMPage from "@/pages/bem";
 import NotFound from "@/pages/not-found";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -49,17 +49,18 @@ const SECTIONS: SectionDef[] = [
   {
     id: "results", icon: ClipboardList, labelKey: "nav.results_section", color: "text-violet-400",
     items: [
-      { href: "/results",  icon: ClipboardList, labelKey: "nav.results"  },
-      { href: "/subjects", icon: BarChart3,     labelKey: "nav.subjects" },
-      { href: "/failed",   icon: UserX,         labelKey: "nav.failed"   },
+      { href: "/results",  icon: ClipboardList,  labelKey: "nav.results"  },
+      { href: "/subjects", icon: BarChart3,      labelKey: "nav.subjects" },
+      { href: "/failed",   icon: UserX,          labelKey: "nav.failed"   },
+      { href: "/bem",      icon: GraduationCap,  labelKey: "nav.bem"      },
     ],
   },
   {
     id: "yearend", icon: GraduationCap, labelKey: "nav.yearend_section", color: "text-emerald-400",
     items: [
-      { href: "/yearend",         icon: CheckSquare,    labelKey: "nav.yearend"      },
-      { href: "/yearend/passed",  icon: CheckSquare,    labelKey: "nav.passed_list"  },
-      { href: "/yearend/failed",  icon: UserX,          labelKey: "nav.failed_list"  },
+      { href: "/yearend",        icon: CheckSquare, labelKey: "nav.yearend"     },
+      { href: "/yearend/passed", icon: CheckSquare, labelKey: "nav.passed_list" },
+      { href: "/yearend/failed", icon: UserX,       labelKey: "nav.failed_list" },
     ],
   },
   {
@@ -71,7 +72,7 @@ const SECTIONS: SectionDef[] = [
   {
     id: "data", icon: Database, labelKey: "nav.data_section", color: "text-cyan-400",
     items: [
-      { href: "/import",  icon: FileSpreadsheet, labelKey: "nav.import"  },
+      { href: "/import", icon: FileSpreadsheet, labelKey: "nav.import" },
     ],
   },
   {
@@ -94,7 +95,7 @@ function sectionHasActive(section: SectionDef, loc: string): boolean {
 }
 
 // ── Single nav item ───────────────────────────────────────────────────────────
-function NavItem({ item, loc, depth = 0, onClick }: { item: NavItemDef; loc: string; depth?: number; onClick?: () => void }) {
+function NavItem({ item, loc, onClick }: { item: NavItemDef; loc: string; onClick?: () => void }) {
   const { t } = useLanguage();
   const active = isActive(item.href, loc);
 
@@ -125,17 +126,17 @@ function NavItem({ item, loc, depth = 0, onClick }: { item: NavItemDef; loc: str
 }
 
 // ── Collapsible section ───────────────────────────────────────────────────────
-function SidebarSection({ section, loc, onItemClick }: { section: SectionDef; loc: string; onItemClick?: () => void }) {
+function SidebarSection({ section, loc, onItemClick }: {
+  section: SectionDef; loc: string; onItemClick?: () => void;
+}) {
   const { t } = useLanguage();
   const hasActive = sectionHasActive(section, loc);
   const [open, setOpen] = useState(hasActive);
 
-  // Auto-expand when navigating to this section
   useEffect(() => { if (hasActive) setOpen(true); }, [hasActive]);
 
   return (
     <div className="space-y-0.5">
-      {/* Section header */}
       <motion.button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-start hover:bg-white/5 transition-colors group"
@@ -150,7 +151,6 @@ function SidebarSection({ section, loc, onItemClick }: { section: SectionDef; lo
         </motion.div>
       </motion.button>
 
-      {/* Items */}
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
@@ -182,7 +182,6 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
 
   return (
     <div className="flex flex-col h-full bg-slate-900 text-white overflow-hidden">
-      {/* Logo */}
       <motion.div className="px-4 py-4 border-b border-white/8 flex items-center justify-between shrink-0"
         initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
         <div className="flex items-center gap-3">
@@ -202,8 +201,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         )}
       </motion.div>
 
-      {/* Nav sections */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
         {SECTIONS.map((section, i) => (
           <motion.div key={section.id}
             initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
@@ -213,7 +211,6 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         ))}
       </nav>
 
-      {/* User row */}
       <motion.div className="px-2 pb-3 pt-2 border-t border-white/8 shrink-0"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }}>
         {user && (
@@ -266,11 +263,13 @@ function ThemeButton() {
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={t("toggleTheme")}>
         <AnimatePresence mode="wait">
           {theme === "dark" ? (
-            <motion.div key="sun" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.2 }}>
+            <motion.div key="sun" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }}
+              exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.2 }}>
               <Sun className="h-4 w-4" />
             </motion.div>
           ) : (
-            <motion.div key="moon" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.2 }}>
+            <motion.div key="moon" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }}
+              exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.2 }}>
               <Moon className="h-4 w-4" />
             </motion.div>
           )}
@@ -329,39 +328,33 @@ function ComingSoon({ title }: { title: string }) {
 // ── App layout ────────────────────────────────────────────────────────────────
 function AppLayout() {
   const [loc] = useLocation();
-
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-60 xl:w-64 shrink-0 flex-col border-e">
         <Sidebar />
       </aside>
-
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <MobileBar />
-
-        {/* Desktop toolbar */}
         <motion.div className="hidden lg:flex items-center justify-end gap-2 px-5 py-2 border-b bg-background"
           initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <LangButtons />
           <ThemeButton />
         </motion.div>
-
-        {/* Page area */}
         <main className="flex-1 overflow-y-auto">
           <AnimatePresence mode="wait" initial={false}>
             <Switch key={loc}>
-              <Route path="/"            component={Dashboard} />
-              <Route path="/students"    component={Students} />
-              <Route path="/results"     component={Results} />
-              <Route path="/subjects"    component={SubjectsPage} />
+              <Route path="/"             component={Dashboard} />
+              <Route path="/students"     component={Students} />
+              <Route path="/results"      component={Results} />
+              <Route path="/subjects"     component={SubjectsPage} />
               <Route path="/failed">{() => <YearEnd />}</Route>
-              <Route path="/yearend"     component={YearEnd} />
+              <Route path="/yearend"      component={YearEnd} />
               <Route path="/yearend/passed">{() => <YearEnd />}</Route>
               <Route path="/yearend/failed">{() => <YearEnd />}</Route>
+              <Route path="/bem"          component={BEMPage} />
               <Route path="/orientation">{() => <ComingSoon title="التوجيه المسبق" />}</Route>
-              <Route path="/import"      component={ImportPage} />
-              <Route path="/settings"    component={SettingsPage} />
+              <Route path="/import"       component={ImportPage} />
+              <Route path="/settings"     component={SettingsPage} />
               <Route path="/account">{() => <SettingsPage />}</Route>
               <Route component={NotFound} />
             </Switch>
@@ -376,7 +369,6 @@ function AppLayout() {
 function LoginScreen() {
   const { login } = useAuth();
   const { t } = useLanguage();
-
   const features = ["login.feature1", "login.feature2", "login.feature3", "login.feature4"] as const;
 
   return (
@@ -386,8 +378,6 @@ function LoginScreen() {
           animate={{ scale: [1, 1.12, 1], rotate: [0, 12, 0] }} transition={{ duration: 9, repeat: Infinity }} />
         <motion.div className="absolute -bottom-40 -start-40 w-96 h-96 rounded-full bg-violet-400/10 blur-3xl"
           animate={{ scale: [1, 1.18, 1], rotate: [0, -12, 0] }} transition={{ duration: 11, repeat: Infinity, delay: 2 }} />
-        <motion.div className="absolute top-1/2 start-1/4 w-64 h-64 rounded-full bg-emerald-400/5 blur-3xl"
-          animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 7, repeat: Infinity, delay: 1 }} />
       </div>
 
       <motion.div className="text-center max-w-xl mx-auto relative z-10">

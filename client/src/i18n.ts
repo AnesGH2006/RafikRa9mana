@@ -27,6 +27,7 @@ export const translations: TranslationMap = {
   "nav.failed_list":  { en: "Failed List",     ar: "قوائم الراسبين",   fr: "Liste des non admis" },
   "nav.final_list":   { en: "Final List",      ar: "القوائم النهائية", fr: "Listes finales" },
   "nav.orientation":  { en: "Final Orientation", ar: "التوجيه النهائي", fr: "Orientation finale" },
+  "nav.bem":          { en: "BEM Results",     ar: "نتائج BEM",        fr: "Résultats BEM" },
   "nav.import":       { en: "Import Data",     ar: "استيراد البيانات", fr: "Importer des données" },
   "nav.archive":      { en: "Archive",         ar: "أرشفة البيانات",  fr: "Archivage" },
   "nav.settings":     { en: "School Info",     ar: "معلومات المؤسسة", fr: "Infos établissement" },
