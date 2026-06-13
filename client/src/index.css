@@ -275,3 +275,18 @@ html[dir="ltr"] body {
     inset: -1px;
   }
 }
+@media print {
+  * {
+    overflow: visible !important;
+  }
+
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 1.5cm;
+  }
+}

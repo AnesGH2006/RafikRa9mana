@@ -13,56 +13,21 @@ const upload = multer({
   },
 });
 
-// BEM subjects with coefficients
 const BEM_SUBJECTS = [
-  { key: "arabic",  arLabel: "اللغة العربية",                  coef: 5,
-    aliases: ["عربية", "اللغة العربية", "عربي", "arab", "arabe", "الع", "ع"] },
-  { key: "french",  arLabel: "اللغة الفرنسية",                  coef: 3,
-    aliases: ["فرنسية", "اللغة الفرنسية", "فرنسي", "french", "français", "francais", "الف", "ف"] },
-  { key: "math",    arLabel: "الرياضيات",                       coef: 4,
-    aliases: ["رياضيات", "الرياضيات", "math", "maths", "mathematiques", "الر", "ر"] },
-  { key: "science", arLabel: "علوم الطبيعة والحياة",            coef: 2,
-    aliases: ["علوم ط", "علوم الطبيعة", "علوم طبيعية", "sciences", "svt", "علوم طبيعة", "ع ط", "علوم"] },
-  { key: "physics", arLabel: "العلوم الفيزيائية والتكنولوجية", coef: 2,
-    aliases: ["فيزياء", "فيزياء وتكنولوجيا", "العلوم الفيزيائية", "physique", "physics", "ع ف", "فيز", "تكنولوجيا"] },
-  { key: "history", arLabel: "التاريخ والجغرافيا",              coef: 3,
-    aliases: ["تاريخ", "التاريخ والجغرافيا", "تاريخ وجغرافيا", "histoire", "history", "الت", "جغرافيا"] },
-  { key: "islamic", arLabel: "التربية الإسلامية",               coef: 2,
-    aliases: ["إسلامية", "التربية الإسلامية", "اسلامية", "islamic", "islam", "ت إسلامية", "ت ا", "تربية إسلامية"] },
-  { key: "civic",   arLabel: "التربية المدنية",                 coef: 1,
-    aliases: ["مدنية", "التربية المدنية", "civic", "civique", "ت مدنية", "ت م", "تربية مدنية"] },
-  { key: "english", arLabel: "اللغة الإنجليزية",                coef: 2,
-    aliases: ["إنجليزية", "اللغة الإنجليزية", "انجليزية", "english", "anglais", "الإ", "انجليزي"] },
-  { key: "pe",      arLabel: "التربية البدنية والرياضية",       coef: 1,
-    aliases: ["بدنية", "التربية البدنية", "ب ر", "pe", "eps", "sport", "بدني", "رياضة"] },
+  { key: "math",    arLabel: "الرياضيات",                       coef: 4 },
+  { key: "arabic",  arLabel: "اللغة العربية",                   coef: 5 },
+  { key: "french",  arLabel: "اللغة الفرنسية",                  coef: 3 },
+  { key: "english", arLabel: "اللغة الإنجليزية",                coef: 2 },
+  { key: "islamic", arLabel: "التربية الإسلامية",               coef: 2 },
+  { key: "civic",   arLabel: "التربية المدنية",                 coef: 1 },
+  { key: "history", arLabel: "التاريخ والجغرافيا",              coef: 3 },
+  { key: "science", arLabel: "علوم الطبيعة والحياة",            coef: 2 },
+  { key: "physics", arLabel: "العلوم الفيزيائية والتكنولوجية", coef: 2 },
+  { key: "pe",      arLabel: "التربية البدنية والرياضية",       coef: 1 },
 ];
-
-const NAME_ALIASES = [
-  "الاسم واللقب", "اللقب والاسم", "الاسم الكامل", "اسم ولقب",
-  "الاسم", "اللقب", "nom et prénom", "nom", "name", "prenom", "إسم",
-  "التلميذ", "اسم التلميذ", "المتعلم", "اسم المتعلم",
-];
-
-const LAQAB_ALIASES = ["اللقب", "laqab", "nom de famille", "last name", "lastname"];
-const ISM_ALIASES   = ["الاسم", "prenom", "first name", "firstname", "prénom"];
-
-// Columns to skip when doing fallback name detection
-const SKIP_COL_ALIASES = ["رقم", "n°", "num", "رقم التسجيل", "no", "#"];
 
 function normalise(s: string): string {
-  return String(s).toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-}
-
-function matchesAlias(header: string, aliases: string[]): boolean {
-  const h = normalise(header);
-  return aliases.some(a => {
-    const an = normalise(a);
-    return h === an || h.includes(an) || an.includes(h);
-  });
-}
-
-function findCol(headers: string[], aliases: string[]): string | null {
-  return headers.find(h => matchesAlias(h, aliases)) ?? null;
+  return String(s).toLowerCase().replace(/\s+/g, "").replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 function parseScore(val: unknown): number | null {
@@ -71,33 +36,46 @@ function parseScore(val: unknown): number | null {
   return isNaN(n) ? null : Math.max(0, Math.min(20, n));
 }
 
-/** Pick the most likely "name" column as a fallback when no alias matched */
-function guessFallbackNameCol(
-  headers: string[],
-  subjectColIndices: Set<number>,
-  dataRows: unknown[][]
-): string | null {
-  for (let i = 0; i < headers.length; i++) {
-    const h = headers[i];
-    if (!h || !h.trim()) continue;
-    if (subjectColIndices.has(i)) continue;
-    if (matchesAlias(h, SKIP_COL_ALIASES)) continue;
-
-    // Check that this column has mostly text values in data rows
-    const sampleRows = dataRows.slice(0, Math.min(10, dataRows.length));
-    const nonEmpty = sampleRows
-      .map(r => (r as unknown[])[i])
-      .filter(v => v !== null && v !== undefined && String(v).trim() !== "");
-
-    if (nonEmpty.length === 0) continue;
-
-    const textCount = nonEmpty.filter(v => isNaN(parseFloat(String(v)))).length;
-    if (textCount / nonEmpty.length >= 0.6) return h;
-  }
+function detectSubjectKey(header: string): string | null {
+  const h = normalise(header);
+  if (h.includes("رياضيات")) return "math";
+  if (h.includes("عربية") || h.includes("العربية")) return "arabic";
+  if (h.includes("فرنسية") || h.includes("الفرنسية")) return "french";
+  if (h.includes("إنجليزية") || h.includes("الإنجليزية") || h.includes("انجليزية")) return "english";
+  if (h.includes("إسلامية") || h.includes("اسلامية")) return "islamic";
+  if (h.includes("مدنية")) return "civic";
+  if (h.includes("ميلاد")) return null;
+  if (h.includes("تاريخ") || h.includes("جغرافيا")) return "history";
+  if (h.includes("علومط") || (h.includes("علوم") && h.includes("ط"))) return "science";
+  if (h.includes("فيزياء")) return "physics";
+  if (h.includes("بدنية")) return "pe";
   return null;
 }
 
-// POST /api/bem/analyze
+function isNameColumn(header: string): boolean {
+  const h = normalise(header);
+  return h.includes("لقب") || h.includes("اسم") || h.includes("إسم") ||
+    h.includes("nom") || h.includes("name") || h.includes("prenom") ||
+    h.includes("متعلم") || h.includes("تلميذ");
+}
+
+function isAverageColumn(header: string): boolean {
+  const h = normalise(header);
+  return (h.includes("معدل") && (h.includes("شتم") || h.includes("bem") ||
+    h.includes("انتقال") || h.includes("إنتقال"))) || h === "معدل";
+}
+
+function detectGender(name: string): "male" | "female" | "unknown" {
+  const femaleSuffixes = ["ة", "ى", "اء", "ين", "ينة", "ية"];
+  const maleNames = ["محمد", "أحمد", "علي", "عمر", "يوسف", "إبراهيم", "خالد", "عبد"];
+  const femaleNames = ["فاطمة", "عائشة", "مريم", "زينب", "سارة", "نور", "هند", "ليلى", "أمينة", "خديجة", "سلمى", "رقية", "حفصة", "أسماء", "رحمة", "وسام", "إيمان", "هاجر", "آية", "نجاة"];
+  const n = name.trim();
+  for (const fn of femaleNames) if (n.includes(fn)) return "female";
+  for (const mn of maleNames) if (n.includes(mn)) return "male";
+  for (const sf of femaleSuffixes) if (n.endsWith(sf) && n.length > sf.length + 2) return "female";
+  return "unknown";
+}
+
 router.post("/bem/analyze", upload.single("file"), async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
@@ -110,135 +88,87 @@ router.post("/bem/analyze", upload.single("file"), async (req, res): Promise<voi
   if (!sheetName) { res.status(400).json({ error: "Empty file" }); return; }
 
   const sheet = wb.Sheets[sheetName];
-  const allRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", header: 1 }) as unknown[][];
+  const allRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { defval: null, header: 1 }) as unknown[][];
 
-  // ── Find header row ────────────────────────────────────────────────────────
   let headerRowIndex = -1;
   let headers: string[] = [];
-
-  for (let i = 0; i < Math.min(15, allRows.length); i++) {
-    const row = (allRows[i] ?? []) as unknown[];
-    const strs = row.map(c => String(c ?? "").trim()).filter(Boolean);
-    const textCells = strs.filter(s => isNaN(parseFloat(s)));
-    if (textCells.length >= 2) {
+  for (let i = 0; i < Math.min(20, allRows.length); i++) {
+    const row = allRows[i] as unknown[];
+    const textCells = row.filter(c => typeof c === "string" && c.trim().length > 1);
+    if (textCells.length >= 3) {
       headerRowIndex = i;
-      headers = row.map(c => String(c ?? "").trim());
+      headers = row.map(c => (c == null ? "" : String(c).trim()));
       break;
     }
   }
 
-  // Last resort: use row 0 as headers even if it looks numeric-ish
-  if (headerRowIndex === -1 && allRows.length > 0) {
-    headerRowIndex = 0;
-    headers = (allRows[0] as unknown[]).map(c => String(c ?? "").trim());
-  }
-
-  if (headers.length === 0) {
+  if (headerRowIndex === -1) {
     res.status(400).json({ error: "Could not detect header row" });
     return;
   }
 
-  // ── Map columns ────────────────────────────────────────────────────────────
-  const subjectCols: Record<string, number> = {};
-  for (const subj of BEM_SUBJECTS) {
-    const col = findCol(headers, subj.aliases);
-    if (col) subjectCols[subj.key] = headers.indexOf(col);
+  let nameColIdx = -1;
+  let avgColIdx  = -1;
+  const subjectColMap: Record<string, number> = {};
+
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i];
+    if (!h) continue;
+    if (nameColIdx === -1 && isNameColumn(h)) { nameColIdx = i; continue; }
+    if (avgColIdx  === -1 && isAverageColumn(h)) { avgColIdx = i; continue; }
+    const subjKey = detectSubjectKey(h);
+    if (subjKey && !(subjKey in subjectColMap)) subjectColMap[subjKey] = i;
   }
 
-  const subjectColIndexSet = new Set(Object.values(subjectCols));
-  const dataRows = allRows.slice(headerRowIndex + 1).filter(r => {
-    const row = r as unknown[];
-    return row.some(c => c !== null && c !== undefined && String(c).trim() !== "");
-  });
+  const dataRows = allRows.slice(headerRowIndex + 1);
 
-  // Name column detection (with fallback)
-  let nameCol   = findCol(headers, NAME_ALIASES);
-  const laqabCol  = findCol(headers, LAQAB_ALIASES);
-  const ismCol    = findCol(headers, ISM_ALIASES);
-
-  if (!nameCol && !laqabCol && !ismCol) {
-    nameCol = guessFallbackNameCol(headers, subjectColIndexSet, dataRows);
-  }
-
-  // ── Parse students ─────────────────────────────────────────────────────────
   const students: Array<{
-    name: string;
+    name: string; gender: "male" | "female" | "unknown";
     scores: Record<string, number | null>;
-    totalScore: number;
-    totalCoef: number;
-    average: number | null;
-    passed: boolean | null;
-    rank: number;
+    average: number | null; passed: boolean | null; rank: number;
   }> = [];
 
   for (const rawRow of dataRows) {
     const row = rawRow as unknown[];
-    if (!row || row.length === 0) continue;
+    if (!row || row.every(c => c === null || c === "")) continue;
+    const name = nameColIdx >= 0 ? String(row[nameColIdx] ?? "").trim() : "";
+    if (!name || !isNaN(Number(name))) continue;
 
-    const namedRow: Record<string, unknown> = {};
-    headers.forEach((h, i) => { namedRow[h] = row[i]; });
-
-    // Build name
-    let name = "";
-    if (nameCol && namedRow[nameCol] !== undefined && String(namedRow[nameCol]).trim()) {
-      name = String(namedRow[nameCol]).trim();
-    } else if (laqabCol && ismCol) {
-      const l = String(namedRow[laqabCol] ?? "").trim();
-      const f = String(namedRow[ismCol] ?? "").trim();
-      name = [l, f].filter(Boolean).join(" ");
-    } else if (laqabCol) {
-      name = String(namedRow[laqabCol] ?? "").trim();
-    }
-
-    // Skip clearly invalid rows
-    if (!name || name === "0" || !isNaN(parseFloat(name))) continue;
-    // Skip header-like repeating rows
-    if (matchesAlias(name, NAME_ALIASES)) continue;
-
-    // Parse scores
     const scores: Record<string, number | null> = {};
     for (const subj of BEM_SUBJECTS) {
-      const ci = subjectCols[subj.key];
+      const ci = subjectColMap[subj.key];
       scores[subj.key] = ci !== undefined ? parseScore(row[ci]) : null;
     }
 
-    // Weighted average
-    let totalScore = 0;
-    let totalCoef  = 0;
-    for (const subj of BEM_SUBJECTS) {
-      const s = scores[subj.key];
-      if (s !== null) { totalScore += s * subj.coef; totalCoef += subj.coef; }
+    let average: number | null = null;
+    if (avgColIdx >= 0) average = parseScore(row[avgColIdx]);
+    if (average === null) {
+      let totalScore = 0, totalCoef = 0;
+      for (const subj of BEM_SUBJECTS) {
+        const s = scores[subj.key];
+        if (s !== null) { totalScore += s * subj.coef; totalCoef += subj.coef; }
+      }
+      if (totalCoef > 0) average = Math.round((totalScore / totalCoef) * 100) / 100;
     }
-    const average = totalCoef > 0 ? Math.round((totalScore / totalCoef) * 100) / 100 : null;
 
     students.push({
-      name, scores, totalScore, totalCoef,
-      average, passed: average !== null ? average >= 10 : null, rank: 0,
+      name, gender: detectGender(name), scores, average,
+      passed: average !== null ? average >= 10 : null, rank: 0,
     });
   }
 
   if (students.length === 0) {
-    // Return helpful debug info so you can see exactly what the parser found
     res.status(400).json({
       error: "No valid student data found in file",
-      debug: {
-        headerRowIndex,
-        detectedHeaders: headers,
-        nameCol,
-        laqabCol,
-        ismCol,
-        subjectCols,
-        sampleRows: allRows.slice(headerRowIndex + 1, headerRowIndex + 4),
-      },
+      debug: { headerRowIndex, headers, nameColIdx, avgColIdx, subjectColMap,
+               sample: allRows.slice(headerRowIndex + 1, headerRowIndex + 3) },
     });
     return;
   }
 
-  // ── Sort + rank ────────────────────────────────────────────────────────────
-  const sorted = [...students]
-    .filter(s => s.average !== null)
+  // Sort + rank
+  const sorted = [...students].filter(s => s.average !== null)
     .sort((a, b) => (b.average ?? 0) - (a.average ?? 0));
-
   sorted.forEach((s, i) => { s.rank = i + 1; });
   const noAvg = students.filter(s => s.average === null);
   const allRanked = [...sorted, ...noAvg];
@@ -248,22 +178,57 @@ router.post("/bem/analyze", upload.single("file"), async (req, res): Promise<voi
     ? Math.round((sorted.reduce((sum, s) => sum + (s.average ?? 0), 0) / sorted.length) * 100) / 100
     : null;
 
-  const detectedSubjects = BEM_SUBJECTS.filter(s => subjectCols[s.key] !== undefined);
+  // Gender stats
+  const males   = students.filter(s => s.gender === "male");
+  const females = students.filter(s => s.gender === "female");
+  const genderStats = {
+    males:          males.length,
+    females:        females.length,
+    unknown:        students.filter(s => s.gender === "unknown").length,
+    malePass:       males.filter(s => s.passed).length,
+    maleFail:       males.filter(s => s.passed === false).length,
+    femalePass:     females.filter(s => s.passed).length,
+    femaleFail:     females.filter(s => s.passed === false).length,
+    malePassRate:   males.length > 0 ? Math.round((males.filter(s => s.passed).length / males.length) * 10000) / 100 : 0,
+    femalePassRate: females.length > 0 ? Math.round((females.filter(s => s.passed).length / females.length) * 10000) / 100 : 0,
+  };
+
+  // Subject stats
+  const detectedSubjects = BEM_SUBJECTS.filter(s => subjectColMap[s.key] !== undefined);
+  const subjectStats = detectedSubjects.map(subj => {
+    const scores = students.map(s => s.scores[subj.key]).filter((v): v is number => v !== null);
+    const passC  = scores.filter(v => v >= 10).length;
+    const avg    = scores.length > 0
+      ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
+      : null;
+    return {
+      key: subj.key, arLabel: subj.arLabel, coef: subj.coef,
+      avg, passCount: passC, total: scores.length,
+      passRate: scores.length > 0 ? Math.round((passC / scores.length) * 10000) / 100 : 0,
+    };
+  });
+
+  // Score distribution (1-point buckets)
+  const scoreDistribution = Array.from({ length: 20 }, (_, i) => ({
+    range: String(i),
+    count: students.filter(s => s.average !== null && Math.floor(s.average) === i).length,
+  }));
 
   req.log.info({ file: req.file.originalname, total: students.length, passed: passCount }, "BEM analyzed");
 
   res.json({
     students: allRanked,
     summary: {
-      total: students.length,
-      withAvg: sorted.length,
-      passCount,
-      failCount: sorted.filter(s => !s.passed).length,
+      total: students.length, withAvg: sorted.length,
+      passCount, failCount: sorted.filter(s => !s.passed).length,
       passRate: sorted.length > 0 ? Math.round((passCount / sorted.length) * 10000) / 100 : 0,
       classAvg,
       first: sorted[0] ?? null,
       last:  sorted[sorted.length - 1] ?? null,
     },
+    genderStats,
+    subjectStats,
+    scoreDistribution,
     detectedSubjects: detectedSubjects.map(s => ({ key: s.key, arLabel: s.arLabel, coef: s.coef })),
     fileName: req.file.originalname,
   });

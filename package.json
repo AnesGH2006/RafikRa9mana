@@ -6,6 +6,10 @@
   "scripts": {
     "dev:client": "vite --config vite.config.ts --host 0.0.0.0",
     "dev:server": "tsx watch server/index.ts",
+    "build:client": "vite build --config vite.config.ts",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --outdir=dist --format=esm --packages=external",
+    "build": "pnpm run build:client && pnpm run build:server",
+    "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
