@@ -1,33 +1,120 @@
-import type { SubjectDef, Niveau } from "./types.js";
+// Algerian middle school (CEM) subject coefficients
+// Source: Official Algerian Ministry of Education grading system
 
-// CEM subject definitions (Algerian curriculum)
-export const CEM_SUBJECTS: SubjectDef[] = [
-  { key: "arabic",  arLabel: "اللغة العربية",            coef: 3 },
-  { key: "french",  arLabel: "اللغة الفرنسية",            coef: 2 },
-  { key: "math",    arLabel: "الرياضيات",                coef: 3 },
-  { key: "science", arLabel: "علوم الطبيعة والحياة",      coef: 2 },
-  { key: "physics", arLabel: "العلوم الفيزيائية",         coef: 2, levels: ["2AM","3AM","4AM"] },
-  { key: "history", arLabel: "التاريخ والجغرافيا",        coef: 2 },
-  { key: "islamic", arLabel: "التربية الإسلامية",         coef: 2 },
-  { key: "civic",   arLabel: "التربية المدنية",            coef: 1 },
-  { key: "english", arLabel: "اللغة الإنجليزية",          coef: 1 },
-  { key: "pe",      arLabel: "التربية البدنية والرياضية",  coef: 1 },
+export interface Subject {
+  key: string;
+  arLabel: string;
+  frLabel: string;
+  coef: number;
+}
+
+// ── 1AM & 2AM ─────────────────────────────────────────────────────────────────
+const SUBJECTS_1_2AM: Subject[] = [
+  { key: "arabe",        arLabel: "اللغة العربية",                    frLabel: "Langue Arabe",         coef: 3 },
+  { key: "maths",        arLabel: "الرياضيات",                        frLabel: "Mathématiques",        coef: 3 },
+  { key: "francais",     arLabel: "اللغة الفرنسية",                   frLabel: "Langue Française",     coef: 2 },
+  { key: "anglais",      arLabel: "اللغة الإنجليزية",                  frLabel: "Langue Anglaise",      coef: 2 },
+  { key: "histoire_geo", arLabel: "التاريخ والجغرافيا",                frLabel: "Histoire-Géographie",  coef: 2 },
+  { key: "svt",          arLabel: "علوم الطبيعة والحياة",              frLabel: "SVT",                  coef: 2 },
+  { key: "physique",     arLabel: "العلوم الفيزيائية والتكنولوجيا",    frLabel: "Physique-Technologie", coef: 2 },
+  { key: "islam",        arLabel: "التربية الإسلامية",                 frLabel: "Éducation Islamique",  coef: 1 },
+  { key: "civique",      arLabel: "التربية المدنية",                   frLabel: "Éducation Civique",    coef: 1 },
+  { key: "arts",         arLabel: "التربية التشكيلية / الموسيقية",     frLabel: "Arts / Musique",       coef: 1 },
+  { key: "eps",          arLabel: "التربية البدنية والرياضية",          frLabel: "EPS",                  coef: 1 },
+  { key: "amazigh",      arLabel: "اللغة الأمازيغية",                  frLabel: "Langue Amazighe",      coef: 1 },
 ];
 
-export function getSubjectsForLevel(niveau: Niveau): SubjectDef[] {
-  return CEM_SUBJECTS.filter(s => !s.levels || s.levels.includes(niveau));
+// ── 3AM — identical to 1AM/2AM ────────────────────────────────────────────────
+const SUBJECTS_3AM: Subject[] = [
+  { key: "arabe",        arLabel: "اللغة العربية",                    frLabel: "Langue Arabe",         coef: 3 },
+  { key: "maths",        arLabel: "الرياضيات",                        frLabel: "Mathématiques",        coef: 3 },
+  { key: "francais",     arLabel: "اللغة الفرنسية",                   frLabel: "Langue Française",     coef: 2 },
+  { key: "anglais",      arLabel: "اللغة الإنجليزية",                  frLabel: "Langue Anglaise",      coef: 2 },
+  { key: "histoire_geo", arLabel: "التاريخ والجغرافيا",                frLabel: "Histoire-Géographie",  coef: 2 },
+  { key: "svt",          arLabel: "علوم الطبيعة والحياة",              frLabel: "SVT",                  coef: 2 },
+  { key: "physique",     arLabel: "العلوم الفيزيائية والتكنولوجيا",    frLabel: "Physique-Technologie", coef: 2 },
+  { key: "islam",        arLabel: "التربية الإسلامية",                 frLabel: "Éducation Islamique",  coef: 1 },
+  { key: "civique",      arLabel: "التربية المدنية",                   frLabel: "Éducation Civique",    coef: 1 },
+  { key: "arts",         arLabel: "التربية التشكيلية / الموسيقية",     frLabel: "Arts / Musique",       coef: 1 },
+  { key: "eps",          arLabel: "التربية البدنية والرياضية",          frLabel: "EPS",                  coef: 1 },
+  { key: "amazigh",      arLabel: "اللغة الأمازيغية",                  frLabel: "Langue Amazighe",      coef: 1 },
+];
+
+// ── 4AM (BEM) — higher coefficients for core subjects ─────────────────────────
+const SUBJECTS_4AM: Subject[] = [
+  { key: "arabe",        arLabel: "اللغة العربية",                    frLabel: "Langue Arabe",         coef: 5 },
+  { key: "maths",        arLabel: "الرياضيات",                        frLabel: "Mathématiques",        coef: 4 },
+  { key: "francais",     arLabel: "اللغة الفرنسية",                   frLabel: "Langue Française",     coef: 3 },
+  { key: "histoire_geo", arLabel: "التاريخ والجغرافيا",                frLabel: "Histoire-Géographie",  coef: 3 },
+  { key: "svt",          arLabel: "علوم الطبيعة والحياة",              frLabel: "SVT",                  coef: 2 },
+  { key: "physique",     arLabel: "العلوم الفيزيائية والتكنولوجيا",    frLabel: "Physique-Technologie", coef: 2 },
+  { key: "anglais",      arLabel: "اللغة الإنجليزية",                  frLabel: "Langue Anglaise",      coef: 2 },
+  { key: "islam",        arLabel: "التربية الإسلامية",                 frLabel: "Éducation Islamique",  coef: 2 },
+  { key: "civique",      arLabel: "التربية المدنية",                   frLabel: "Éducation Civique",    coef: 1 },
+  { key: "eps",          arLabel: "التربية البدنية والرياضية",          frLabel: "EPS",                  coef: 1 },
+  { key: "amazigh",      arLabel: "اللغة الأمازيغية",                  frLabel: "Langue Amazighe",      coef: 1 },
+  // Note: التشكيلية/الموسيقية not listed for 4AM in official BEM coefficients
+];
+
+// ── Lookup ────────────────────────────────────────────────────────────────────
+export type Niveau = "1AM" | "2AM" | "3AM" | "4AM";
+
+export function getSubjectsForLevel(niveau: Niveau): Subject[] {
+  switch (niveau) {
+    case "1AM":
+    case "2AM": return SUBJECTS_1_2AM;
+    case "3AM": return SUBJECTS_3AM;
+    case "4AM": return SUBJECTS_4AM;
+    default:    return SUBJECTS_3AM;
+  }
 }
 
-export function calcWeightedAvg(scores: Record<string, number>, subjects: SubjectDef[]): number | null {
-  let totalScore = 0;
+/**
+ * Calculate weighted trimester average.
+ * Formula: Σ(grade × coef) / Σ(coef)
+ * Subjects with grade 0 or missing are excluded from both numerator and denominator.
+ * Returns null if no valid grades exist.
+ */
+export function calcWeightedAvg(
+  grades: Record<string, number>,
+  subjects: Subject[]
+): number | null {
+  let weightedSum = 0;
   let totalCoef = 0;
+
   for (const s of subjects) {
-    const score = scores[s.key];
-    if (score !== undefined && !isNaN(score)) {
-      totalScore += score * s.coef;
-      totalCoef += s.coef;
-    }
+    const grade = grades[s.key];
+    if (grade === undefined || grade === null || grade <= 0 || s.coef === 0) continue;
+    weightedSum += grade * s.coef;
+    totalCoef   += s.coef;
   }
+
   if (totalCoef === 0) return null;
-  return Math.round((totalScore / totalCoef) * 100) / 100;
+  return Math.round((weightedSum / totalCoef) * 100) / 100;
 }
+
+/**
+ * Calculate annual average from three trimester averages.
+ * Uses only non-null trimesters.
+ */
+export function calcAnnualAvg(
+  t1: number | null,
+  t2: number | null,
+  t3: number | null
+): number | null {
+  const available = [t1, t2, t3].filter((v): v is number => v !== null && v > 0);
+  if (available.length === 0) return null;
+  return Math.round((available.reduce((a, b) => a + b, 0) / available.length) * 100) / 100;
+}
+
+/**
+ * Determine pass/fail.
+ * Pass threshold is 10/20.
+ */
+export function isPassed(annualAvg: number | null): boolean | null {
+  if (annualAvg === null) return null;
+  return annualAvg >= 10;
+}
+
+// Legacy export for compatibility
+export const CEM_SUBJECTS = SUBJECTS_3AM;

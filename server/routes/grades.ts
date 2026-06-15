@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { Router, type IRouter } from "express";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { db, gradesTable, absencesTable, studentsTable } from "../../shared/db.js";
 import { UpsertGradesBulkBody, UpsertAbsenceBody } from "../../shared/schemas.js";
 import { getSubjectsForLevel, calcWeightedAvg } from "../../shared/subjects.js";
@@ -12,7 +12,7 @@ const router: IRouter = Router();
 router.get("/grades", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
-  const { studentId, annee, trimestre } = req.query as Record<string,string>;
+  const { studentId, annee, trimestre } = req.query as Record<string, string>;
   const conds = [eq(gradesTable.userId, userId)];
   if (studentId) conds.push(eq(gradesTable.studentId, studentId));
   if (annee) conds.push(eq(gradesTable.annee, annee));
@@ -21,54 +21,116 @@ router.get("/grades", async (req, res): Promise<void> => {
   res.json(rows.map(r => ({ ...r, score: parseFloat(String(r.score)) })));
 });
 
-// ── POST /api/grades/bulk — upsert all subjects for one student/trimestre ─────
+// ── POST /api/grades/bulk ─────────────────────────────────────────────────────
+// Accepts either:
+//   { studentId, annee, trimestre, grades }          ← manual entry (existing)
+//   { studentName, annee, trimestre, grades }         ← Excel import (new)
 router.post("/grades/bulk", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
-  const body = UpsertGradesBulkBody.safeParse(req.body);
-  if (!body.success) { res.status(400).json({ error: "Invalid data", details: body.error.flatten() }); return; }
-  const { studentId, annee, trimestre, grades } = body.data;
 
-  // Verify student belongs to user
-  const [student] = await db.select().from(studentsTable)
-    .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId)));
-  if (!student) { res.status(404).json({ error: "Student not found" }); return; }
+  const { studentId, studentName, annee, trimestre, grades } = req.body as {
+    studentId?: string;
+    studentName?: string;
+    annee: string;
+    trimestre: number;
+    grades: Record<string, number>;
+  };
 
-  // Delete existing grades for this student/trimestre/annee then re-insert
+  if (!annee || !trimestre || !grades || typeof grades !== "object") {
+    res.status(400).json({ error: "Missing required fields: annee, trimestre, grades" });
+    return;
+  }
+  if (!studentId && !studentName) {
+    res.status(400).json({ error: "Provide either studentId or studentName" });
+    return;
+  }
+
+  // ── Resolve student ────────────────────────────────────────────────────────
+  let student: typeof studentsTable.$inferSelect | undefined;
+
+  if (studentId) {
+    // Manual entry: look up by ID (original behaviour)
+    const rows = await db.select().from(studentsTable)
+      .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId)));
+    student = rows[0];
+  } else {
+    // Excel import: look up by name (normalize whitespace for safety)
+    const name = (studentName ?? "").trim();
+    const rows = await db.select().from(studentsTable)
+      .where(and(eq(studentsTable.userId, userId), eq(studentsTable.nomPrenom, name)));
+    student = rows[0];
+
+    // Fallback: try removing double spaces / different spacing
+    if (!student) {
+      const allStudents = await db.select().from(studentsTable)
+        .where(eq(studentsTable.userId, userId));
+      student = allStudents.find(s =>
+        s.nomPrenom.replace(/\s+/g, " ").trim() === name.replace(/\s+/g, " ").trim()
+      );
+    }
+  }
+
+  if (!student) {
+    res.status(404).json({ error: `Student not found: ${studentId ?? studentName}` });
+    return;
+  }
+
+  // ── Update raqm if provided via Excel import ──────────────────────────────
+  const raqm = (req.body as any).raqm as number | undefined;
+  if (raqm && !studentId) {
+    await db.update(studentsTable)
+      .set({ raqm })
+      .where(and(eq(studentsTable.id, student.id), eq(studentsTable.userId, userId)));
+  }
+
+  // ── Upsert grades ─────────────────────────────────────────────────────────
   await db.delete(gradesTable).where(and(
     eq(gradesTable.userId, userId),
-    eq(gradesTable.studentId, studentId),
+    eq(gradesTable.studentId, student.id),
     eq(gradesTable.annee, annee),
     eq(gradesTable.trimestre, trimestre),
   ));
 
-  if (Object.keys(grades).length > 0) {
+  const validGrades = Object.entries(grades).filter(([, score]) =>
+    typeof score === "number" && !isNaN(score) && score > 0
+  );
+
+  if (validGrades.length > 0) {
     await db.insert(gradesTable).values(
-      Object.entries(grades).map(([subject, score]) => ({
+      validGrades.map(([subject, score]) => ({
         id: crypto.randomBytes(8).toString("hex"),
-        userId, studentId, annee, trimestre, subject,
+        userId,
+        studentId: student!.id,
+        annee,
+        trimestre,
+        subject,
         score: String(Math.max(0, Math.min(20, score))),
       }))
     );
   }
 
-  req.log.info({ studentId, trimestre, count: Object.keys(grades).length }, "Grades saved");
-  res.json({ success: true });
+  req.log.info(
+    { studentId: student.id, studentName: student.nomPrenom, trimestre, count: validGrades.length },
+    "Grades saved"
+  );
+  res.json({ success: true, studentId: student.id, saved: validGrades.length });
 });
 
-// ── GET /api/results — computed results for all students ──────────────────────
+// ── GET /api/results ──────────────────────────────────────────────────────────
 router.get("/results", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
-  const { annee, niveau, classe } = req.query as Record<string,string>;
+  const { annee, niveau, classe } = req.query as Record<string, string>;
 
   const studentConds = [eq(studentsTable.userId, userId)];
   if (annee) studentConds.push(eq(studentsTable.annee, annee));
   if (niveau) studentConds.push(eq(studentsTable.niveau, niveau as Niveau));
   if (classe) studentConds.push(eq(studentsTable.classe, classe));
 
-  const students = await db.select().from(studentsTable).where(and(...studentConds))
-    .orderBy(studentsTable.niveau, studentsTable.classe, studentsTable.nomPrenom);
+  const students = await db.select().from(studentsTable)
+    .where(and(...studentConds))
+    .orderBy(studentsTable.niveau, studentsTable.classe, studentsTable.raqm, studentsTable.nomPrenom);
 
   if (!students.length) { res.json([]); return; }
 
@@ -80,7 +142,6 @@ router.get("/results", async (req, res): Promise<void> => {
     and(eq(absencesTable.userId, userId), inArray(absencesTable.studentId, studentIds))
   );
 
-  // Build grade map: studentId → trimestre → subject → score
   const gradeMap: Record<string, Record<string, Record<string, number>>> = {};
   for (const g of allGrades) {
     gradeMap[g.studentId] ??= {};
@@ -88,7 +149,6 @@ router.get("/results", async (req, res): Promise<void> => {
     gradeMap[g.studentId][String(g.trimestre)]![g.subject] = parseFloat(String(g.score));
   }
 
-  // Build absence map: studentId → totals
   const absMap: Record<string, { j: number; u: number }> = {};
   for (const a of allAbsences) {
     absMap[a.studentId] ??= { j: 0, u: 0 };
@@ -105,13 +165,14 @@ router.get("/results", async (req, res): Promise<void> => {
     const t3Avg = calcWeightedAvg(scores["3"] ?? {}, subs);
 
     const avgs = [t1Avg, t2Avg, t3Avg].filter((v): v is number => v !== null);
-    const annualAvg = avgs.length > 0 ? Math.round((avgs.reduce((a, b) => a + b, 0) / avgs.length) * 100) / 100 : null;
+    const annualAvg = avgs.length > 0
+      ? Math.round((avgs.reduce((a, b) => a + b, 0) / avgs.length) * 100) / 100
+      : null;
     const passed = annualAvg !== null ? annualAvg >= 10 : null;
     const abs = absMap[s.id] ?? { j: 0, u: 0 };
 
     return {
-      student: s,
-      scores,
+      student: s, scores,
       t1Avg, t2Avg, t3Avg, annualAvg, passed,
       rank: null as number | null,
       totalJustified: abs.j,
@@ -127,7 +188,9 @@ router.get("/results", async (req, res): Promise<void> => {
     byClass[key]!.push(r);
   }
   for (const group of Object.values(byClass)) {
-    const sorted = [...group].filter(r => r.annualAvg !== null).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+    const sorted = [...group]
+      .filter(r => r.annualAvg !== null)
+      .sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
     sorted.forEach((r, i) => { r.rank = i + 1; });
   }
 
@@ -138,7 +201,7 @@ router.get("/results", async (req, res): Promise<void> => {
 router.get("/results/subjects", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
-  const { annee, niveau, classe, trimestre } = req.query as Record<string,string>;
+  const { annee, niveau, classe, trimestre } = req.query as Record<string, string>;
 
   const studentConds = [eq(studentsTable.userId, userId)];
   if (annee) studentConds.push(eq(studentsTable.annee, annee));
@@ -158,14 +221,14 @@ router.get("/results/subjects", async (req, res): Promise<void> => {
     bySubject[g.subject]!.push(parseFloat(String(g.score)));
   }
 
-  const subs = getSubjectsForLevel(niveau as Niveau ?? "4AM");
+  const subs = getSubjectsForLevel((niveau as Niveau) ?? "4AM");
   const result = subs.map(s => {
     const scores = bySubject[s.key] ?? [];
-    const avg = scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100 : 0;
+    const avg = scores.length > 0
+      ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
+      : 0;
     return {
-      subject: s.key,
-      arLabel: s.arLabel,
-      avg,
+      subject: s.key, arLabel: s.arLabel, avg,
       min: scores.length ? Math.min(...scores) : 0,
       max: scores.length ? Math.max(...scores) : 0,
       passCount: scores.filter(v => v >= 10).length,
@@ -180,7 +243,7 @@ router.get("/results/subjects", async (req, res): Promise<void> => {
 router.get("/absences", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
-  const { annee, studentId } = req.query as Record<string,string>;
+  const { annee, studentId } = req.query as Record<string, string>;
   const conds = [eq(absencesTable.userId, userId)];
   if (annee) conds.push(eq(absencesTable.annee, annee));
   if (studentId) conds.push(eq(absencesTable.studentId, studentId));

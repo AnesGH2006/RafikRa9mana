@@ -4,12 +4,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { UserCheck, AlertCircle } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL;
-const CURRENT_YEAR = "2024-2025";
+const CURRENT_YEAR = "2025-2026";
 
 interface ResultRow {
-  student: { id: string; firstName: string; lastName: string; niveau: string; classe: string; };
+  student: { id: string; nomPrenom: string; niveau: string; classe: string; };
   annualAvg: number | null;
-  passed: boolean;
+  passed: boolean | null;
   rank: number | null;
 }
 
@@ -97,7 +97,7 @@ export default function RepeatersPage() {
                   <AlertCircle className="w-5 h-5 text-orange-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold">{r.student.firstName} {r.student.lastName}</p>
+                  <p className="font-semibold">{r.student.nomPrenom}</p>
                   <p className="text-xs text-muted-foreground">{r.student.niveau} — قسم {r.student.classe}</p>
                 </div>
 

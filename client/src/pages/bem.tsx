@@ -3,7 +3,7 @@ import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileSpreadsheet, RotateCcw, Printer, BarChart3, Users } from "lucide-react";
+import { FileSpreadsheet, RotateCcw, Printer, BarChart3, Users, AlertTriangle } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -23,6 +23,18 @@ interface BEMStudent {
   average: number | null;
   passed: boolean | null;
   rank: number;
+  classe: string | null;     // ← matched from students table (4AM)
+  classRank?: number;        // ← rank within the matched class
+}
+
+interface BEMClassGroup {
+  classe: string;
+  students: BEMStudent[];
+  total: number;
+  passCount: number;
+  failCount: number;
+  passRate: number;
+  classAvg: number | null;
 }
 
 interface BEMSummary {
@@ -46,6 +58,8 @@ interface SubjectStat {
 
 interface BEMResult {
   students: BEMStudent[];
+  byClass: BEMClassGroup[];
+  unmatchedCount: number;
   summary: BEMSummary;
   genderStats: GenderStats;
   subjectStats: SubjectStat[];
@@ -110,40 +124,27 @@ function ChartCard({ title, icon, children }: {
 function ChartsSection({ result }: { result: BEMResult }) {
   const { summary, genderStats, subjectStats, scoreDistribution } = result;
 
-  // 1. Pass/fail pie
   const passPieData = [
     { name: "ناجح", value: summary.passCount, color: "#16a34a" },
     { name: "راسب", value: summary.failCount,  color: "#dc2626" },
   ];
 
-  // 2. Gender pie
   const genderPieData = [
     { name: "ذكور",  value: genderStats.males,   color: "#2563eb" },
     { name: "إناث", value: genderStats.females,  color: "#db2777" },
     ...(genderStats.unknown > 0 ? [{ name: "غير محدد", value: genderStats.unknown, color: "#94a3b8" }] : []),
   ];
 
-  // 3. Gender pass/fail grouped bar
   const genderBarData = [
-    {
-      group: "ذكور",
-      ناجح:  genderStats.malePass,
-      راسب:  genderStats.maleFail,
-    },
-    {
-      group: "إناث",
-      ناجح:  genderStats.femalePass,
-      راسب:  genderStats.femaleFail,
-    },
+    { group: "ذكور", ناجح: genderStats.malePass, راسب: genderStats.maleFail },
+    { group: "إناث", ناجح: genderStats.femalePass, راسب: genderStats.femaleFail },
   ];
 
-  // 4. Gender pass rate comparison
   const genderRateData = [
     { name: "ذكور",  rate: genderStats.malePassRate,   fill: "#2563eb" },
     { name: "إناث", rate: genderStats.femalePassRate,  fill: "#db2777" },
   ];
 
-  // 5. Subject averages (horizontal)
   const subjectAvgData = [...subjectStats]
     .sort((a, b) => (b.avg ?? 0) - (a.avg ?? 0))
     .map(s => ({
@@ -153,7 +154,6 @@ function ChartsSection({ result }: { result: BEMResult }) {
       fill:     (s.avg ?? 0) >= 14 ? "#16a34a" : (s.avg ?? 0) >= 10 ? "#2563eb" : "#dc2626",
     }));
 
-  // 6. Subject pass rates
   const subjectRateData = [...subjectStats]
     .sort((a, b) => b.passRate - a.passRate)
     .map(s => ({
@@ -163,13 +163,11 @@ function ChartsSection({ result }: { result: BEMResult }) {
       fill:     s.passRate >= 70 ? "#16a34a" : s.passRate >= 50 ? "#d97706" : "#dc2626",
     }));
 
-  // 7. Score histogram (area)
   const histData = scoreDistribution.map(d => ({
     avg:   parseInt(d.range),
     count: d.count,
   }));
 
-  // 8. Radar — subject scores for top student
   const topStudent = result.students.find(s => s.rank === 1);
   const radarData = subjectStats.slice(0, 8).map(s => ({
     subject:    s.arLabel.split(" ")[s.arLabel.startsWith("ال") ? 1 : 0] ?? s.arLabel,
@@ -180,7 +178,6 @@ function ChartsSection({ result }: { result: BEMResult }) {
   return (
     <div className="space-y-4">
 
-      {/* Row 1: Pass/Fail + Gender distribution */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         <ChartCard title="نسبة النجاح والرسوب" icon="🥧">
@@ -228,7 +225,6 @@ function ChartsSection({ result }: { result: BEMResult }) {
         </ChartCard>
       </div>
 
-      {/* Row 2: Gender pass/fail grouped + gender pass rate */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         <ChartCard title="النجاح والرسوب حسب الجنس" icon="📊">
@@ -243,7 +239,6 @@ function ChartsSection({ result }: { result: BEMResult }) {
               <Bar dataKey="راسب"  fill="#dc2626" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-          {/* Mini stats below */}
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
             {[
               { label: "نسبة نجاح الذكور",  val: `${genderStats.malePassRate}%`,   color: "text-blue-600" },
@@ -277,7 +272,6 @@ function ChartsSection({ result }: { result: BEMResult }) {
         </ChartCard>
       </div>
 
-      {/* Row 3: Subject averages (horizontal bar) */}
       <ChartCard title="متوسط نقاط كل مادة" icon="📏">
         <ResponsiveContainer width="100%" height={Math.max(200, subjectAvgData.length * 32)}>
           <BarChart data={subjectAvgData} layout="vertical" barCategoryGap="18%">
@@ -306,7 +300,6 @@ function ChartsSection({ result }: { result: BEMResult }) {
         </div>
       </ChartCard>
 
-      {/* Row 4: Subject pass rates */}
       <ChartCard title="نسبة النجاح في كل مادة" icon="✅">
         <ResponsiveContainer width="100%" height={Math.max(200, subjectRateData.length * 32)}>
           <BarChart data={subjectRateData} layout="vertical" barCategoryGap="18%">
@@ -336,7 +329,6 @@ function ChartsSection({ result }: { result: BEMResult }) {
         </div>
       </ChartCard>
 
-      {/* Row 5: Radar + Score histogram */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         <ChartCard title={`مقارنة الأول بمتوسط القسم${topStudent ? ` — ${topStudent.name}` : ""}`} icon="🕸️">
@@ -419,6 +411,7 @@ function SpotlightCard({ student, subjects, variant, delay }: {
             <p className="font-bold text-foreground leading-tight">{student.name}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               {student.gender === "male" ? "🔵 ذكر" : student.gender === "female" ? "🔴 أنثى" : ""}
+              {student.classe ? ` — قسم ${student.classe}` : ""}
             </p>
           </div>
           <div className="ms-auto text-end">
@@ -532,6 +525,199 @@ function UploadZone({ onResult }: { onResult: (r: BEMResult) => void }) {
   );
 }
 
+// ── Print helper (grouped by class) ──────────────────────────────────────────
+function printBEMByClass(result: BEMResult) {
+  const win = window.open("", "_blank");
+  if (!win) return;
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("ar-DZ", { year: "numeric", month: "long", day: "numeric" });
+
+  const sectionsHtml = result.byClass.map((group, gi) => {
+    const rowsHtml = group.students.map((s) => {
+      const passClass = s.passed === true ? "pass" : s.passed === false ? "fail" : "";
+      const passLabel = s.passed === null ? "—" : s.passed ? "ناجح" : "راسب";
+      const rank = s.classRank ?? "—";
+      return `
+        <tr>
+          <td>${rank}</td>
+          <td class="name">${s.name}</td>
+          <td>${s.gender === "male" ? "ذكر" : s.gender === "female" ? "أنثى" : "—"}</td>
+          <td class="bold ${s.average !== null ? (s.average >= 10 ? "pass" : "fail") : ""}">
+            ${s.average !== null ? s.average.toFixed(2) : "—"}
+          </td>
+          <td class="${passClass}">${passLabel}</td>
+        </tr>`;
+    }).join("");
+
+    return `
+  <section class="class-section${gi > 0 ? " page-break" : ""}">
+    <div class="header">
+      <h1>نتائج شهادة التعليم المتوسط (BEM)</h1>
+      <div class="sub">السنة الرابعة متوسط — قسم ${group.classe}</div>
+    </div>
+
+    <div class="meta">
+      <span>عدد التلاميذ: ${group.total}</span>
+      <span>الناجحون: ${group.passCount} | الراسبون: ${group.failCount}</span>
+      <span>نسبة النجاح: ${group.passRate}%</span>
+      <span>معدل القسم: ${group.classAvg !== null ? group.classAvg.toFixed(2) : "—"}</span>
+      <span>تاريخ الطباعة: ${dateStr}</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>الرتبة</th>
+          <th>الاسم واللقب</th>
+          <th>الجنس</th>
+          <th>المعدل</th>
+          <th>النتيجة</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+
+    <div class="stamp">
+      <div class="box">
+        <div>توقيع الأستاذ (ة)</div>
+        <div class="line"></div>
+      </div>
+      <div class="box">
+        <div>ختم وتوقيع الإدارة</div>
+        <div class="line"></div>
+      </div>
+    </div>
+  </section>`;
+  }).join("");
+
+  // Unmatched students go in their own final section, if any
+  const unmatchedStudents = result.students.filter(s => !s.classe);
+  const unmatchedHtml = unmatchedStudents.length > 0 ? `
+  <section class="class-section page-break">
+    <div class="header">
+      <h1>نتائج شهادة التعليم المتوسط (BEM)</h1>
+      <div class="sub">تلاميذ غير مُطابقين مع قائمة الرابعة متوسط (${unmatchedStudents.length})</div>
+    </div>
+    <div class="meta">
+      <span>تاريخ الطباعة: ${dateStr}</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>الرتبة العامة</th>
+          <th>الاسم واللقب</th>
+          <th>الجنس</th>
+          <th>المعدل</th>
+          <th>النتيجة</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${unmatchedStudents.map(s => {
+          const passClass = s.passed === true ? "pass" : s.passed === false ? "fail" : "";
+          const passLabel = s.passed === null ? "—" : s.passed ? "ناجح" : "راسب";
+          return `
+        <tr>
+          <td>${s.rank > 0 ? s.rank : "—"}</td>
+          <td class="name">${s.name}</td>
+          <td>${s.gender === "male" ? "ذكر" : s.gender === "female" ? "أنثى" : "—"}</td>
+          <td class="bold ${s.average !== null ? (s.average >= 10 ? "pass" : "fail") : ""}">
+            ${s.average !== null ? s.average.toFixed(2) : "—"}
+          </td>
+          <td class="${passClass}">${passLabel}</td>
+        </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+    <p style="margin-top:10px; font-size:11px; color:#777;">
+      تنبيه: لم يتم العثور على هذه الأسماء في قائمة تلاميذ السنة الرابعة متوسط — تأكد من تطابق الأسماء بين الملفين.
+    </p>
+  </section>` : "";
+
+  win.document.write(`
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8" />
+<title>نتائج BEM — حسب الأقسام</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    direction: rtl;
+    color: #1a1a1a;
+    padding: 24px;
+  }
+  .class-section { margin-bottom: 36px; }
+  .class-section.page-break { page-break-before: always; }
+  .header {
+    text-align: center;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #1a1a1a;
+    padding-bottom: 12px;
+  }
+  .header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .header .sub { font-size: 14px; font-weight: 600; color: #333; }
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 12px;
+    margin: 12px 0;
+    color: #333;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th, td {
+    border: 1px solid #999;
+    padding: 5px 8px;
+    text-align: center;
+  }
+  th {
+    background: #e8e8e8;
+    font-weight: 700;
+  }
+  td.name { text-align: right; font-weight: 600; }
+  td.bold { font-weight: 700; }
+  td.pass { color: #0a7a3d; }
+  td.fail { color: #c0392b; }
+  tr:nth-child(even) { background: #f7f7f7; }
+  .stamp {
+    margin-top: 40px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+  }
+  .stamp .box { text-align: center; }
+  .stamp .line {
+    margin-top: 40px;
+    border-top: 1px solid #999;
+    width: 160px;
+  }
+  @media print {
+    body { padding: 0; }
+    @page { size: A4 landscape; margin: 12mm; }
+    .class-section { margin-bottom: 0; }
+  }
+</style>
+</head>
+<body>
+  ${sectionsHtml}
+  ${unmatchedHtml}
+</body>
+</html>
+  `);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 300);
+}
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 type TabId = "overview" | "charts" | "table";
 
@@ -559,13 +745,15 @@ export default function BEMPage() {
             تحليل نتائج امتحان BEM
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            بريفيه التعليم المتوسط — يحلل ملف Excel ويصنف التلاميذ حسب المعدل
+            بريفيه التعليم المتوسط — يحلل ملف Excel ويصنف التلاميذ حسب المعدل والقسم
           </p>
         </motion.div>
         {result && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.print()}>
-              <Printer className="w-4 h-4" /> طباعة
+            <Button variant="outline" size="sm" className="gap-1.5"
+              onClick={() => printBEMByClass(result)}
+              disabled={result.byClass.length === 0}>
+              <Printer className="w-4 h-4" /> طباعة حسب الأقسام
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5" onClick={reset}>
               <RotateCcw className="w-4 h-4" /> ملف جديد
@@ -607,18 +795,29 @@ export default function BEMPage() {
               <p className="text-xs text-muted-foreground">
                 المجموع الكلي للمعاملات: <strong>25</strong> — العتبة: <strong>10/20</strong>
               </p>
+              <p className="text-xs text-muted-foreground border-t pt-2 mt-2">
+                💡 سيتم مطابقة أسماء التلاميذ تلقائياً مع قائمة السنة الرابعة متوسط لتحديد قسم كل تلميذ، مما يسمح بطباعة النتائج منظمة حسب كل قسم.
+              </p>
             </motion.div>
           </motion.div>
         ) : (
           /* ── Results screen ── */
           <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
 
-            {/* File badge */}
-            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="print:hidden">
+            {/* File badge + match status */}
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="print:hidden flex items-center gap-2 flex-wrap">
               <Badge variant="secondary" className="text-xs gap-1.5">
                 <FileSpreadsheet className="w-3 h-3" /> {result.fileName}
                 <span className="text-muted-foreground ms-1">— {result.detectedSubjects.length} مادة مكتشفة</span>
               </Badge>
+              <Badge variant="secondary" className="text-xs gap-1.5">
+                <Users className="w-3 h-3" /> {result.byClass.length} أقسام مطابقة
+              </Badge>
+              {result.unmatchedCount > 0 && (
+                <Badge variant="outline" className="text-xs gap-1.5 border-amber-300 text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="w-3 h-3" /> {result.unmatchedCount} تلميذ غير مُطابق
+                </Badge>
+              )}
             </motion.div>
 
             {/* KPI cards */}
@@ -640,6 +839,42 @@ export default function BEMPage() {
                 </motion.div>
               ))}
             </div>
+
+            {/* Per-class summary cards */}
+            {result.byClass.length > 0 && (
+              <div className="print:hidden">
+                <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-muted-foreground">
+                  <Users className="w-4 h-4" /> ملخص الأقسام
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {result.byClass.map((g, i) => (
+                    <motion.div key={g.classe}
+                      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="rounded-xl border bg-card p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold">قسم {g.classe}</span>
+                        <span className="text-xs text-muted-foreground">{g.total} تلميذ</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                        <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 py-1.5">
+                          <p className="font-bold text-emerald-700 dark:text-emerald-300">{g.passCount}</p>
+                          <p className="text-muted-foreground">ناجح</p>
+                        </div>
+                        <div className="rounded-lg bg-red-50 dark:bg-red-950/30 py-1.5">
+                          <p className="font-bold text-red-700 dark:text-red-300">{g.failCount}</p>
+                          <p className="text-muted-foreground">راسب</p>
+                        </div>
+                        <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 py-1.5">
+                          <p className="font-bold text-amber-700 dark:text-amber-300">{g.classAvg?.toFixed(2) ?? "—"}</p>
+                          <p className="text-muted-foreground">المعدل</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Tabs */}
             <div className="flex gap-1 border-b overflow-x-auto print:hidden">
@@ -725,6 +960,7 @@ export default function BEMPage() {
                           <tr>
                             <th className="px-3 py-3 text-start text-xs font-semibold text-muted-foreground">الرتبة</th>
                             <th className="px-3 py-3 text-start text-xs font-semibold text-muted-foreground">الاسم واللقب</th>
+                            <th className="px-3 py-3 text-center text-xs font-semibold text-muted-foreground">القسم</th>
                             <th className="px-3 py-3 text-center text-xs font-semibold text-muted-foreground">الجنس</th>
                             {result.detectedSubjects.map(s => (
                               <th key={s.key} className="px-2 py-3 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">
@@ -749,6 +985,11 @@ export default function BEMPage() {
                                   : <span className="text-muted-foreground text-xs">—</span>}
                               </td>
                               <td className="px-3 py-2.5 font-medium min-w-[140px]">{s.name}</td>
+                              <td className="px-3 py-2.5 text-center">
+                                {s.classe
+                                  ? <Badge variant="outline" className="font-bold text-xs">{s.classe}</Badge>
+                                  : <span className="text-muted-foreground text-xs">—</span>}
+                              </td>
                               <td className="px-3 py-2.5 text-center text-base">
                                 {s.gender === "male" ? "🔵" : s.gender === "female" ? "🔴" : "⚪"}
                               </td>
@@ -786,55 +1027,6 @@ export default function BEMPage() {
 
               </motion.div>
             </AnimatePresence>
-
-            {/* Print-only table */}
-            <div className="hidden print:block" dir="rtl">
-              <div style={{ textAlign: "center", marginBottom: "12px" }}>
-                <h2 style={{ fontSize: "16pt", fontWeight: "bold", margin: "0 0 4px" }}>
-                  نتائج امتحان شهادة التعليم المتوسط
-                </h2>
-                <p style={{ fontSize: "10pt", color: "#555", margin: 0 }}>
-                  عدد التلاميذ: {result.summary.total} &nbsp;|&nbsp;
-                  الناجحون: {result.summary.passCount} &nbsp;|&nbsp;
-                  الراسبون: {result.summary.failCount} &nbsp;|&nbsp;
-                  نسبة النجاح: {result.summary.passRate}% &nbsp;|&nbsp;
-                  معدل القسم: {result.summary.classAvg?.toFixed(2) ?? "—"} &nbsp;|&nbsp;
-                  ذكور: {result.genderStats.males} / إناث: {result.genderStats.females}
-                </p>
-              </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11pt" }}>
-                <thead>
-                  <tr style={{ backgroundColor: "#f0f0f0" }}>
-                    <th style={{ border: "1px solid #999", padding: "6px 10px", textAlign: "center", width: "50px" }}>الرتبة</th>
-                    <th style={{ border: "1px solid #999", padding: "6px 10px", textAlign: "right" }}>الاسم واللقب</th>
-                    <th style={{ border: "1px solid #999", padding: "6px 10px", textAlign: "center", width: "50px" }}>الجنس</th>
-                    <th style={{ border: "1px solid #999", padding: "6px 10px", textAlign: "center", width: "80px" }}>المعدل</th>
-                    <th style={{ border: "1px solid #999", padding: "6px 10px", textAlign: "center", width: "80px" }}>النتيجة</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.students.map((s, i) => (
-                    <tr key={i} style={{ backgroundColor: i % 2 === 0 ? "#fff" : "#f9f9f9" }}>
-                      <td style={{ border: "1px solid #ccc", padding: "4px 10px", textAlign: "center" }}>
-                        {s.rank > 0 ? s.rank : "—"}
-                      </td>
-                      <td style={{ border: "1px solid #ccc", padding: "4px 10px" }}>{s.name}</td>
-                      <td style={{ border: "1px solid #ccc", padding: "4px 10px", textAlign: "center" }}>
-                        {s.gender === "male" ? "ذكر" : s.gender === "female" ? "أنثى" : "—"}
-                      </td>
-                      <td style={{ border: "1px solid #ccc", padding: "4px 10px", textAlign: "center", fontWeight: "bold",
-                        color: s.average === null ? "#999" : s.average >= 10 ? "#16a34a" : "#dc2626" }}>
-                        {s.average !== null ? s.average.toFixed(2) : "—"}
-                      </td>
-                      <td style={{ border: "1px solid #ccc", padding: "4px 10px", textAlign: "center", fontWeight: "bold",
-                        color: s.passed === true ? "#16a34a" : s.passed === false ? "#dc2626" : "#999" }}>
-                        {s.passed === true ? "ناجح ✓" : s.passed === false ? "راسب ✗" : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
 
           </motion.div>
         )}

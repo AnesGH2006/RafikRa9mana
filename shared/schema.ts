@@ -56,6 +56,8 @@ export const studentsTable = pgTable("students", {
   statut: statutEnum("statut").notNull().default("nouveau"),
   resultat: resultatEnum("resultat"),
   annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
+  // Sequence number from the official class list (رقم التلميذ)
+  raqm: integer("raqm"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

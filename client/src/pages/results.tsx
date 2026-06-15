@@ -7,8 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, ClipboardList, Search, Upload, CheckCircle2, AlertCircle, X, FileSpreadsheet } from "lucide-react";
-import { CEM_SUBJECTS, getSubjectsForLevel, calcWeightedAvg } from "@shared/subjects";
+import { Pencil, ClipboardList, Search, Upload, CheckCircle2, AlertCircle, X, FileSpreadsheet, Loader2, Printer } from "lucide-react";
+import { getSubjectsForLevel, calcWeightedAvg } from "@shared/subjects";
 import type { StudentResult } from "@shared/types";
 import type { Niveau } from "@shared/types";
 
@@ -29,239 +29,350 @@ function avg2(v: number | null) {
   return v.toFixed(2);
 }
 
-// ── Excel column map ──────────────────────────────────────────────────────────
-// Maps Arabic column headers from the XLS file to our internal subject keys.
-// The file uses "اللغة العربية ف 3", "الرياضيات ف 3", etc.
-// We only need trimestre 3 columns, but we parse all three so the modal
-// can also be pre-filled for earlier trimesters when the file contains them.
-
+// ── Arabic subject header → internal key ─────────────────────────────────────
 const SUBJECT_HEADER_MAP: Record<string, string> = {
-  "اللغة العربية":           "arabe",
-  "اللغة الفرنسية":          "francais",
-  "اللغة الإنجليزية":        "anglais",
-  "اللغة اﻷمازيغية":        "amazigh",
-  "التربية الإسلامية":        "islam",
-  "التربية المدنية":          "civique",
-  "التاريخ والجغرافيا":       "histoire_geo",
-  "الرياضيات":                "maths",
-  "ع الطبيعة و الحياة":      "svt",
-  "ع الفيزيائية والتكنولوجيا": "physique",
-  "المعلوماتية":               "informatique",
-  "التربية التشكيلية":         "plastique",
-  "التربية الموسيقية":         "musique",
-  "ت البدنية و الرياضية":    "eps",
+  "اللغة العربية":              "arabe",
+  "اللغة الفرنسية":             "francais",
+  "اللغة الإنجليزية":           "anglais",
+  "اللغة اﻷمازيغية":           "amazigh",
+  "التربية الإسلامية":           "islam",
+  "التربية المدنية":             "civique",
+  "التاريخ والجغرافيا":          "histoire_geo",
+  "الرياضيات":                   "maths",
+  "ع الطبيعة و الحياة":         "svt",
+  "ع الفيزيائية والتكنولوجيا":  "physique",
+  "المعلوماتية":                  "informatique",
+  "التربية التشكيلية":            "plastique",
+  "التربية الموسيقية":            "musique",
+  "ت البدنية و الرياضية":       "eps",
 };
 
-// ── Import types ──────────────────────────────────────────────────────────────
-interface ImportedRow {
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface ParsedStudent {
   raqm: number;
   nomPrenom: string;
-  grades: {
-    1: Record<string, number>;
-    2: Record<string, number>;
-    3: Record<string, number>;
-  };
+  gender: string;
+  grades: { 1: Record<string, number>; 2: Record<string, number>; 3: Record<string, number> };
   t1Avg: number | null;
   t2Avg: number | null;
   t3Avg: number | null;
+  annualAvg: number | null;
+  passed: boolean | null;
 }
 
-interface ImportState {
-  status: "idle" | "parsing" | "preview" | "importing" | "done" | "error";
-  rows: ImportedRow[];
-  error: string | null;
-  imported: number;
-  skipped: number;
-}
-
-// ── HTML-XLS parser ───────────────────────────────────────────────────────────
-function parseHTMLExcel(text: string): ImportedRow[] {
+// ── Parser ────────────────────────────────────────────────────────────────────
+function parseHTMLExcel(text: string): ParsedStudent[] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, "text/html");
   const tableRows = Array.from(doc.querySelectorAll("tr"));
 
-  // Find the header row (contains "الرقم")
   let headerRowIdx = -1;
   let headers: string[] = [];
   for (let i = 0; i < tableRows.length; i++) {
-    const cells = Array.from(tableRows[i].querySelectorAll("td,th")).map(c =>
-      c.textContent?.trim() ?? ""
-    );
+    const cells = Array.from(tableRows[i].querySelectorAll("td,th")).map(c => c.textContent?.trim() ?? "");
     if (cells.some(c => c === "الرقم")) {
       headerRowIdx = i;
       headers = cells;
       break;
     }
   }
-  if (headerRowIdx === -1) throw new Error("لم يتم العثور على صف العناوين");
+  if (headerRowIdx === -1) throw new Error("لم يتم العثور على صف العناوين (الرقم)");
 
-  // Build column index map:
-  // "اللغة العربية ف 1" → { subject: "arabe", tri: 1 }
-  // "معدل الفصل 1"      → { isAvg: true, tri: 1 }
-  interface ColInfo {
+  interface ColMeta {
+    type: "raqm" | "name" | "gender" | "subject" | "avg" | "skip";
     subjectKey?: string;
     tri?: 1 | 2 | 3;
-    isAvg?: boolean;
-    isName?: boolean;
-    isRaqm?: boolean;
   }
-  const colInfo: (ColInfo | null)[] = headers.map(h => {
-    if (h === "الرقم") return { isRaqm: true };
-    if (h === "اللقب و الاسم" || h === "اللقب والاسم") return { isName: true };
+  const colMeta: ColMeta[] = headers.map(h => {
+    if (h === "الرقم") return { type: "raqm" };
+    if (h === "اللقب و الاسم" || h === "اللقب والاسم") return { type: "name" };
+    if (h === "الجنس") return { type: "gender" };
     for (const [arLabel, key] of Object.entries(SUBJECT_HEADER_MAP)) {
       for (const tri of [1, 2, 3] as const) {
-        if (h === `${arLabel} ف ${tri}`) return { subjectKey: key, tri };
+        if (h === `${arLabel} ف ${tri}`) return { type: "subject", subjectKey: key, tri };
       }
     }
     for (const tri of [1, 2, 3] as const) {
-      if (h === `معدل الفصل ${tri}`) return { isAvg: true, tri };
+      if (h === `معدل الفصل ${tri}`) return { type: "avg", tri };
     }
-    return null;
+    return { type: "skip" };
   });
 
-  const iRaqm  = colInfo.findIndex(c => c?.isRaqm);
-  const iName  = colInfo.findIndex(c => c?.isName);
+  const iRaqm  = colMeta.findIndex(c => c.type === "raqm");
+  const iName  = colMeta.findIndex(c => c.type === "name");
+  const iGender = colMeta.findIndex(c => c.type === "gender");
 
-  const rows: ImportedRow[] = [];
+  const students: ParsedStudent[] = [];
 
   for (let i = headerRowIdx + 1; i < tableRows.length; i++) {
-    const cells = Array.from(tableRows[i].querySelectorAll("td,th")).map(c =>
-      c.textContent?.trim() ?? ""
-    );
+    const cells = Array.from(tableRows[i].querySelectorAll("td,th")).map(c => c.textContent?.trim() ?? "");
     const raqmRaw = cells[iRaqm];
-    if (!raqmRaw || isNaN(Number(raqmRaw))) continue; // skip total rows / empty
+    if (!raqmRaw || isNaN(Number(raqmRaw))) continue;
 
-    const grades: ImportedRow["grades"] = { 1: {}, 2: {}, 3: {} };
-    const avgs: Record<number, number | null> = { 1: null, 2: null, 3: null };
+    const grades: ParsedStudent["grades"] = { 1: {}, 2: {}, 3: {} };
+    const triAvgs: Record<number, number | null> = { 1: null, 2: null, 3: null };
 
     cells.forEach((val, ci) => {
-      const info = colInfo[ci];
-      if (!info) return;
+      const meta = colMeta[ci];
+      if (!meta) return;
       const n = parseFloat(val);
-      if (info.subjectKey && info.tri && !isNaN(n)) {
-        grades[info.tri][info.subjectKey] = Math.max(0, Math.min(20, n));
+      if (meta.type === "subject" && meta.subjectKey && meta.tri && !isNaN(n) && n > 0) {
+        grades[meta.tri][meta.subjectKey] = Math.max(0, Math.min(20, n));
       }
-      if (info.isAvg && info.tri && !isNaN(n)) {
-        avgs[info.tri] = n;
+      if (meta.type === "avg" && meta.tri && !isNaN(n) && n > 0) {
+        triAvgs[meta.tri] = n;
       }
     });
 
-    rows.push({
+    const available = ([1, 2, 3] as const).map(t => triAvgs[t]).filter((v): v is number => v !== null);
+    const annualAvg = available.length > 0
+      ? Math.round((available.reduce((a, b) => a + b, 0) / available.length) * 100) / 100
+      : null;
+
+    students.push({
       raqm: Number(raqmRaw),
       nomPrenom: cells[iName] ?? "",
+      gender: cells[iGender] ?? "",
       grades,
-      t1Avg: avgs[1],
-      t2Avg: avgs[2],
-      t3Avg: avgs[3],
+      t1Avg: triAvgs[1],
+      t2Avg: triAvgs[2],
+      t3Avg: triAvgs[3],
+      annualAvg,
+      passed: annualAvg !== null ? annualAvg >= 10 : null,
     });
   }
 
-  if (rows.length === 0) throw new Error("لم يتم العثور على بيانات تلاميذ");
-  return rows;
+  if (students.length === 0) throw new Error("لم يتم العثور على بيانات تلاميذ في الملف");
+  return students;
+}
+
+// ── Print helper ──────────────────────────────────────────────────────────────
+function printResults(results: StudentResult[], niveauLabel: string, classeLabel: string, t: (k: string) => string) {
+  const win = window.open("", "_blank");
+  if (!win) return;
+
+  const rowsHtml = results.map((r, i) => {
+    const passClass = r.passed === true ? "pass" : r.passed === false ? "fail" : "";
+    const passLabel = r.passed === null ? "—" : r.passed ? "ناجح" : "راسب";
+    return `
+      <tr>
+        <td>${r.rank ?? i + 1}</td>
+        <td class="name">${r.student.nomPrenom}</td>
+        <td>${avg2(r.t1Avg)}</td>
+        <td>${avg2(r.t2Avg)}</td>
+        <td>${avg2(r.t3Avg)}</td>
+        <td class="bold">${avg2(r.annualAvg)}</td>
+        <td class="${passClass}">${passLabel}</td>
+      </tr>`;
+  }).join("");
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("ar-DZ", { year: "numeric", month: "long", day: "numeric" });
+
+  win.document.write(`
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8" />
+<title>نتائج التلاميذ</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    direction: rtl;
+    color: #1a1a1a;
+    padding: 24px;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #1a1a1a;
+    padding-bottom: 12px;
+  }
+  .header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .header .sub { font-size: 13px; color: #555; }
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    margin: 16px 0;
+    color: #333;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th, td {
+    border: 1px solid #999;
+    padding: 6px 8px;
+    text-align: center;
+  }
+  th {
+    background: #e8e8e8;
+    font-weight: 700;
+  }
+  td.name { text-align: right; font-weight: 600; }
+  td.bold { font-weight: 700; }
+  td.pass { color: #0a7a3d; font-weight: 700; }
+  td.fail { color: #c0392b; font-weight: 700; }
+  tr:nth-child(even) { background: #f7f7f7; }
+  .footer {
+    margin-top: 24px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #555;
+  }
+  .stamp {
+    margin-top: 60px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+  }
+  .stamp .box { text-align: center; }
+  .stamp .line {
+    margin-top: 50px;
+    border-top: 1px solid #999;
+    width: 160px;
+  }
+  @media print {
+    body { padding: 0; }
+    @page { size: A4 landscape; margin: 12mm; }
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>نتائج التلاميذ</h1>
+    <div class="sub">${niveauLabel}${classeLabel ? " — قسم " + classeLabel : ""}</div>
+  </div>
+
+  <div class="meta">
+    <span>عدد التلاميذ: ${results.length}</span>
+    <span>تاريخ الطباعة: ${dateStr}</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>الرتبة</th>
+        <th>اللقب والاسم</th>
+        <th>معدل ف1</th>
+        <th>معدل ف2</th>
+        <th>معدل ف3</th>
+        <th>المعدل السنوي</th>
+        <th>النتيجة</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+
+  <div class="stamp">
+    <div class="box">
+      <div>توقيع الأستاذ (ة)</div>
+      <div class="line"></div>
+    </div>
+    <div class="box">
+      <div>ختم وتوقيع الإدارة</div>
+      <div class="line"></div>
+    </div>
+  </div>
+</body>
+</html>
+  `);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 300);
 }
 
 // ── Import modal ──────────────────────────────────────────────────────────────
-function ImportModal({
-  annee,
-  onClose,
-  onDone,
-}: {
-  annee: string;
-  onClose: () => void;
-  onDone: () => void;
-}) {
+function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () => void; onDone: () => void }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [state, setState] = useState<ImportState>({
-    status: "idle", rows: [], error: null, imported: 0, skipped: 0,
-  });
+  const [status, setStatus] = useState<"idle" | "parsing" | "preview" | "importing" | "done" | "error">("idle");
+  const [students, setStudents] = useState<ParsedStudent[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   const handleFile = async (file: File) => {
-    setState(s => ({ ...s, status: "parsing", error: null }));
+    setStatus("parsing");
+    setError(null);
     try {
       const text = await file.text();
-      const rows = parseHTMLExcel(text);
-      setState(s => ({ ...s, status: "preview", rows }));
+      const parsed = parseHTMLExcel(text);
+      setStudents(parsed);
+      setStatus("preview");
     } catch (e: any) {
-      setState(s => ({ ...s, status: "error", error: e.message ?? "خطأ في قراءة الملف" }));
+      setError(e.message ?? "خطأ في قراءة الملف");
+      setStatus("error");
     }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
   };
 
   const handleImport = async () => {
-    setState(s => ({ ...s, status: "importing" }));
-    let imported = 0;
-    let skipped = 0;
+    setStatus("importing");
+    setProgress({ done: 0, total: students.length });
+    let saved = 0;
 
-    for (const row of state.rows) {
-      // Match student by رقم (rank/sequence in file) or by name.
-      // We POST to the bulk grades endpoint using nomPrenom as lookup key.
-      // The API should accept { studentName, annee, trimestre, grades }.
-      for (const tri of [1, 2, 3] as const) {
-        const grades = row.grades[tri];
-        if (Object.keys(grades).length === 0) continue;
-        try {
-          const res = await fetch(`${BASE}api/grades/bulk`, {
-            method: "POST",
-            credentials: "include",
+    for (const s of students) {
+      try {
+        for (const tri of [1, 2, 3] as const) {
+          const grades = s.grades[tri];
+          if (Object.keys(grades).length === 0) continue;
+          await fetch(`${BASE}api/grades/bulk`, {
+            method: "POST", credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              studentName: row.nomPrenom,
+              studentName: s.nomPrenom,
+              raqm: s.raqm,
               annee,
               trimestre: tri,
               grades,
+              triAvg: tri === 1 ? s.t1Avg : tri === 2 ? s.t2Avg : s.t3Avg,
+              annualAvg: s.annualAvg,
             }),
           });
-          if (res.ok) imported++;
-          else skipped++;
-        } catch {
-          skipped++;
         }
-      }
+        saved++;
+      } catch { /* skip individual failures */ }
+      setProgress(p => ({ ...p, done: p.done + 1 }));
     }
 
-    setState(s => ({ ...s, status: "done", imported, skipped }));
-    toast({ title: `تم استيراد نتائج ${imported} فصل بنجاح` });
+    toast({ title: `✓ تم استيراد نتائج ${saved} تلميذ` });
+    setStatus("done");
     onDone();
   };
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-base">
             <FileSpreadsheet className="w-5 h-5 text-emerald-500" />
-            استيراد النتائج من Excel
+            استيراد وحساب المعدلات من Excel
           </DialogTitle>
         </DialogHeader>
 
         <AnimatePresence mode="wait">
-          {/* ── Idle / drop zone ── */}
-          {(state.status === "idle" || state.status === "parsing") && (
-            <motion.div key="drop"
-              initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+
+          {(status === "idle" || status === "parsing") && (
+            <motion.div key="drop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div
-                onDrop={handleDrop}
+                onDrop={e => { e.preventDefault(); e.dataTransfer.files[0] && handleFile(e.dataTransfer.files[0]); }}
                 onDragOver={e => e.preventDefault()}
                 onClick={() => fileRef.current?.click()}
-                className="mt-2 border-2 border-dashed border-muted-foreground/30 rounded-xl p-10 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/5 transition-colors"
+                className="mt-1 border-2 border-dashed border-muted-foreground/25 rounded-xl p-12 text-center cursor-pointer hover:border-emerald-500/50 hover:bg-emerald-50/5 transition-all"
               >
-                {state.status === "parsing" ? (
-                  <motion.div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"
-                    animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }} />
-                ) : (
-                  <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
-                )}
-                <p className="text-sm font-medium text-foreground">
-                  {state.status === "parsing" ? "جارٍ القراءة…" : "اسحب ملف Excel هنا أو انقر للاختيار"}
+                {status === "parsing"
+                  ? <Loader2 className="w-8 h-8 mx-auto mb-3 text-emerald-500 animate-spin" />
+                  : <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />}
+                <p className="text-sm font-medium">
+                  {status === "parsing" ? "جارٍ تحليل الملف…" : "اسحب ملف Excel هنا أو انقر للاختيار"}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  يدعم ملفات .xls المُصدَّرة من تحليل النتائج
+                  يدعم ملفات تحليل النتائج (.xls) — سيتم حساب المعدل السنوي تلقائياً
                 </p>
               </div>
               <input ref={fileRef} type="file" accept=".xls,.xlsx,.html,.htm" className="hidden"
@@ -269,52 +380,68 @@ function ImportModal({
             </motion.div>
           )}
 
-          {/* ── Error ── */}
-          {state.status === "error" && (
+          {status === "error" && (
             <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="flex flex-col items-center gap-3 py-6 text-center">
+              className="flex flex-col items-center gap-3 py-8 text-center">
               <AlertCircle className="w-10 h-10 text-red-500" />
-              <p className="text-sm font-medium text-red-500">{state.error}</p>
-              <Button variant="outline" onClick={() => setState(s => ({ ...s, status: "idle", error: null }))}>
-                حاول مجدداً
-              </Button>
+              <p className="text-sm font-medium text-red-500">{error}</p>
+              <Button variant="outline" onClick={() => setStatus("idle")}>حاول مجدداً</Button>
             </motion.div>
           )}
 
-          {/* ── Preview ── */}
-          {state.status === "preview" && (
+          {status === "preview" && (
             <motion.div key="preview" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="flex items-center justify-between mb-3 mt-1">
+              <div className="flex items-center justify-between my-3">
                 <p className="text-sm text-muted-foreground">
-                  تم قراءة <span className="font-bold text-foreground">{state.rows.length}</span> تلميذ
+                  تم تحليل <span className="font-bold text-foreground">{students.length}</span> تلميذ —
+                  سيتم حساب المعدل السنوي تلقائياً
                 </p>
-                <Badge variant="secondary">السنة {annee}</Badge>
+                <div className="flex gap-2 text-xs text-muted-foreground">
+                  <span className="text-emerald-500 font-semibold">
+                    {students.filter(s => s.passed).length} ناجح
+                  </span>
+                  <span>·</span>
+                  <span className="text-red-500 font-semibold">
+                    {students.filter(s => s.passed === false).length} راسب
+                  </span>
+                </div>
               </div>
 
-              <div className="rounded-lg border overflow-hidden max-h-64 overflow-y-auto text-sm">
+              <div className="rounded-lg border overflow-hidden max-h-72 overflow-y-auto text-sm">
                 <table className="w-full">
-                  <thead className="bg-muted/60 sticky top-0">
+                  <thead className="bg-muted/60 sticky top-0 z-10">
                     <tr>
                       <th className="px-3 py-2 text-start text-xs text-muted-foreground font-semibold">#</th>
                       <th className="px-3 py-2 text-start text-xs text-muted-foreground font-semibold">الاسم</th>
                       <th className="px-3 py-2 text-center text-xs text-muted-foreground font-semibold">ف1</th>
                       <th className="px-3 py-2 text-center text-xs text-muted-foreground font-semibold">ف2</th>
                       <th className="px-3 py-2 text-center text-xs text-muted-foreground font-semibold">ف3</th>
+                      <th className="px-3 py-2 text-center text-xs text-muted-foreground font-semibold">المعدل السنوي</th>
+                      <th className="px-3 py-2 text-center text-xs text-muted-foreground font-semibold">النتيجة</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {state.rows.map((row, i) => (
+                    {students.map((s, i) => (
                       <tr key={i} className={`border-t ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
-                        <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{row.raqm}</td>
-                        <td className="px-3 py-2 font-medium">{row.nomPrenom}</td>
-                        {[row.t1Avg, row.t2Avg, row.t3Avg].map((a, ti) => (
+                        <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{s.raqm}</td>
+                        <td className="px-3 py-2 font-medium text-xs">{s.nomPrenom}</td>
+                        {[s.t1Avg, s.t2Avg, s.t3Avg].map((a, ti) => (
                           <td key={ti} className={`px-3 py-2 text-center font-mono text-xs ${
-                            a === null ? "text-muted-foreground"
-                              : a >= 10 ? "text-emerald-600" : "text-red-500"
-                          }`}>
-                            {a !== null ? a.toFixed(2) : "—"}
-                          </td>
+                            a === null ? "text-muted-foreground" : a >= 10 ? "text-emerald-600" : "text-red-500"
+                          }`}>{a !== null ? a.toFixed(2) : "—"}</td>
                         ))}
+                        <td className={`px-3 py-2 text-center font-mono font-bold text-xs ${
+                          s.annualAvg === null ? "text-muted-foreground"
+                            : s.annualAvg >= 10 ? "text-emerald-600" : "text-red-500"
+                        }`}>
+                          {s.annualAvg !== null ? s.annualAvg.toFixed(2) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {s.passed === null ? "—"
+                            : s.passed
+                              ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-semibold">ناجح</span>
+                              : <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 font-semibold">راسب</span>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -322,52 +449,52 @@ function ImportModal({
               </div>
 
               <div className="flex gap-2 justify-end mt-4">
-                <Button variant="outline"
-                  onClick={() => setState(s => ({ ...s, status: "idle", rows: [] }))}>
+                <Button variant="outline" onClick={() => { setStudents([]); setStatus("idle"); }}>
                   <X className="w-4 h-4 me-1" /> إلغاء
                 </Button>
-                <Button onClick={handleImport}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                  <Upload className="w-4 h-4 me-1" />
-                  استيراد {state.rows.length} تلميذ
+                <Button onClick={handleImport} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+                  <Upload className="w-4 h-4" />
+                  حفظ نتائج {students.length} تلميذ
                 </Button>
               </div>
             </motion.div>
           )}
 
-          {/* ── Importing spinner ── */}
-          {state.status === "importing" && (
+          {status === "importing" && (
             <motion.div key="importing" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="flex flex-col items-center gap-4 py-10">
-              <motion.div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full"
-                animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }} />
-              <p className="text-sm text-muted-foreground">جارٍ الاستيراد…</p>
+              <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+              <p className="text-sm text-muted-foreground">
+                جارٍ الحفظ… {progress.done} / {progress.total}
+              </p>
+              <div className="w-48 h-1.5 bg-muted rounded-full overflow-hidden">
+                <motion.div className="h-full bg-emerald-500 rounded-full"
+                  animate={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }}
+                  transition={{ duration: 0.3 }} />
+              </div>
             </motion.div>
           )}
 
-          {/* ── Done ── */}
-          {state.status === "done" && (
+          {status === "done" && (
             <motion.div key="done" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
               className="flex flex-col items-center gap-3 py-8 text-center">
               <CheckCircle2 className="w-12 h-12 text-emerald-500" />
-              <p className="text-base font-semibold">تم الاستيراد بنجاح</p>
+              <p className="text-base font-semibold">تم الاستيراد وحساب المعدلات بنجاح</p>
               <p className="text-sm text-muted-foreground">
-                {state.imported} فصل مستورد
-                {state.skipped > 0 && <span className="text-amber-500 ms-2">· {state.skipped} تم تخطيه</span>}
+                تم حفظ نتائج {students.length} تلميذ مع معدلاتهم السنوية
               </p>
               <Button onClick={onClose} className="mt-2">إغلاق</Button>
             </motion.div>
           )}
+
         </AnimatePresence>
       </DialogContent>
     </Dialog>
   );
 }
 
-// ── Grade entry modal ─────────────────────────────────────────────────────────
-function GradeModal({
-  result, annee, onClose, onSaved,
-}: {
+// ── Grade entry modal (manual) ────────────────────────────────────────────────
+function GradeModal({ result, annee, onClose, onSaved }: {
   result: StudentResult; annee: string; onClose: () => void; onSaved: () => void;
 }) {
   const { toast } = useToast();
@@ -380,9 +507,7 @@ function GradeModal({
     const g: Record<string, Record<string, string>> = { "1": {}, "2": {}, "3": {} };
     for (const [t, subs] of Object.entries(result.scores)) {
       g[t] = {};
-      for (const [sub, score] of Object.entries(subs)) {
-        g[t]![sub] = String(score);
-      }
+      for (const [sub, score] of Object.entries(subs)) g[t]![sub] = String(score);
     }
     setGrades(g);
   }, [result]);
@@ -412,11 +537,10 @@ function GradeModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ studentId: result.student.id, annee, trimestre: t, grades: g }),
         });
-        if (!res.ok) throw new Error("Failed to save");
+        if (!res.ok) throw new Error("Failed");
       }
       toast({ title: "تم حفظ النقاط ✓" });
-      onSaved();
-      onClose();
+      onSaved(); onClose();
     } catch {
       toast({ variant: "destructive", title: "خطأ في الحفظ" });
     } finally { setSaving(false); }
@@ -461,13 +585,10 @@ function GradeModal({
                 <p className="text-xs text-muted-foreground mb-1">{s.arLabel}</p>
                 <p className="text-xs text-muted-foreground">معامل {s.coef}</p>
               </div>
-              <Input
-                type="number" min={0} max={20} step={0.25}
-                placeholder="— /20"
+              <Input type="number" min={0} max={20} step={0.25} placeholder="— /20"
                 className="w-20 text-center font-mono text-base"
                 value={grades[String(tri)]?.[s.key] ?? ""}
-                onChange={e => setScore(s.key, e.target.value)}
-              />
+                onChange={e => setScore(s.key, e.target.value)} />
             </motion.div>
           ))}
         </div>
@@ -477,21 +598,14 @@ function GradeModal({
             معدل الفصل {tri}:
             <span className={`ms-2 text-xl font-extrabold ${
               triAvg === null ? "text-muted-foreground" : triAvg >= 10 ? "text-emerald-600" : "text-red-500"
-            }`}>
-              {triAvg !== null ? triAvg.toFixed(2) : "—"}
-            </span>
+            }`}>{triAvg !== null ? triAvg.toFixed(2) : "—"}</span>
             {triAvg !== null && <span className="text-muted-foreground text-xs ms-1">/20</span>}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose}>إلغاء</Button>
-            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-              <Button onClick={handleSave} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white">
-                {saving ? (
-                  <motion.div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
-                    animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }} />
-                ) : "حفظ النقاط"}
-              </Button>
-            </motion.div>
+            <Button onClick={handleSave} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "حفظ النقاط"}
+            </Button>
           </div>
         </div>
       </DialogContent>
@@ -499,7 +613,7 @@ function GradeModal({
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function Results() {
   const { t } = useLanguage();
   const [results, setResults] = useState<StudentResult[]>([]);
@@ -528,6 +642,13 @@ export default function Results() {
     ? results.filter(r => r.student.nomPrenom.toLowerCase().includes(filters.q.toLowerCase()))
     : results;
 
+  const niveauLabel = filters.niveau ? LEVEL_LABELS[filters.niveau as Niveau] : "جميع المستويات";
+
+  const handlePrint = () => {
+    if (displayed.length === 0) return;
+    printResults(displayed, niveauLabel, filters.classe, t);
+  };
+
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
       className="p-6 space-y-5 max-w-7xl mx-auto">
@@ -536,12 +657,17 @@ export default function Results() {
         <motion.h1 className="text-2xl font-bold" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
           {t("results.title")}
         </motion.h1>
-        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-          <Button
-            variant="outline"
+        <motion.div className="flex items-center gap-2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+          <Button variant="outline"
+            className="gap-2"
+            onClick={handlePrint}
+            disabled={displayed.length === 0}>
+            <Printer className="w-4 h-4" />
+            طباعة
+          </Button>
+          <Button variant="outline"
             className="gap-2 border-emerald-500/40 text-emerald-600 hover:bg-emerald-50/10 hover:border-emerald-500"
-            onClick={() => setShowImport(true)}
-          >
+            onClick={() => setShowImport(true)}>
             <FileSpreadsheet className="w-4 h-4" />
             استيراد Excel
           </Button>
@@ -597,20 +723,18 @@ export default function Results() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/60 sticky top-0">
                   <tr>
-                    {["#", t("col.name"), t("col.level"), t("col.class"), t("col.t1"), t("col.t2"), t("col.t3"), t("col.avg"), t("col.result"), ""].map(h => (
-                      <th key={h} className="px-3 py-3 text-start text-xs font-semibold text-muted-foreground uppercase whitespace-nowrap">{h}</th>
+                    {["#", t("col.name"), t("col.level"), t("col.class"), t("col.t1"), t("col.t2"), t("col.t3"), t("col.avg"), t("col.result"), ""].map((h, i) => (
+                      <th key={i} className="px-3 py-3 text-start text-xs font-semibold text-muted-foreground uppercase whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {displayed.map((r, i) => (
                     <motion.tr key={r.student.id}
-                      initial={{ opacity: 0, x: -12 }}
-                      animate={{ opacity: 1, x: 0 }}
+                      initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: Math.min(i * 0.02, 0.4) }}
                       className={`border-t hover:bg-muted/30 transition-colors cursor-pointer ${i % 2 === 0 ? "" : "bg-muted/15"}`}
-                      onClick={() => setSelected(r)}
-                    >
+                      onClick={() => setSelected(r)}>
                       <td className="px-3 py-3 text-muted-foreground text-xs font-mono">
                         {r.rank !== null ? (
                           <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
@@ -633,7 +757,8 @@ export default function Results() {
                         {avg2(r.annualAvg)}
                       </td>
                       <td className="px-3 py-3">
-                        {r.passed === null ? <span className="text-muted-foreground text-xs">—</span>
+                        {r.passed === null
+                          ? <span className="text-muted-foreground text-xs">—</span>
                           : r.passed
                             ? <span className="text-xs font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{t("val.admis")}</span>
                             : <span className="text-xs font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">{t("val.non_admis")}</span>}
@@ -658,7 +783,6 @@ export default function Results() {
       {selected && (
         <GradeModal result={selected} annee={annee} onClose={() => setSelected(null)} onSaved={fetchResults} />
       )}
-
       {showImport && (
         <ImportModal annee={annee} onClose={() => setShowImport(false)} onDone={fetchResults} />
       )}
