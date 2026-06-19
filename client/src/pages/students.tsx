@@ -7,19 +7,151 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Trash2, Search, Users, FileSpreadsheet, X, CheckCircle2, AlertCircle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Upload, Trash2, Search, Users, FileSpreadsheet, X, CheckCircle2, AlertCircle, BarChart2 } from "lucide-react";
 import { CountUp } from "@/components/count-up";
 import type { Student, Niveau, Sexe, Statut } from "@shared/types";
+import {
+  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
+} from "recharts";
 
 const BASE = import.meta.env.BASE_URL;
 const LEVELS: Niveau[] = ["1AM", "2AM", "3AM", "4AM"];
 const LEVEL_LABELS: Record<Niveau, string> = { "1AM": "1ère AM", "2AM": "2ème AM", "3AM": "3ème AM", "4AM": "4ème AM" };
+const LEVEL_COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
+const GENDER_COLORS = ["#3b82f6", "#ec4899"];
 
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as any } },
   exit:    { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
+
+function MiniTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-background/95 border rounded-lg shadow-lg p-2 text-xs">
+      {payload.map((p: any, i: number) => (
+        <p key={i} style={{ color: p.color || p.fill }} className="font-semibold">{p.name}: {p.value}</p>
+      ))}
+    </div>
+  );
+}
+
+function StudentAnalytics({ students }: { students: Student[] }) {
+  if (students.length === 0) return null;
+
+  const boys  = students.filter(s => s.sexe === "M").length;
+  const girls = students.filter(s => s.sexe === "F").length;
+
+  const genderData = [
+    { name: "ذكور", value: boys,  fill: GENDER_COLORS[0] },
+    { name: "إناث", value: girls, fill: GENDER_COLORS[1] },
+  ];
+
+  const levelData = LEVELS.map((l, i) => ({
+    name: l,
+    total: students.filter(s => s.niveau === l).length,
+    fill: LEVEL_COLORS[i],
+  })).filter(d => d.total > 0);
+
+  const admis    = students.filter(s => s.resultat === "admis").length;
+  const nonAdmis = students.filter(s => s.resultat === "non_admis").length;
+  const withResult = admis + nonAdmis;
+  const successRate = withResult > 0 ? Math.round((admis / withResult) * 100) : null;
+
+  const statusData = [
+    { name: "جديد",  value: students.filter(s => s.statut === "nouveau").length,    fill: "#10b981" },
+    { name: "معيد",  value: students.filter(s => s.statut === "redoublant").length,  fill: "#f59e0b" },
+  ].filter(d => d.value > 0);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3"
+    >
+      {/* KPI bar */}
+      <Card className="border-0 shadow-md bg-gradient-to-br from-blue-500 to-indigo-700 overflow-hidden col-span-1">
+        <CardContent className="p-4 relative">
+          <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full bg-white/10 blur-xl" />
+          <p className="text-white/70 text-xs font-semibold mb-1">إجمالي التلاميذ</p>
+          <p className="text-4xl font-extrabold text-white"><CountUp to={students.length} /></p>
+          <div className="mt-3 flex gap-3 text-xs text-white/80 font-semibold">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-sky-300" />{boys} ذكور
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-pink-300" />{girls} إناث
+            </span>
+          </div>
+          {successRate !== null && (
+            <div className="mt-2 text-xs text-white/70">
+              نسبة النجاح: <span className="font-bold text-emerald-200">{successRate}%</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Gender pie */}
+      <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20 col-span-1">
+        <CardHeader className="pb-1 pt-3 px-4">
+          <CardTitle className="text-xs font-bold text-muted-foreground">توزيع الجنس</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0 pb-2">
+          <ResponsiveContainer width="100%" height={110}>
+            <PieChart>
+              <Pie data={genderData} cx="50%" cy="50%" innerRadius={30} outerRadius={45}
+                paddingAngle={3} dataKey="value" animationDuration={700}>
+                {genderData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+              </Pie>
+              <Tooltip content={<MiniTooltip />} />
+              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Level bar */}
+      <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20 col-span-1">
+        <CardHeader className="pb-1 pt-3 px-4">
+          <CardTitle className="text-xs font-bold text-muted-foreground">توزيع المستويات</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0 pb-2 px-2">
+          <ResponsiveContainer width="100%" height={110}>
+            <BarChart data={levelData} barSize={18} margin={{ top: 6, bottom: 0, left: -20, right: 0 }}>
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+              <Tooltip content={<MiniTooltip />} />
+              <Bar dataKey="total" name="التلاميذ" radius={[4, 4, 0, 0]}>
+                {levelData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Status pie */}
+      <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20 col-span-1">
+        <CardHeader className="pb-1 pt-3 px-4">
+          <CardTitle className="text-xs font-bold text-muted-foreground">الوضعية والنتيجة</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0 pb-2">
+          <ResponsiveContainer width="100%" height={110}>
+            <PieChart>
+              <Pie data={statusData} cx="50%" cy="50%" innerRadius={28} outerRadius={42}
+                paddingAngle={3} dataKey="value" animationDuration={700}>
+                {statusData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+              </Pie>
+              <Tooltip content={<MiniTooltip />} />
+              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
 
 export default function Students() {
   const { t } = useLanguage();
@@ -33,7 +165,8 @@ export default function Students() {
   const [deleting, setDeleting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
   const [importResultOpen, setImportResultOpen] = useState(false);
-  const [listKey, setListKey] = useState(0); // key to re-trigger table animation
+  const [listKey, setListKey] = useState(0);
+  const [showAnalytics, setShowAnalytics] = useState(true);
 
   const [filters, setFilters] = useState({ q: "", niveau: "", classe: "", sexe: "", statut: "", annee: "" });
 
@@ -95,18 +228,33 @@ export default function Students() {
 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <motion.h1 className="text-2xl font-bold text-foreground"
-          initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
-          {t("students.title")}
-        </motion.h1>
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <span className="inline-flex w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 items-center justify-center shadow-lg shadow-blue-500/30">
+              <Users className="w-5 h-5 text-white" />
+            </span>
+            {t("students.title")}
+          </h1>
+        </motion.div>
 
         <motion.div className="flex items-center gap-2"
           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Button
+              size="sm" variant="outline"
+              className={`gap-1.5 h-9 text-xs font-semibold ${showAnalytics ? "bg-violet-50 border-violet-200 text-violet-700" : ""}`}
+              onClick={() => setShowAnalytics(s => !s)}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              {showAnalytics ? "إخفاء الإحصاءات" : "إظهار الإحصاءات"}
+            </Button>
+          </motion.div>
+
           <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleImport(f); }} />
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Button
-              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+              className="gap-2 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-sm shadow-emerald-500/30 border-0"
               onClick={() => fileRef.current?.click()} disabled={importing}
             >
               {importing ? (
@@ -138,6 +286,22 @@ export default function Students() {
           </AnimatePresence>
         </motion.div>
       </div>
+
+      {/* Analytics */}
+      <AnimatePresence>
+        {showAnalytics && !loading && students.length > 0 && (
+          <motion.div
+            key="analytics"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-hidden"
+          >
+            <StudentAnalytics students={students} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Filters */}
       <motion.div className="flex flex-wrap gap-3 items-center"
@@ -289,16 +453,12 @@ export default function Students() {
               <div className="flex gap-4">
                 <motion.div className="flex-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 p-4 text-center"
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                  <p className="text-3xl font-extrabold text-emerald-600">
-                    <CountUp to={importResult.imported} duration={0.8} />
-                  </p>
+                  <p className="text-3xl font-extrabold text-emerald-600"><CountUp to={importResult.imported} duration={0.8} /></p>
                   <p className="text-xs text-muted-foreground mt-1">تم الاستيراد</p>
                 </motion.div>
                 <motion.div className="flex-1 rounded-xl bg-amber-50 dark:bg-amber-950/30 p-4 text-center"
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-                  <p className="text-3xl font-extrabold text-amber-600">
-                    <CountUp to={importResult.skipped} duration={0.8} />
-                  </p>
+                  <p className="text-3xl font-extrabold text-amber-600"><CountUp to={importResult.skipped} duration={0.8} /></p>
                   <p className="text-xs text-muted-foreground mt-1">تم التخطي</p>
                 </motion.div>
               </div>
@@ -326,22 +486,12 @@ export default function Students() {
                       </motion.p>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    تأكد أن الملف يحتوي على أعمدة: <span className="font-semibold">الاسم، المستوى، القسم، الجنس</span>
-                  </p>
                 </motion.div>
-              )}
-              {importResult.imported === 0 && importResult.errors.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-2">
-                  لم يتم التعرف على أعمدة الملف. تأكد أن الصف الأول يحتوي على عناوين الأعمدة.
-                </p>
               )}
             </div>
           )}
           <DialogFooter>
-            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-              <Button onClick={() => setImportResultOpen(false)}>حسناً</Button>
-            </motion.div>
+            <Button onClick={() => setImportResultOpen(false)}>حسناً</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

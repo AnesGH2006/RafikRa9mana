@@ -1,16 +1,36 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UserCheck, AlertCircle } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid, Cell,
+} from "recharts";
 
 const BASE = import.meta.env.BASE_URL;
 const CURRENT_YEAR = "2025-2026";
+const LEVEL_COLORS: Record<string, string> = {
+  "1AM": "#6366f1", "2AM": "#8b5cf6", "3AM": "#a855f7", "4AM": "#d946ef",
+};
 
 interface ResultRow {
-  student: { id: string; nomPrenom: string; niveau: string; classe: string; };
+  student: { id: string; nomPrenom: string; niveau: string; classe: string };
   annualAvg: number | null;
   passed: boolean | null;
   rank: number | null;
+}
+
+function MiniTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-background/95 border rounded-lg shadow-lg p-2 text-xs">
+      {label && <p className="font-bold mb-1">{label}</p>}
+      {payload.map((p: any, i: number) => (
+        <p key={i} style={{ color: p.color || p.fill }} className="font-semibold">{p.name}: {p.value}</p>
+      ))}
+    </div>
+  );
 }
 
 export default function RepeatersPage() {
@@ -32,25 +52,123 @@ export default function RepeatersPage() {
 
   const repeaters = results.filter(r => r.passed === false || (r.annualAvg !== null && r.annualAvg < 10));
 
+  // Analytics
+  const LEVELS = ["1AM", "2AM", "3AM", "4AM"];
+  const byLevel = LEVELS.map(lvl => ({
+    name: lvl,
+    معيدون: repeaters.filter(r => r.student.niveau === lvl).length,
+    fill: LEVEL_COLORS[lvl] ?? "#6366f1",
+  })).filter(d => d.معيدون > 0);
+
+  const totalWithAvg = results.filter(r => r.annualAvg !== null).length;
+  const repeatRate = totalWithAvg > 0 ? Math.round((repeaters.length / totalWithAvg) * 100) : 0;
+
+  // Grade histogram buckets: <5, 5-7, 7-8, 8-9, 9-10
+  const buckets = [
+    { label: "< 5",   min: 0,   max: 5   },
+    { label: "5-7",   min: 5,   max: 7   },
+    { label: "7-8",   min: 7,   max: 8   },
+    { label: "8-9",   min: 8,   max: 9   },
+    { label: "9-10",  min: 9,   max: 10  },
+  ];
+  const histData = buckets.map(b => ({
+    name: b.label,
+    count: repeaters.filter(r => r.annualAvg !== null && r.annualAvg >= b.min && r.annualAvg < b.max).length,
+  }));
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.35 }}
       className="p-6 space-y-6 max-w-4xl mx-auto"
     >
+      {/* Header */}
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <UserCheck className="w-6 h-6 text-orange-500" />
+          <span className="inline-flex w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 items-center justify-center shadow-lg shadow-orange-500/30">
+            <UserCheck className="w-5 h-5 text-white" />
+          </span>
           التلاميذ المعيدون
         </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
+        <p className="text-sm text-muted-foreground mt-0.5 ms-11">
           التلاميذ المحتمل إعادتهم — المعدل السنوي أقل من 10
         </p>
       </motion.div>
 
+      {/* Analytics */}
+      {!loading && repeaters.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+          className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+        >
+          {/* KPI card */}
+          <Card className="border-0 shadow-lg shadow-orange-500/20 overflow-hidden">
+            <div className="bg-gradient-to-br from-orange-500 to-amber-600 p-5 relative overflow-hidden">
+              <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full bg-white/10 blur-xl" />
+              <p className="text-white/70 text-xs font-semibold mb-1">إجمالي المعيدون</p>
+              <p className="text-4xl font-extrabold text-white">{repeaters.length}</p>
+              <div className="mt-3 h-1.5 rounded-full bg-white/20 overflow-hidden">
+                <motion.div
+                  className="h-full bg-white/70 rounded-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${repeatRate}%` }}
+                  transition={{ duration: 1, delay: 0.4, ease: "easeOut" }}
+                />
+              </div>
+              <p className="text-white/70 text-xs mt-1.5">
+                {repeatRate}% من إجمالي التلاميذ
+              </p>
+            </div>
+          </Card>
+
+          {/* By level bar */}
+          {byLevel.length > 0 && (
+            <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+              <CardHeader className="pb-1 pt-3 px-4">
+                <CardTitle className="text-xs font-bold text-muted-foreground">المعيدون حسب المستوى</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 pb-3 px-2">
+                <ResponsiveContainer width="100%" height={130}>
+                  <BarChart data={byLevel} barSize={24} margin={{ left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip content={<MiniTooltip />} />
+                    <Bar dataKey="معيدون" radius={[5, 5, 0, 0]}>
+                      {byLevel.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Grade histogram */}
+          <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardTitle className="text-xs font-bold text-muted-foreground">توزيع المعدلات</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0 pb-3 px-2">
+              <ResponsiveContainer width="100%" height={130}>
+                <BarChart data={histData} barSize={20} margin={{ left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip content={<MiniTooltip />} />
+                  <Bar dataKey="count" name="تلاميذ" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Filters + count */}
       <div className="flex gap-3 flex-wrap items-center">
         <Select value={niveau || "__all__"} onValueChange={v => setNiveau(v === "__all__" ? "" : v)}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="كل المستويات" /></SelectTrigger>
+          <SelectTrigger className="w-40 bg-gradient-to-r from-orange-500 to-amber-600 text-white border-0 font-semibold text-xs h-9">
+            <SelectValue placeholder="كل المستويات" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">كل المستويات</SelectItem>
             {["1AM", "2AM", "3AM", "4AM"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
@@ -100,8 +218,6 @@ export default function RepeatersPage() {
                   <p className="font-semibold">{r.student.nomPrenom}</p>
                   <p className="text-xs text-muted-foreground">{r.student.niveau} — قسم {r.student.classe}</p>
                 </div>
-
-                {/* Mini bar */}
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
                     <motion.div
