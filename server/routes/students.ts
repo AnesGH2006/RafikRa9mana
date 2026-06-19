@@ -300,32 +300,37 @@ router.get("/students", async (req, res): Promise<void> => {
 
 router.get("/stats", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
-  const userId = req.user!.id;
-  const { annee } = req.query as Record<string, string>;
-  const conds = [eq(studentsTable.userId, userId)];
-  if (annee) conds.push(eq(studentsTable.annee, annee));
-  const all = await db.select().from(studentsTable).where(and(...conds));
+  try {
+    const userId = req.user!.id;
+    const { annee } = req.query as Record<string, string>;
+    const conds = [eq(studentsTable.userId, userId)];
+    if (annee) conds.push(eq(studentsTable.annee, annee));
+    const all = await db.select().from(studentsTable).where(and(...conds));
 
-  const LEVELS = ["1AM", "2AM", "3AM", "4AM"] as const;
-  const byLevel = LEVELS.map(niveau => {
-    const g = all.filter(s => s.niveau === niveau);
-    return {
-      niveau, total: g.length,
-      boys: g.filter(s => s.sexe === "M").length,
-      girls: g.filter(s => s.sexe === "F").length,
-      admis: g.filter(s => s.resultat === "admis").length,
-      nonAdmis: g.filter(s => s.resultat === "non_admis").length,
-    };
-  }).filter(l => l.total > 0);
+    const LEVELS = ["1AM", "2AM", "3AM", "4AM"] as const;
+    const byLevel = LEVELS.map(niveau => {
+      const g = all.filter(s => s.niveau === niveau);
+      return {
+        niveau, total: g.length,
+        boys: g.filter(s => s.sexe === "M").length,
+        girls: g.filter(s => s.sexe === "F").length,
+        admis: g.filter(s => s.resultat === "admis").length,
+        nonAdmis: g.filter(s => s.resultat === "non_admis").length,
+      };
+    }).filter(l => l.total > 0);
 
-  res.json(DashboardStatsResponse.parse({
-    total: all.length,
-    boys: all.filter(s => s.sexe === "M").length,
-    girls: all.filter(s => s.sexe === "F").length,
-    admis: all.filter(s => s.resultat === "admis").length,
-    nonAdmis: all.filter(s => s.resultat === "non_admis").length,
-    byLevel,
-  }));
+    res.json(DashboardStatsResponse.parse({
+      total: all.length,
+      boys: all.filter(s => s.sexe === "M").length,
+      girls: all.filter(s => s.sexe === "F").length,
+      admis: all.filter(s => s.resultat === "admis").length,
+      nonAdmis: all.filter(s => s.resultat === "non_admis").length,
+      byLevel,
+    }));
+  } catch (err) {
+    req.log.error({ err }, "Stats query failed");
+    res.status(500).json({ error: "Failed to load stats" });
+  }
 });
 
 router.post("/students/import", upload.single("file"), async (req, res): Promise<void> => {

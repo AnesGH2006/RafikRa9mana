@@ -1,15 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLanguage } from "@/contexts/language-provider";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, RadialBarChart, RadialBar,
+  LineChart, Line,
 } from "recharts";
-import { TrendingUp, Users, UserCheck, UserX, Award, BarChart3 } from "lucide-react";
+import {
+  TrendingUp, Users, UserCheck, UserX, Award, BarChart3,
+  GitCompare, ChevronDown, ChevronUp,
+} from "lucide-react";
 import { CountUp } from "@/components/count-up";
 import type { DashboardStats } from "@shared/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -28,101 +33,316 @@ const LEVEL_LABELS: Record<string, string> = {
 const GENDER_COLORS = ["#3b82f6", "#ec4899"];
 const LEVEL_COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
 const SUCCESS_COLORS = { pass: "#10b981", fail: "#f43f5e" };
+const YEAR_A_COLOR = "#6366f1";
+const YEAR_B_COLOR = "#f59e0b";
 
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as const } },
   exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
-
 const cardVariants = {
   initial: { opacity: 0, y: 24, scale: 0.97 },
   animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: "easeOut" as const } },
 };
 
-function SkeletonCard() {
+function SkeletonCard({ h = 64 }: { h?: number }) {
   return (
     <motion.div
-      className="h-64 rounded-2xl bg-muted"
+      className={`h-${h} rounded-2xl bg-muted`}
       animate={{ opacity: [0.4, 0.7, 0.4] }}
       transition={{ duration: 1.5, repeat: Infinity }}
     />
   );
 }
 
-interface CustomTooltipProps {
+interface TooltipProps {
   active?: boolean;
   payload?: Array<{ name: string; value: number; color: string }>;
   label?: string;
 }
-
-function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
+function CustomTooltip({ active, payload, label }: TooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-background/95 backdrop-blur border rounded-xl shadow-xl p-3 text-xs">
-      {label && <p className="font-bold mb-1 text-foreground">{label}</p>}
+      {label && <p className="font-bold mb-1.5 text-foreground">{label}</p>}
       {payload.map((p, i) => (
-        <p key={i} style={{ color: p.color }} className="font-semibold">
-          {p.name}: {p.value}
-        </p>
+        <p key={i} style={{ color: p.color }} className="font-semibold">{p.name}: {p.value}</p>
       ))}
     </div>
   );
 }
 
-export default function AnalyticsPage() {
-  const { t } = useLanguage();
-  const [year, setYear] = useState(() => {
-    const stored = localStorage.getItem("cem-selected-year");
-    return stored || "2025-2026";
-  });
+function useStats(year: string) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const years = getAcademicYears();
 
-  const fetchStats = useCallback(async (y: string) => {
+  const fetch_ = useCallback(async (y: string) => {
     setLoading(true);
     try {
       const res = await fetch(`${BASE}api/stats?annee=${y}`, { credentials: "include" });
-      if (res.ok) setStats(await res.json());
-      else setStats(null);
-    } finally {
-      setLoading(false);
-    }
+      setStats(res.ok ? await res.json() : null);
+    } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => {
-    fetchStats(year);
-    localStorage.setItem("cem-selected-year", year);
-  }, [year, fetchStats]);
+  useEffect(() => { fetch_(year); }, [year, fetch_]);
+  return { stats, loading };
+}
+
+// ── Comparison section ────────────────────────────────────────────────────────
+function ComparisonSection({ yearA, yearB }: { yearA: string; yearB: string }) {
+  const { stats: sA, loading: lA } = useStats(yearA);
+  const { stats: sB, loading: lB } = useStats(yearB);
+  const loading = lA || lB;
+
+  const hasData = !loading && (sA?.total || sB?.total);
+
+  // Build per-level comparison data
+  const levels = ["1AM", "2AM", "3AM", "4AM"];
+  const levelCompare = levels.map(lvl => {
+    const la = sA?.byLevel.find(l => l.niveau === lvl);
+    const lb = sB?.byLevel.find(l => l.niveau === lvl);
+    return {
+      name: LEVEL_LABELS[lvl],
+      [yearA]: la?.total ?? 0,
+      [yearB]: lb?.total ?? 0,
+    };
+  }).filter(d => d[yearA] > 0 || d[yearB] > 0);
+
+  const successCompare = levels.map(lvl => {
+    const la = sA?.byLevel.find(l => l.niveau === lvl);
+    const lb = sB?.byLevel.find(l => l.niveau === lvl);
+    const rateA = la && (la.admis + la.nonAdmis) > 0
+      ? Math.round((la.admis / (la.admis + la.nonAdmis)) * 100) : 0;
+    const rateB = lb && (lb.admis + lb.nonAdmis) > 0
+      ? Math.round((lb.admis / (lb.admis + lb.nonAdmis)) * 100) : 0;
+    return {
+      name: LEVEL_LABELS[lvl],
+      [yearA]: rateA,
+      [yearB]: rateB,
+    };
+  }).filter(d => d[yearA] > 0 || d[yearB] > 0);
+
+  // Trend line: total + success rate per year
+  const rateA = sA && (sA.admis + sA.nonAdmis) > 0
+    ? Math.round((sA.admis / (sA.admis + sA.nonAdmis)) * 100) : null;
+  const rateB = sB && (sB.admis + sB.nonAdmis) > 0
+    ? Math.round((sB.admis / (sB.admis + sB.nonAdmis)) * 100) : null;
+
+  const trendData = [
+    { year: yearA, total: sA?.total ?? 0, rate: rateA ?? 0, boys: sA?.boys ?? 0, girls: sA?.girls ?? 0 },
+    { year: yearB, total: sB?.total ?? 0, rate: rateB ?? 0, boys: sB?.boys ?? 0, girls: sB?.girls ?? 0 },
+  ];
+
+  if (loading) return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+      {[...Array(4)].map((_, i) => <SkeletonCard key={i} h={48} />)}
+    </div>
+  );
+
+  if (!hasData) return (
+    <div className="text-center py-8 text-muted-foreground text-sm">
+      لا توجد بيانات كافية لإجراء المقارنة
+    </div>
+  );
+
+  return (
+    <div className="space-y-5 mt-2">
+      {/* KPI diff row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          {
+            label: "إجمالي التلاميذ",
+            a: sA?.total ?? 0, b: sB?.total ?? 0,
+            icon: Users, color: "from-blue-500 to-indigo-600",
+          },
+          {
+            label: "ذكور",
+            a: sA?.boys ?? 0, b: sB?.boys ?? 0,
+            icon: Users, color: "from-sky-500 to-cyan-600",
+          },
+          {
+            label: "إناث",
+            a: sA?.girls ?? 0, b: sB?.girls ?? 0,
+            icon: Users, color: "from-pink-500 to-rose-600",
+          },
+          {
+            label: "نسبة النجاح",
+            a: rateA ?? 0, b: rateB ?? 0,
+            icon: Award, color: "from-emerald-500 to-green-600",
+            suffix: "%",
+          },
+        ].map((item, i) => {
+          const diff = item.b - item.a;
+          return (
+            <motion.div
+              key={i} variants={cardVariants} initial="initial" animate="animate"
+              whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 260, delay: i * 0.06 }}
+            >
+              <Card className="border-0 shadow-md overflow-hidden">
+                <div className={`bg-gradient-to-br ${item.color} p-3 relative overflow-hidden`}>
+                  <div className="absolute -top-4 -right-4 w-14 h-14 rounded-full bg-white/10 blur-xl" />
+                  <p className="text-white/75 text-[10px] font-semibold mb-1.5">{item.label}</p>
+                  <div className="flex items-end justify-between gap-1">
+                    <div>
+                      <p className="text-[10px] text-white/60 font-medium">{yearA}</p>
+                      <p className="text-xl font-extrabold text-white leading-none">
+                        {item.a}{item.suffix ?? ""}
+                      </p>
+                    </div>
+                    <div className="text-end">
+                      <p className="text-[10px] text-white/60 font-medium">{yearB}</p>
+                      <p className="text-xl font-extrabold text-white leading-none">
+                        {item.b}{item.suffix ?? ""}
+                      </p>
+                    </div>
+                  </div>
+                  {item.a > 0 && (
+                    <div className={`mt-2 flex items-center gap-1 text-[10px] font-bold ${diff > 0 ? "text-emerald-200" : diff < 0 ? "text-red-200" : "text-white/50"}`}>
+                      {diff > 0 ? <ChevronUp className="w-3 h-3" /> : diff < 0 ? <ChevronDown className="w-3 h-3" /> : null}
+                      {diff !== 0 ? `${diff > 0 ? "+" : ""}${diff}${item.suffix ?? ""}` : "لا تغيير"}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Students per level comparison */}
+      {levelCompare.length > 0 && (
+        <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 200 }}>
+          <Card className="shadow-md border-0 bg-gradient-to-br from-card to-muted/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                التلاميذ حسب المستوى — مقارنة
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={levelCompare} barSize={20} barGap={4}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend iconType="circle" iconSize={8} />
+                  <Bar dataKey={yearA} fill={YEAR_A_COLOR} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={yearB} fill={YEAR_B_COLOR} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Success rate by level comparison */}
+      {successCompare.length > 0 && (
+        <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 200 }}>
+          <Card className="shadow-md border-0 bg-gradient-to-br from-card to-muted/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                نسبة النجاح حسب المستوى — مقارنة %
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={successCompare} barSize={20} barGap={4}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} unit="%" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend iconType="circle" iconSize={8} />
+                  <Bar dataKey={yearA} fill={YEAR_A_COLOR} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={yearB} fill={YEAR_B_COLOR} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Trend line */}
+      {(trendData[0].total > 0 || trendData[1].total > 0) && (
+        <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 200 }}>
+          <Card className="shadow-md border-0 bg-gradient-to-br from-card to-muted/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-cyan-500" />
+                الاتجاه العام — إجمالي التلاميذ ونسبة النجاح
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
+                  <XAxis dataKey="year" tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} domain={[0, 100]} unit="%" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend iconType="circle" iconSize={8} />
+                  <Line yAxisId="left" type="monotone" dataKey="total" name="إجمالي التلاميذ"
+                    stroke={YEAR_A_COLOR} strokeWidth={2.5} dot={{ r: 5, fill: YEAR_A_COLOR }} />
+                  <Line yAxisId="right" type="monotone" dataKey="rate" name="نسبة النجاح %"
+                    stroke="#10b981" strokeWidth={2.5} dot={{ r: 5, fill: "#10b981" }} strokeDasharray="5 3" />
+                  <Line yAxisId="left" type="monotone" dataKey="boys" name="ذكور"
+                    stroke="#3b82f6" strokeWidth={1.5} dot={{ r: 4 }} />
+                  <Line yAxisId="left" type="monotone" dataKey="girls" name="إناث"
+                    stroke="#ec4899" strokeWidth={1.5} dot={{ r: 4 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function AnalyticsPage() {
+  const { t } = useLanguage();
+  const years = getAcademicYears();
+
+  const [year, setYear] = useState(() => localStorage.getItem("cem-selected-year") || "2025-2026");
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareYear, setCompareYear] = useState(() => {
+    const stored = localStorage.getItem("cem-selected-year") || "2025-2026";
+    const idx = years.indexOf(stored);
+    return years[idx + 1] || years[1] || stored;
+  });
+
+  const { stats, loading } = useStats(year);
+
+  useEffect(() => { localStorage.setItem("cem-selected-year", year); }, [year]);
 
   const genderData = stats ? [
-    { name: t("analytics.boys"), value: stats.boys, color: "#3b82f6" },
-    { name: t("analytics.girls"), value: stats.girls, color: "#ec4899" },
+    { name: t("analytics.boys"), value: stats.boys },
+    { name: t("analytics.girls"), value: stats.girls },
   ] : [];
 
   const levelData = stats?.byLevel.map((l, i) => ({
     name: LEVEL_LABELS[l.niveau] || l.niveau,
-    total: l.total,
-    boys: l.boys,
-    girls: l.girls,
+    [t("analytics.boys")]: l.boys,
+    [t("analytics.girls")]: l.girls,
     color: LEVEL_COLORS[i % LEVEL_COLORS.length],
   })) || [];
 
-  const successData = stats?.byLevel.filter(l => l.admis > 0 || l.nonAdmis > 0).map((l, i) => ({
+  const successData = stats?.byLevel.filter(l => l.admis > 0 || l.nonAdmis > 0).map(l => ({
     name: LEVEL_LABELS[l.niveau] || l.niveau,
     [t("analytics.passed")]: l.admis,
     [t("analytics.failed")]: l.nonAdmis,
-    color: LEVEL_COLORS[i % LEVEL_COLORS.length],
   })) || [];
 
-  const successRate = stats && stats.total > 0 && (stats.admis + stats.nonAdmis > 0)
+  const successRate = stats && (stats.admis + stats.nonAdmis) > 0
     ? Math.round((stats.admis / (stats.admis + stats.nonAdmis)) * 100)
     : null;
 
-  const radialData = successRate !== null ? [
-    { name: t("analytics.passed"), value: successRate, fill: "#10b981" },
-  ] : [];
+  const radialData = successRate !== null
+    ? [{ name: t("analytics.passed"), value: successRate, fill: "#10b981" }]
+    : [];
 
   return (
     <motion.div
@@ -130,31 +350,98 @@ export default function AnalyticsPage() {
       className="p-6 space-y-6 max-w-6xl mx-auto"
     >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <span className="inline-flex w-9 h-9 rounded-xl bg-violet-500 items-center justify-center shadow-lg shadow-violet-500/30">
+            <span className="inline-flex w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 items-center justify-center shadow-lg shadow-violet-500/30">
               <BarChart3 className="w-5 h-5 text-white" />
             </span>
             {t("analytics.title")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">{t("analytics.overview")}</p>
+          <p className="text-xs text-muted-foreground mt-1 ms-11">{t("analytics.overview")}</p>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
+        <motion.div
+          className="flex flex-wrap items-center gap-2"
+          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.1 }}
+        >
           <Select value={year} onValueChange={setYear}>
-            <SelectTrigger className="w-44 bg-gradient-to-r from-violet-500 to-purple-600 text-white border-0 shadow-lg shadow-violet-500/25 font-semibold">
+            <SelectTrigger className="w-40 bg-gradient-to-r from-violet-500 to-purple-600 text-white border-0 shadow-lg shadow-violet-500/25 font-semibold text-xs h-9">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {years.map(y => (
-                <SelectItem key={y} value={y}>{y}</SelectItem>
-              ))}
+              {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
             </SelectContent>
           </Select>
+
+          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
+            <Button
+              size="sm"
+              onClick={() => setCompareMode(m => !m)}
+              className={`gap-2 h-9 font-semibold text-xs shadow-md transition-all ${
+                compareMode
+                  ? "bg-gradient-to-r from-amber-500 to-orange-600 text-white border-0 shadow-amber-500/30"
+                  : "bg-gradient-to-r from-slate-600 to-slate-800 text-white border-0 hover:from-amber-500 hover:to-orange-600"
+              }`}
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              {compareMode ? "إلغاء المقارنة" : "مقارنة السنوات"}
+            </Button>
+          </motion.div>
+
+          <AnimatePresence>
+            {compareMode && (
+              <motion.div
+                initial={{ opacity: 0, width: 0, x: -8 }}
+                animate={{ opacity: 1, width: "auto", x: 0 }}
+                exit={{ opacity: 0, width: 0, x: -8 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <Select value={compareYear} onValueChange={setCompareYear}>
+                  <SelectTrigger className="w-40 bg-gradient-to-r from-amber-500 to-orange-600 text-white border-0 shadow-lg shadow-amber-500/25 font-semibold text-xs h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.filter(y => y !== year).map(y => (
+                      <SelectItem key={y} value={y}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
 
+      {/* ── Compare mode ── */}
+      <AnimatePresence mode="wait">
+        {compareMode && (
+          <motion.div
+            key="compare"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.35 }}
+          >
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-indigo-50/80 to-amber-50/60 dark:from-indigo-950/40 dark:to-amber-950/30 overflow-hidden">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <GitCompare className="w-4 h-4 text-indigo-500" />
+                  <span className="text-indigo-600 dark:text-indigo-300 font-extrabold">{year}</span>
+                  <span className="text-muted-foreground">مقابل</span>
+                  <span className="text-amber-600 dark:text-amber-300 font-extrabold">{compareYear}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ComparisonSection yearA={year} yearB={compareYear} />
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Single year stats ── */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
@@ -174,23 +461,25 @@ export default function AnalyticsPage() {
         </motion.div>
       ) : (
         <>
-          {/* KPI Cards */}
+          {/* KPI cards */}
           <motion.div
             className="grid grid-cols-2 md:grid-cols-4 gap-4"
             initial="initial" animate="animate"
             variants={{ animate: { transition: { staggerChildren: 0.07 } } }}
           >
             {[
-              { label: t("stats.total"), value: stats.total, icon: Users, bg: "from-blue-500 to-blue-600", shadow: "shadow-blue-500/30" },
+              { label: t("stats.total"), value: stats.total, icon: Users, bg: "from-blue-500 to-blue-700", shadow: "shadow-blue-500/30" },
               { label: t("analytics.boys"), value: stats.boys, icon: Users, bg: "from-sky-500 to-cyan-600", shadow: "shadow-sky-500/30" },
               { label: t("analytics.girls"), value: stats.girls, icon: Users, bg: "from-pink-500 to-rose-600", shadow: "shadow-pink-500/30" },
-              ...(successRate !== null ? [
-                { label: t("analytics.successRate"), value: successRate, icon: Award, bg: "from-emerald-500 to-green-600", shadow: "shadow-emerald-500/30", suffix: "%" },
-              ] : []),
+              ...(successRate !== null ? [{
+                label: t("analytics.successRate"), value: successRate, icon: Award,
+                bg: "from-emerald-500 to-green-700", shadow: "shadow-emerald-500/30", suffix: "%",
+              }] : []),
             ].map((item, i) => (
               <motion.div key={i} variants={cardVariants} whileHover={{ y: -4, scale: 1.03 }} transition={{ type: "spring", stiffness: 300 }}>
                 <Card className={`border-0 shadow-lg ${item.shadow} overflow-hidden`}>
-                  <div className={`h-full bg-gradient-to-br ${item.bg} p-4`}>
+                  <div className={`bg-gradient-to-br ${item.bg} p-4 relative overflow-hidden`}>
+                    <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full bg-white/10 blur-xl" />
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-white/80 text-xs font-semibold">{item.label}</p>
                       <item.icon className="w-4 h-4 text-white/60" />
@@ -217,11 +506,9 @@ export default function AnalyticsPage() {
                 <CardContent>
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
-                      <Pie
-                        data={genderData} cx="50%" cy="50%" innerRadius={55} outerRadius={80}
-                        paddingAngle={4} dataKey="value" animationDuration={800}
-                      >
-                        {genderData.map((entry, i) => (
+                      <Pie data={genderData} cx="50%" cy="50%" innerRadius={55} outerRadius={80}
+                        paddingAngle={4} dataKey="value" animationDuration={800}>
+                        {genderData.map((_, i) => (
                           <Cell key={i} fill={GENDER_COLORS[i % GENDER_COLORS.length]} />
                         ))}
                       </Pie>
@@ -233,7 +520,7 @@ export default function AnalyticsPage() {
               </Card>
             </motion.div>
 
-            {/* Success Rate Radial */}
+            {/* Radial success */}
             {successRate !== null && (
               <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 200 }}>
                 <Card className="shadow-md border-0 bg-gradient-to-br from-card to-muted/30 h-full">
@@ -246,10 +533,8 @@ export default function AnalyticsPage() {
                   <CardContent className="flex flex-col items-center">
                     <div className="relative">
                       <ResponsiveContainer width={180} height={180}>
-                        <RadialBarChart
-                          cx="50%" cy="50%" innerRadius={55} outerRadius={80}
-                          barSize={14} data={radialData} startAngle={90} endAngle={-270}
-                        >
+                        <RadialBarChart cx="50%" cy="50%" innerRadius={55} outerRadius={80}
+                          barSize={14} data={radialData} startAngle={90} endAngle={-270}>
                           <RadialBar background={{ fill: "#e5e7eb" }} dataKey="value" cornerRadius={8} />
                         </RadialBarChart>
                       </ResponsiveContainer>
@@ -260,10 +545,10 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="flex gap-4 text-xs mt-1">
                       <span className="flex items-center gap-1.5 text-emerald-600 font-semibold">
-                        <UserCheck className="w-3.5 h-3.5" />{stats.admis} {t("analytics.passed")}
+                        <UserCheck className="w-3.5 h-3.5" />{stats.admis}
                       </span>
                       <span className="flex items-center gap-1.5 text-red-500 font-semibold">
-                        <UserX className="w-3.5 h-3.5" />{stats.nonAdmis} {t("analytics.failed")}
+                        <UserX className="w-3.5 h-3.5" />{stats.nonAdmis}
                       </span>
                     </div>
                   </CardContent>
@@ -272,7 +557,8 @@ export default function AnalyticsPage() {
             )}
 
             {/* Level bar */}
-            <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 200 }}
+            <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -3 }}
+              transition={{ type: "spring", stiffness: 200 }}
               className={successRate !== null ? "" : "md:col-span-2 xl:col-span-1"}>
               <Card className="shadow-md border-0 bg-gradient-to-br from-card to-muted/30 h-full">
                 <CardHeader className="pb-2">
@@ -288,8 +574,8 @@ export default function AnalyticsPage() {
                       <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="boys" name={t("analytics.boys")} fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="girls" name={t("analytics.girls")} fill="#ec4899" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey={t("analytics.boys")} fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey={t("analytics.girls")} fill="#ec4899" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -298,8 +584,8 @@ export default function AnalyticsPage() {
 
             {/* Success by level */}
             {successData.length > 0 && (
-              <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 200 }}
-                className="md:col-span-2 xl:col-span-3">
+              <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -3 }}
+                transition={{ type: "spring", stiffness: 200 }} className="md:col-span-2 xl:col-span-3">
                 <Card className="shadow-md border-0 bg-gradient-to-br from-card to-muted/30">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-bold flex items-center gap-2">
@@ -324,7 +610,7 @@ export default function AnalyticsPage() {
               </motion.div>
             )}
 
-            {/* Level summary table */}
+            {/* Level table */}
             <motion.div variants={cardVariants} initial="initial" animate="animate"
               className="md:col-span-2 xl:col-span-3">
               <Card className="shadow-md border-0">
@@ -353,17 +639,15 @@ export default function AnalyticsPage() {
                           const total = l.admis + l.nonAdmis;
                           const rate = total > 0 ? Math.round((l.admis / total) * 100) : null;
                           return (
-                            <motion.tr
-                              key={l.niveau}
-                              custom={i}
-                              initial={{ opacity: 0, x: -12 }}
-                              animate={{ opacity: 1, x: 0 }}
+                            <motion.tr key={l.niveau}
+                              initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}
                               transition={{ delay: i * 0.06 }}
                               className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/15"}`}
                             >
                               <td className="py-3 font-bold text-foreground">
                                 <span className="inline-flex items-center gap-2">
-                                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: LEVEL_COLORS[i % LEVEL_COLORS.length] }} />
+                                  <span className="w-2.5 h-2.5 rounded-full"
+                                    style={{ backgroundColor: LEVEL_COLORS[i % LEVEL_COLORS.length] }} />
                                   {LEVEL_LABELS[l.niveau] || l.niveau}
                                 </span>
                               </td>
