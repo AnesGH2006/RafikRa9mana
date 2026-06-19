@@ -43,6 +43,11 @@ description: Key decisions for the Algerian CEM school management app structure 
 - Command: `pnpm run dev:server & pnpm run dev:client`
 - waitForPort: 20053 (vite uses PORT env var, default 20053 in vite.config.ts)
 
+## Critical: Vite proxy required for /api
+- vite.config.ts MUST have `server.proxy: { "/api": { target: "http://localhost:8080" } }`
+- Without it, all /api calls hit Vite (which 404s) instead of Express backend
+- **Why:** Vite dev server and Express run on different ports; the proxy bridges them in dev
+
 ## UI style conventions
 - Stat cards use bg-gradient-to-br with colored shadow (`shadow-{color}-500/25`)
 - Buttons use gradient classes for bright CTAs (from-blue-500 to-indigo-600 etc.)
