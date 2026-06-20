@@ -5,7 +5,8 @@ minimumReleaseAgeExclude:
   - '@replit/*'
 
 # No workspace packages — this is now a flat single-package project
-packages: []
+packages:
+  - 'artifacts/school-video'
 
 autoInstallPeers: false
 
