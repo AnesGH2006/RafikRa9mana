@@ -16,6 +16,10 @@ export default defineConfig({
       "@assets": path.resolve(__dirname, "attached_assets"),
     },
   },
+  build: {
+    outDir: "../dist/public",
+    emptyOutDir: true,
+  },
   server: {
     port: parseInt(process.env.PORT || "20053"),
     host: "0.0.0.0",
