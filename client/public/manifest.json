@@ -1,7 +1,7 @@
 {
   "name": "رفيق الرقمنة",
   "short_name": "رفيق الرقمنة",
-  "description": "منصة جزائرية تعمل على تسسهيل عمل المدراء ومستشارين التوجيه",
+  "description": "منصة جزائرية تعمل على تسهيل عمل المدراء ومستشاري التوجيه",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -12,7 +12,7 @@
   "lang": "ar",
   "dir": "rtl",
   "id": "rafik-ra9mana-dz",
-  "categories": ["Education", "Grades"],
+  "categories": ["education"],
   "prefer_related_applications": false,
   "icons": [
     {
@@ -42,12 +42,20 @@
   ],
   "shortcuts": [
     {
-      "name": "رفيق الرقمنة",
-      "short_name": "رفيق الرقمنة",
-      "description": "تصفح التطبيق",
-      "url": "/settings",
+      "name": "الطلاب",
+      "short_name": "الطلاب",
+      "description": "قائمة الطلاب",
+      "url": "/students",
       "icons": [{ "src": "/logo.png", "sizes": "192x192", "type": "image/png" }]
     },
+    {
+      "name": "النتائج",
+      "short_name": "النتائج",
+      "description": "نتائج الطلاب",
+      "url": "/results",
+      "icons": [{ "src": "/logo.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
   "screenshots": [
     {
       "src": "/opengraph.jpg",
