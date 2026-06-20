@@ -107,7 +107,7 @@ function ComparisonSection({ yearA, yearB }: { yearA: string; yearB: string }) {
       [yearA]: la?.total ?? 0,
       [yearB]: lb?.total ?? 0,
     };
-  }).filter(d => d[yearA] > 0 || d[yearB] > 0);
+  }).filter(d => (d[yearA] as number) > 0 || (d[yearB] as number) > 0);
 
   const successCompare = levels.map(lvl => {
     const la = sA?.byLevel.find(l => l.niveau === lvl);
@@ -121,7 +121,7 @@ function ComparisonSection({ yearA, yearB }: { yearA: string; yearB: string }) {
       [yearA]: rateA,
       [yearB]: rateB,
     };
-  }).filter(d => d[yearA] > 0 || d[yearB] > 0);
+  }).filter(d => (d[yearA] as number) > 0 || (d[yearB] as number) > 0);
 
   // Trend line: total + success rate per year
   const rateA = sA && (sA.admis + sA.nonAdmis) > 0
