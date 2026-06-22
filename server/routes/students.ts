@@ -34,42 +34,98 @@ function contains(hay: string, needles: string[]): boolean {
   return needles.some(n => h.includes(norm(n)));
 }
 
-// ─── HTML-XLS parser (for Algerian Ministry files) ───────────────────────────
-function parseHTMLWorkbook(buffer: Buffer): unknown[][] {
-  const text = buffer.toString("utf-8");
-  if (!text.trim().startsWith("<")) return [];
+// ─── HTML entity decoder ──────────────────────────────────────────────────────
+function decodeHTMLEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_: string, n: string) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_: string, h: string) => String.fromCharCode(parseInt(h, 16)));
+}
 
-  // Use regex to extract table rows — no DOM parser available in Node
+// ─── HTML-XLS parser (for Algerian Ministry files) ───────────────────────────
+export function parseHTMLWorkbook(buffer: Buffer): { rows: unknown[][]; error?: string } {
+  const text = buffer.toString("utf-8");
+  const trimmed = text.trimStart();
+
+  if (!trimmed.startsWith("<")) return { rows: [], error: "ليس ملف HTML" };
+
+  // Detect frameset-based XLS (references external sheet001.htm — can't be parsed alone)
+  if (/<frameset/i.test(text) && /<frame\s/i.test(text) && !/<tbody/i.test(text)) {
+    return {
+      rows: [],
+      error:
+        "هذا الملف يستخدم نسق الإطارات (Frameset) ويحتاج إلى ملف sheet001.htm المرافق. " +
+        "الرجاء تصدير الملف بصيغة .xlsx مباشرة من التطبيق أو استخدام ملف HTML المضمّن.",
+    };
+  }
+
   const rows: unknown[][] = [];
   const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  const tdRegex = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
   const tagRegex = /<[^>]+>/g;
 
   let trMatch: RegExpExecArray | null;
   while ((trMatch = trRegex.exec(text)) !== null) {
     const cells: string[] = [];
-    let tdMatch: RegExpExecArray | null;
     const tdRe = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+    let tdMatch: RegExpExecArray | null;
     while ((tdMatch = tdRe.exec(trMatch[1]!)) !== null) {
-      const cell = tdMatch[1]!.replace(tagRegex, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").trim();
+      const raw = tdMatch[1]!.replace(tagRegex, "");
+      const cell = decodeHTMLEntities(raw).replace(/\s+/g, " ").trim();
       cells.push(cell);
     }
     if (cells.length > 0) rows.push(cells);
   }
-  return rows;
+  return { rows };
+}
+
+// ─── Arabic name-based gender inference ──────────────────────────────────────
+const FEMALE_NAMES = new Set([
+  "فاطمة","عائشة","مريم","زينب","سارة","نور","هند","ليلى","أمينة","خديجة",
+  "سلمى","رقية","حفصة","أسماء","رحمة","وسام","إيمان","هاجر","آية","نجاة",
+  "كوثر","منال","هدى","ندى","شيماء","نهال","ملاك","بشرى","أمال","سهام",
+  "إخلاص","اخلاص","سجى","صفاء","وفاء","دلال","ربيعة","حياة","نسرين","لمياء",
+  "ياسمين","زهرة","نادية","سميرة","نجمة","جميلة","مليكة","لطيفة","رزيقة","زليخة",
+  "حنان","إيناس","رانية","نسيمة","كريمة","حليمة","فريدة","نفيسة","مسعودة",
+]);
+const MALE_NAMES = new Set([
+  "محمد","أحمد","علي","عمر","يوسف","إبراهيم","خالد","عبد","عبدالله","حسن",
+  "حسين","عبدالرحمن","طارق","كريم","سامي","رامي","أنس","بلال","سعيد","رشيد",
+  "مصطفى","إسماعيل","نور","يونس","إلياس","ياسين","أمين","زكريا","هارون","صالح",
+]);
+
+function inferGenderFromName(fullName: string): "M" | "F" | null {
+  if (!fullName) return null;
+  const words = fullName.trim().split(/\s+/);
+  // Check all words (last name then first name)
+  for (const word of words) {
+    const w = word.replace(/[\u064B-\u065F\u0670\u0640]/g, "");
+    for (const fn of FEMALE_NAMES) if (w === fn || w.includes(fn)) return "F";
+    for (const mn of MALE_NAMES) if (w === mn || w.includes(mn)) return "M";
+  }
+  // Pattern: words ending with ة or ى are often female names (but not last names like "متوسطة")
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i]!.replace(/[\u064B-\u065F\u0670\u0640]/g, "");
+    if (w.length > 3 && (w.endsWith("ة") || w.endsWith("ى") || w.endsWith("اء"))) return "F";
+  }
+  return null;
 }
 
 // ─── Column detection keywords ────────────────────────────────────────────────
-const NAME_N   = ["اسم ولقب","اللقب و الاسم","اللقب والاسم","اسم","لقب","الاسم واللقب","nom prenom","nom et prenom","eleve","élève","name","full name","التلميذ"];
+const NAME_N   = ["اسم ولقب","اللقب و الاسم","اللقب والاسم","لقب و اسم","لقب واسم","اسم","لقب","الاسم واللقب","nom prenom","nom et prenom","eleve","élève","name","full name","التلميذ","المتعلم"];
 const PRENOM_N = ["الاسم","prenom","prénom","first name","fname","الإسم"];
 const NOM_N    = ["اللقب","nom de famille","last name","lname","family"];
 const BIRTH_N  = ["ميلاد","تاريخ الميلاد","naissance","birth","dob","تاريخ"];
 const LEVEL_N  = ["مستوى","niveau","level","year","grade","السنة","الصف","المستوى"];
 const CLASS_N  = ["فوج","قسم","classe","section","class","division","group","الفوج","القسم"];
 const GENDER_N = ["جنس","الجنس","sexe","genre","gender","sex","النوع"];
-const STATUS_N = ["الإعادة","اعاده","إعادة","وضعية","حالة","statut","status","situation","انتساب","الوضعية","redoublan"];
+const STATUS_N = ["الإعادة","اعاده","إعاده","وضعية","حالة","statut","status","situation","انتساب","الوضعية","redoublan"];
 const RESULT_N = ["نتيجه","نتيجة","résultat","resultat","result","mention","قرار","النتيجة"];
-const RAQM_N   = ["الرقم","رقم","#","no","n°","numero","numéro"];
+const RAQM_N   = ["الرقم","رقم","الترتيب","ترتيب","#","no","n°","numero","numéro","رقم التلميذ"];
 
 function findCol(headers: string[], needles: string[]): string | null {
   return headers.find(h => contains(h, needles)) ?? null;
@@ -88,7 +144,8 @@ function isHeaderRow(row: unknown[]): boolean {
   return (
     contains(joined, RAQM_N) ||
     (contains(joined, GENDER_N) && contains(joined, NAME_N.concat(NOM_N))) ||
-    (contains(joined, LEVEL_N) && contains(joined, NAME_N.concat(NOM_N)))
+    (contains(joined, LEVEL_N) && contains(joined, NAME_N.concat(NOM_N))) ||
+    (contains(joined, NAME_N) && cells.filter(c => c.length > 1).length >= 3)
   );
 }
 
@@ -97,10 +154,8 @@ function normalizeGender(val: string): "M" | "F" | null {
   const raw = String(val ?? "").replace(/[\u0009\u000A\u000D\u0020\u00A0\u200B\u200C\u200D\uFEFF\u3000]/g, "").trim();
   if (!raw) return null;
   const v = norm(raw);
-  // Male
   if (/ذكر/.test(v) || /^ذ$/.test(v) || /^م$/.test(v)) return "M";
   if (/^(m|male|masculin|garcon|garçon|homme|h)$/.test(v) || v === "1") return "M";
-  // Female
   if (/انثي|انثى|اناث|انوثه|انوثة/.test(v)) return "F";
   if (/^(انثي|انثى|اناث|فتاه|فتاة|بنت)/.test(v)) return "F";
   if (/^ا$/.test(v) || /^أ$/.test(v)) return "F";
@@ -150,21 +205,21 @@ const AR_CLASS: Record<string, string> = {
   "أ": "A", "ا": "A", "ب": "B", "ج": "C", "د": "D", "ه": "E", "هـ": "E", "و": "F", "ز": "G",
 };
 
-// ─── Core import logic (shared between xlsx and html-xls) ─────────────────────
+// ─── Core import logic ────────────────────────────────────────────────────────
 function processRows(
   raw: unknown[][],
   userId: string,
   annee: string,
-  niveau: "1AM" | "2AM" | "3AM" | "4AM" | null, // null = auto-detect from file
-  classe: string | null,                          // null = auto-detect from file
+  niveau: "1AM" | "2AM" | "3AM" | "4AM" | null,
+  classe: string | null,
   logger: { info: (...a: any[]) => void }
 ): { toInsert: typeof studentsTable.$inferInsert[]; skipped: number; errors: string[] } {
   const errors: string[] = [];
   let skipped = 0;
 
-  // Find header row
+  // Find header row — scan first 15 rows
   let headerRowIdx = 0;
-  for (let i = 0; i < Math.min(10, raw.length); i++) {
+  for (let i = 0; i < Math.min(15, raw.length); i++) {
     if (isHeaderRow(raw[i] as unknown[])) { headerRowIdx = i; break; }
   }
 
@@ -173,7 +228,7 @@ function processRows(
 
   logger.info({ headerRowIdx, headers: headerCells }, "Headers detected");
 
-  // Detect niveau from title rows if not provided
+  // Auto-detect niveau from title rows
   let detectedNiveau = niveau;
   if (!detectedNiveau) {
     for (let i = 0; i < headerRowIdx; i++) {
@@ -181,6 +236,11 @@ function processRows(
       detectedNiveau = normalizeLevel(titleText);
       if (detectedNiveau) break;
     }
+  }
+  // Also try detecting from header row itself (e.g. "ثالثة متوسط")
+  if (!detectedNiveau) {
+    const headerText = headerCells.join(" ");
+    detectedNiveau = normalizeLevel(headerText);
   }
 
   const colRaqm   = findCol(headerCells, RAQM_N);
@@ -210,7 +270,7 @@ function processRows(
 
     const row = rowToObj(rawRow);
 
-    // ── رقم (sequence number) ─────────────────────────────────────────────────
+    // ── رقم ──────────────────────────────────────────────────────────────────
     const raqmRaw = cellStr(row, colRaqm);
     const raqm = raqmRaw && !isNaN(Number(raqmRaw)) ? Number(raqmRaw) : null;
 
@@ -225,6 +285,7 @@ function processRows(
     } else if (colName) {
       nomPrenom = cellStr(row, colName);
     }
+    // Fallback: first cell with Arabic/Latin text longer than 2 chars
     if (!nomPrenom) {
       for (const h of headerCells) {
         const v = cellStr(row, h);
@@ -242,23 +303,19 @@ function processRows(
 
     // ── Class ─────────────────────────────────────────────────────────────────
     let classeRaw = classe ?? cellStr(row, colClass);
-    if (!classeRaw) {
-      // Try to extract class from title (e.g. "ثالثة متوسط 01")
-      if (!detectedNiveau) {
-        if (errors.length < 30) errors.push(`صف ${i + headerRowIdx + 2}: قسم مفقود ← "${nomPrenom}"`);
-        skipped++; continue;
-      }
-      // Use raqm-based default class if title had class info
-      classeRaw = "A";
-    }
+    if (!classeRaw) classeRaw = "A";
     classeRaw = AR_CLASS[classeRaw] ?? classeRaw.toUpperCase().replace(/\s+/g, "");
 
-    // ── Gender ────────────────────────────────────────────────────────────────
+    // ── Gender — column value first, then infer from name ────────────────────
     const genderRaw = cellStr(row, colGender);
-    const sexe = normalizeGender(genderRaw);
+    let sexe: "M" | "F" | null = normalizeGender(genderRaw);
     if (!sexe) {
-      if (errors.length < 30) errors.push(`صف ${i + headerRowIdx + 2}: جنس غير صحيح "${genderRaw}" ← "${nomPrenom}"`);
-      skipped++; continue;
+      sexe = inferGenderFromName(nomPrenom);
+    }
+    if (!sexe) {
+      // Default to M if we can't determine — log a soft warning
+      sexe = "M";
+      if (errors.length < 30) errors.push(`صف ${i + headerRowIdx + 2}: جنس غير محدد — افتراضي ذكر ← "${nomPrenom}"`);
     }
 
     const dateNaissance = cellStr(row, colBirth) || null;
@@ -344,35 +401,36 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
   const userId = req.user!.id;
   const annee = (req.query.annee as string) || "2025-2026";
 
-  // ── Detect file type and parse to row arrays ───────────────────────────────
   let raw: unknown[][] = [];
   const fileText = req.file.buffer.toString("utf-8").trimStart();
   const isHTML = fileText.startsWith("<");
 
   if (isHTML) {
-    // HTML-disguised .xls (Algerian Ministry format)
-    raw = parseHTMLWorkbook(req.file.buffer);
+    const { rows, error } = parseHTMLWorkbook(req.file.buffer);
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+    raw = rows;
   } else {
     try {
       const wb = XLSX.read(req.file.buffer, { type: "buffer", raw: false });
       const ws = wb.Sheets[wb.SheetNames[0]!];
       raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: false, blankrows: false });
     } catch (e) {
-      res.status(400).json({ error: "Invalid file format. Use .xlsx or the ministry .xls file." });
+      res.status(400).json({ error: "صيغة الملف غير صالحة. استخدم .xlsx أو ملف .xls من المنظومة." });
       return;
     }
   }
 
-  if (!raw.length) { res.status(400).json({ error: "Empty file" }); return; }
+  if (!raw.length) { res.status(400).json({ error: "الملف فارغ أو لا يحتوي على بيانات قابلة للقراءة" }); return; }
 
-  // ── Extract class from title rows for ministry files ──────────────────────
-  // e.g. "تحليل النتائج الفصل الثالث 2023-2024 ثالثة متوسط 01"
+  // Extract class/level from title rows (e.g. "ثالثة متوسط 01")
   let titleClasse: string | null = null;
   let titleNiveau: "1AM" | "2AM" | "3AM" | "4AM" | null = null;
-  for (let i = 0; i < Math.min(6, raw.length); i++) {
+  for (let i = 0; i < Math.min(8, raw.length); i++) {
     const text = (raw[i] as unknown[]).join(" ");
     if (text.includes("متوسط")) {
-      // Extract class number e.g. "01", "02"
       const classMatch = text.match(/متوسط\s*(\d+)/);
       if (classMatch) titleClasse = classMatch[1]!.replace(/^0+/, "") || "1";
       titleNiveau = normalizeLevel(text);
@@ -395,7 +453,7 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
 });
 
 router.post("/students/preview", upload.single("file"), async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "No file" }); return; }
   if (!req.file) { res.status(400).json({ error: "No file" }); return; }
 
   const fileText = req.file.buffer.toString("utf-8").trimStart();
@@ -403,19 +461,21 @@ router.post("/students/preview", upload.single("file"), async (req, res): Promis
   let raw: unknown[][] = [];
 
   if (isHTML) {
-    raw = parseHTMLWorkbook(req.file.buffer);
+    const { rows, error } = parseHTMLWorkbook(req.file.buffer);
+    if (error) { res.status(400).json({ error }); return; }
+    raw = rows;
   } else {
     try {
       const wb = XLSX.read(req.file.buffer, { type: "buffer", raw: false });
       const ws = wb.Sheets[wb.SheetNames[0]!];
       raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: false, blankrows: false });
     } catch {
-      res.status(400).json({ error: "Invalid Excel file" }); return;
+      res.status(400).json({ error: "ملف Excel غير صالح" }); return;
     }
   }
 
   let headerRowIdx = 0;
-  for (let i = 0; i < Math.min(10, raw.length); i++) {
+  for (let i = 0; i < Math.min(15, raw.length); i++) {
     if (isHeaderRow(raw[i] as unknown[])) { headerRowIdx = i; break; }
   }
 

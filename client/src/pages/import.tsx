@@ -93,19 +93,19 @@ export default function ImportPage() {
       {/* Required columns info */}
       <motion.div className="rounded-xl bg-muted/50 border p-5 space-y-3"
         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <p className="font-semibold text-sm">الأعمدة المطلوبة في الملف:</p>
+        <p className="font-semibold text-sm">الأعمدة المدعومة في الملف:</p>
         <div className="grid grid-cols-2 gap-2">
           {[
-            { col: "الاسم واللقب", note: "أو اللقب + الاسم في عمودين" },
-            { col: "المستوى", note: "1AM أو أولى، ثانية..." },
-            { col: "القسم", note: "A, B, C أو أ، ب، ج" },
-            { col: "الجنس", note: "ذكر/أنثى أو M/F أو ذ/أ" },
-            { col: "تاريخ الميلاد", note: "اختياري" },
-            { col: "الوضعية", note: "جديد/معيد — اختياري" },
+            { col: "الاسم واللقب", note: "أو «اللقب و الاسم» أو عمودان منفصلان", required: true },
+            { col: "المستوى", note: "أولى/ثانية/ثالثة/رابعة أو 1AM…4AM", required: true },
+            { col: "القسم", note: "A, B, C أو أ، ب، ج — اختياري", required: false },
+            { col: "الجنس", note: "ذكر/أنثى أو M/F — يُستنتج تلقائياً من الاسم", required: false },
+            { col: "تاريخ الميلاد", note: "اختياري", required: false },
+            { col: "الوضعية / الإعادة", note: "جديد/معيد — اختياري", required: false },
           ].map((item, i) => (
             <motion.div key={i} className="flex items-start gap-2"
               initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 + 0.25 }}>
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+              <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${item.required ? "bg-blue-500" : "bg-muted-foreground/40"}`} />
               <div>
                 <span className="text-sm font-semibold">{item.col}</span>
                 <span className="text-xs text-muted-foreground block">{item.note}</span>
@@ -113,9 +113,17 @@ export default function ImportPage() {
             </motion.div>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground pt-1">
-          ⚡ الملف قد يحتوي صفوفًا للترويسة قبل البيانات — يتم التعرف عليها تلقائياً.
-        </p>
+        <div className="pt-1 space-y-1">
+          <p className="text-xs text-muted-foreground">
+            ⚡ يدعم ملفات <strong>.xlsx</strong> الحقيقية وملفات <strong>.xls</strong> بصيغة HTML من منظومة أمتي.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            🔍 يتعرف تلقائياً على صف العناوين حتى لو كان مسبوقاً بصفوف عنوان للمؤسسة أو السنة الدراسية.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            👤 إذا غاب عمود الجنس، يُستنتج تلقائياً من الاسم الأول.
+          </p>
+        </div>
       </motion.div>
 
       {/* Import result dialog */}

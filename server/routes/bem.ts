@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import { parseHTMLWorkbook } from "./students.js";
 
 const router: IRouter = Router();
 
@@ -27,7 +28,13 @@ const BEM_SUBJECTS = [
 ];
 
 function normalise(s: string): string {
-  return String(s).toLowerCase().replace(/\s+/g, "").replace(/[^\p{L}\p{N}]/gu, "");
+  return String(s).toLowerCase()
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآا]/g, "ا")
+    .replace(/[ةه]/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/\s+/g, "")
+    .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 function parseScore(val: unknown): number | null {
@@ -39,16 +46,16 @@ function parseScore(val: unknown): number | null {
 function detectSubjectKey(header: string): string | null {
   const h = normalise(header);
   if (h.includes("رياضيات")) return "math";
-  if (h.includes("عربية") || h.includes("العربية")) return "arabic";
-  if (h.includes("فرنسية") || h.includes("الفرنسية")) return "french";
-  if (h.includes("إنجليزية") || h.includes("الإنجليزية") || h.includes("انجليزية")) return "english";
-  if (h.includes("إسلامية") || h.includes("اسلامية")) return "islamic";
-  if (h.includes("مدنية")) return "civic";
+  if (h.includes("عربيه") || h.includes("عربية") || h.includes("العربيه")) return "arabic";
+  if (h.includes("فرنسيه") || h.includes("فرنسية") || h.includes("الفرنسيه")) return "french";
+  if (h.includes("إنجليزيه") || h.includes("انجليزيه") || h.includes("إنجليزية") || h.includes("انجليزية")) return "english";
+  if (h.includes("إسلاميه") || h.includes("اسلاميه") || h.includes("إسلامية") || h.includes("اسلامية")) return "islamic";
+  if (h.includes("مدنيه") || h.includes("مدنية")) return "civic";
   if (h.includes("ميلاد")) return null;
   if (h.includes("تاريخ") || h.includes("جغرافيا")) return "history";
-  if (h.includes("علومط") || (h.includes("علوم") && h.includes("ط"))) return "science";
-  if (h.includes("فيزياء")) return "physics";
-  if (h.includes("بدنية")) return "pe";
+  if (h.includes("علومط") || (h.includes("علوم") && (h.includes("طبيعه") || h.includes("طبيعة") || h.includes("حياه") || h.includes("حياة")))) return "science";
+  if (h.includes("فيزياء") || h.includes("فيزيائيه") || h.includes("فيزيائية") || h.includes("تكنولوجيا")) return "physics";
+  if (h.includes("بدنيه") || h.includes("بدنية") || h.includes("رياضيه") || h.includes("رياضية")) return "pe";
   return null;
 }
 
@@ -76,19 +83,35 @@ function detectGender(name: string): "male" | "female" | "unknown" {
   return "unknown";
 }
 
+// ── Parse a file buffer into rows (handles both binary XLSX and HTML-disguised XLS) ──
+function parseFileToRows(buffer: Buffer): { rows: unknown[][]; error?: string } {
+  const text = buffer.toString("utf-8").trimStart();
+
+  if (text.startsWith("<")) {
+    // HTML-disguised XLS (Algerian Ministry format)
+    return parseHTMLWorkbook(buffer);
+  }
+
+  // Binary XLSX/XLS
+  try {
+    const wb = XLSX.read(buffer, { type: "buffer" });
+    const sheetName = wb.SheetNames[0];
+    if (!sheetName) return { rows: [], error: "الملف فارغ" };
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { defval: null, header: 1 }) as unknown[][];
+    return { rows };
+  } catch {
+    return { rows: [], error: "تعذّر قراءة ملف Excel. تأكد أن الملف بصيغة .xlsx أو .xls صحيحة." };
+  }
+}
+
 router.post("/bem/analyze", upload.single("file"), async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
 
-  let wb: XLSX.WorkBook;
-  try { wb = XLSX.read(req.file.buffer, { type: "buffer" }); }
-  catch { res.status(400).json({ error: "Could not read Excel file" }); return; }
-
-  const sheetName = wb.SheetNames[0];
-  if (!sheetName) { res.status(400).json({ error: "Empty file" }); return; }
-
-  const sheet = wb.Sheets[sheetName];
-  const allRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { defval: null, header: 1 }) as unknown[][];
+  const { rows: allRows, error: parseError } = parseFileToRows(req.file.buffer);
+  if (parseError) { res.status(400).json({ error: parseError }); return; }
+  if (!allRows.length) { res.status(400).json({ error: "الملف فارغ أو لا يحتوي على بيانات" }); return; }
 
   let headerRowIndex = -1;
   let headers: string[] = [];
@@ -103,7 +126,7 @@ router.post("/bem/analyze", upload.single("file"), async (req, res): Promise<voi
   }
 
   if (headerRowIndex === -1) {
-    res.status(400).json({ error: "Could not detect header row" });
+    res.status(400).json({ error: "تعذّر الكشف عن صف العناوين" });
     return;
   }
 
@@ -130,7 +153,7 @@ router.post("/bem/analyze", upload.single("file"), async (req, res): Promise<voi
 
   for (const rawRow of dataRows) {
     const row = rawRow as unknown[];
-    if (!row || row.every(c => c === null || c === "")) continue;
+    if (!row || row.every(c => c === null || String(c ?? "").trim() === "")) continue;
     const name = nameColIdx >= 0 ? String(row[nameColIdx] ?? "").trim() : "";
     if (!name || !isNaN(Number(name))) continue;
 
@@ -159,7 +182,7 @@ router.post("/bem/analyze", upload.single("file"), async (req, res): Promise<voi
 
   if (students.length === 0) {
     res.status(400).json({
-      error: "No valid student data found in file",
+      error: "لم يتم العثور على بيانات تلاميذ في الملف",
       debug: { headerRowIndex, headers, nameColIdx, avgColIdx, subjectColMap,
                sample: allRows.slice(headerRowIndex + 1, headerRowIndex + 3) },
     });
@@ -178,7 +201,6 @@ router.post("/bem/analyze", upload.single("file"), async (req, res): Promise<voi
     ? Math.round((sorted.reduce((sum, s) => sum + (s.average ?? 0), 0) / sorted.length) * 100) / 100
     : null;
 
-  // Gender stats
   const males   = students.filter(s => s.gender === "male");
   const females = students.filter(s => s.gender === "female");
   const genderStats = {
@@ -193,7 +215,6 @@ router.post("/bem/analyze", upload.single("file"), async (req, res): Promise<voi
     femalePassRate: females.length > 0 ? Math.round((females.filter(s => s.passed).length / females.length) * 10000) / 100 : 0,
   };
 
-  // Subject stats
   const detectedSubjects = BEM_SUBJECTS.filter(s => subjectColMap[s.key] !== undefined);
   const subjectStats = detectedSubjects.map(subj => {
     const scores = students.map(s => s.scores[subj.key]).filter((v): v is number => v !== null);
@@ -208,7 +229,6 @@ router.post("/bem/analyze", upload.single("file"), async (req, res): Promise<voi
     };
   });
 
-  // Score distribution (1-point buckets)
   const scoreDistribution = Array.from({ length: 20 }, (_, i) => ({
     range: String(i),
     count: students.filter(s => s.average !== null && Math.floor(s.average) === i).length,
