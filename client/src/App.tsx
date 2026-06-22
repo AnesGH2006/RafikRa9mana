@@ -29,6 +29,8 @@ import TransferResultsPage from "@/pages/transfer-results";
 import CouncilsPage from "@/pages/councils";
 import AnalyticsPage from "@/pages/analytics";
 import SubscriptionPage from "@/pages/subscription";
+import AdminPage from "@/pages/admin";
+import PaywallScreen from "@/pages/paywall";
 import NotFound from "@/pages/not-found";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -111,6 +113,7 @@ const SECTIONS: SectionDef[] = [
       { href: "/settings",      icon: Settings,    labelKey: "nav.settings"     },
       { href: "/account",       icon: User,        labelKey: "nav.account"      },
       { href: "/subscription",  icon: CreditCard,  labelKey: "nav.subscription", badge: "PRO" },
+      { href: "/admin",         icon: Star,        labelKey: "nav.admin"        },
     ],
   },
 ];
@@ -410,6 +413,7 @@ function AppLayout() {
               <Route path="/yearend/failed">{() => <YearEnd />}</Route>
               <Route path="/analytics"           component={AnalyticsPage} />
               <Route path="/subscription"        component={SubscriptionPage} />
+              <Route path="/admin"               component={AdminPage} />
               <Route path="/orientation">{() => <ComingSoon title="التوجيه النهائي" />}</Route>
               <Route path="/import"              component={ImportPage} />
               <Route path="/settings"            component={SettingsPage} />
@@ -509,18 +513,24 @@ function LoginScreen() {
 
 // ── Auth gate ─────────────────────────────────────────────────────────────────
 function AuthGate() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   if (isLoading) return (
     <div className="min-h-screen flex items-center justify-center">
       <motion.div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full"
         animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} />
     </div>
   );
+
+  const isSubscribed = user?.subscriptionStatus === "active";
+
   return (
     <AnimatePresence mode="wait">
-      {isAuthenticated
-        ? <motion.div key="app" className="h-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}><AppLayout /></motion.div>
-        : <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}><LoginScreen /></motion.div>}
+      {!isAuthenticated
+        ? <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}><LoginScreen /></motion.div>
+        : !isSubscribed
+          ? <motion.div key="paywall" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}><PaywallScreen /></motion.div>
+          : <motion.div key="app" className="h-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}><AppLayout /></motion.div>
+      }
     </AnimatePresence>
   );
 }

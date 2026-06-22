@@ -316,6 +316,8 @@ router.get("/stats", async (req, res): Promise<void> => {
         girls: g.filter(s => s.sexe === "F").length,
         admis: g.filter(s => s.resultat === "admis").length,
         nonAdmis: g.filter(s => s.resultat === "non_admis").length,
+        nouveau: g.filter(s => s.statut === "nouveau").length,
+        redoublant: g.filter(s => s.statut === "redoublant").length,
       };
     }).filter(l => l.total > 0);
 
@@ -325,6 +327,8 @@ router.get("/stats", async (req, res): Promise<void> => {
       girls: all.filter(s => s.sexe === "F").length,
       admis: all.filter(s => s.resultat === "admis").length,
       nonAdmis: all.filter(s => s.resultat === "non_admis").length,
+      nouveau: all.filter(s => s.statut === "nouveau").length,
+      redoublant: all.filter(s => s.statut === "redoublant").length,
       byLevel,
     }));
   } catch (err) {

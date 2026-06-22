@@ -5,6 +5,7 @@ import schoolRouter from "./school.js";
 import studentsRouter from "./students.js";
 import gradesRouter from "./grades.js";
 import bemRouter from "./bem.js";
+import adminRouter from "./admin.js";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(schoolRouter);
 router.use(studentsRouter);
 router.use(gradesRouter);
 router.use(bemRouter);
+router.use(adminRouter);
 
 export default router;

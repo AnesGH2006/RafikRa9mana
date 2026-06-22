@@ -676,6 +676,191 @@ export default function AnalyticsPage() {
                 </CardContent>
               </Card>
             </motion.div>
+
+            {/* ── New analytics: Repeater breakdown ── */}
+            {stats.redoublant > 0 && (() => {
+              const repeaterData = [
+                { name: "جدد", value: stats.nouveau, fill: "#6366f1" },
+                { name: "معيدون", value: stats.redoublant, fill: "#f59e0b" },
+              ];
+              const repeaterRate = stats.total > 0 ? Math.round((stats.redoublant / stats.total) * 100) : 0;
+              const repeaterByLevel = stats.byLevel
+                .filter(l => l.total > 0)
+                .map(l => ({
+                  name: LEVEL_LABELS[l.niveau] || l.niveau,
+                  جدد: l.nouveau,
+                  معيدون: l.redoublant,
+                  "نسبة الإعادة": l.total > 0 ? Math.round((l.redoublant / l.total) * 100) : 0,
+                }));
+
+              return (
+                <>
+                  {/* Repeater KPI banner */}
+                  <motion.div variants={cardVariants} initial="initial" animate="animate"
+                    className="md:col-span-2 xl:col-span-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {[
+                        { label: "إجمالي جدد", value: stats.nouveau, bg: "from-indigo-500 to-violet-600", suffix: "" },
+                        { label: "إجمالي معيدين", value: stats.redoublant, bg: "from-amber-500 to-orange-600", suffix: "" },
+                        { label: "نسبة الإعادة", value: repeaterRate, bg: "from-rose-500 to-red-600", suffix: "%" },
+                        {
+                          label: "ذكور معيدون",
+                          value: stats.byLevel.reduce((s, l) => {
+                            const redoublantTotal = l.redoublant;
+                            const mRatio = l.total > 0 ? l.boys / l.total : 0.5;
+                            return s + Math.round(redoublantTotal * mRatio);
+                          }, 0),
+                          bg: "from-sky-500 to-cyan-600",
+                          suffix: "",
+                        },
+                      ].map((item, i) => (
+                        <motion.div key={i} whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 300 }}>
+                          <Card className="border-0 shadow-md overflow-hidden">
+                            <div className={`bg-gradient-to-br ${item.bg} p-4 relative overflow-hidden`}>
+                              <div className="absolute -top-5 -right-5 w-16 h-16 rounded-full bg-white/10 blur-xl" />
+                              <p className="text-white/75 text-xs font-semibold mb-1">{item.label}</p>
+                              <p className="text-2xl font-extrabold text-white">
+                                <CountUp to={item.value} />{item.suffix}
+                              </p>
+                            </div>
+                          </Card>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </motion.div>
+
+                  {/* Pie: new vs repeater */}
+                  <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -3 }} transition={{ type: "spring", stiffness: 200 }}>
+                    <Card className="shadow-md border-0 bg-gradient-to-br from-card to-muted/30 h-full">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-amber-500" />
+                          توزيع جدد / معيدون
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <PieChart>
+                            <Pie data={repeaterData} cx="50%" cy="50%" innerRadius={55} outerRadius={80}
+                              paddingAngle={4} dataKey="value" animationDuration={800}>
+                              {repeaterData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                            </Pie>
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend iconType="circle" iconSize={8} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+
+                  {/* Bar: new vs repeater by level */}
+                  <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -3 }}
+                    transition={{ type: "spring", stiffness: 200 }} className="md:col-span-1 xl:col-span-2">
+                    <Card className="shadow-md border-0 bg-gradient-to-br from-card to-muted/30 h-full">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                          جدد مقابل معيدين حسب المستوى
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <BarChart data={repeaterByLevel} barSize={18} barGap={4}>
+                            <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 10 }} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Legend iconType="circle" iconSize={8} />
+                            <Bar dataKey="جدد" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="معيدون" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+
+                  {/* Repeater rate by level */}
+                  <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -3 }}
+                    transition={{ type: "spring", stiffness: 200 }} className="md:col-span-2 xl:col-span-3">
+                    <Card className="shadow-md border-0 bg-gradient-to-br from-card to-muted/30">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-rose-500" />
+                          نسبة الإعادة حسب المستوى %
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          {repeaterByLevel.map((l, i) => (
+                            <div key={i} className="space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-semibold text-foreground">{l.name}</span>
+                                <span className={`font-bold ${
+                                  l["نسبة الإعادة"] >= 30 ? "text-red-500"
+                                  : l["نسبة الإعادة"] >= 15 ? "text-amber-500"
+                                  : "text-emerald-500"
+                                }`}>{l["نسبة الإعادة"]}%</span>
+                              </div>
+                              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                <motion.div
+                                  className={`h-full rounded-full ${
+                                    l["نسبة الإعادة"] >= 30 ? "bg-red-500"
+                                    : l["نسبة الإعادة"] >= 15 ? "bg-amber-500"
+                                    : "bg-emerald-500"
+                                  }`}
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${l["نسبة الإعادة"]}%` }}
+                                  transition={{ duration: 0.8, delay: i * 0.1 }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                </>
+              );
+            })()}
+
+            {/* ── Gender success rate by level ── */}
+            {successData.length > 0 && (() => {
+              const genderSuccessData = stats.byLevel
+                .filter(l => l.admis > 0 || l.nonAdmis > 0)
+                .map(l => {
+                  const boysPass = l.boys > 0 ? Math.round((l.admis * (l.boys / l.total)) / l.boys * 100) : 0;
+                  const girlsPass = l.girls > 0 ? Math.round((l.admis * (l.girls / l.total)) / l.girls * 100) : 0;
+                  return { name: LEVEL_LABELS[l.niveau] || l.niveau, ذكور: boysPass, إناث: girlsPass };
+                });
+
+              if (!genderSuccessData.length) return null;
+              return (
+                <motion.div variants={cardVariants} initial="initial" animate="animate" whileHover={{ y: -2 }}
+                  transition={{ type: "spring", stiffness: 200 }} className="md:col-span-2 xl:col-span-3">
+                  <Card className="shadow-md border-0 bg-gradient-to-br from-card to-muted/20">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-bold flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-pink-500" />
+                        نسبة النجاح حسب الجنس والمستوى %
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={genderSuccessData} barSize={24} barGap={6}>
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} unit="%" />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Legend iconType="circle" iconSize={8} />
+                          <Bar dataKey="ذكور" fill="#3b82f6" radius={[5, 5, 0, 0]} />
+                          <Bar dataKey="إناث" fill="#ec4899" radius={[5, 5, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })()}
           </div>
         </>
       )}

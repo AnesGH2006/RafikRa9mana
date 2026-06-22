@@ -7,6 +7,7 @@ import {
   LogoutMobileSessionResponse,
 } from "../../shared/schemas.js";
 import { db, usersTable } from "../../shared/db.js";
+import { eq } from "drizzle-orm";
 import {
   clearSession,
   getOidcConfig,
@@ -42,19 +43,49 @@ function getSafeReturnTo(value: unknown): string {
 }
 
 async function upsertUser(claims: Record<string, unknown>) {
-  const userData = {
+  const adminEmails = (process.env.ADMIN_EMAILS || "").split(",").map(e => e.trim().toLowerCase()).filter(Boolean);
+  const email = (claims.email as string) || null;
+  const isAdminEmail = email && adminEmails.includes(email.toLowerCase());
+
+  const insertData = {
     id: claims.sub as string,
-    email: (claims.email as string) || null,
+    email,
     firstName: (claims.first_name as string) || null,
     lastName: (claims.last_name as string) || null,
     profileImageUrl: (claims.profile_image_url || claims.picture) as string | null,
   };
-  const [user] = await db.insert(usersTable).values(userData).onConflictDoUpdate({ target: usersTable.id, set: { ...userData, updatedAt: new Date() } }).returning();
+
+  // On conflict, only update identity fields — never overwrite role/subscription
+  const [user] = await db.insert(usersTable)
+    .values({
+      ...insertData,
+      role: isAdminEmail ? "admin" : "user",
+      subscriptionStatus: isAdminEmail ? "active" : "pending",
+    })
+    .onConflictDoUpdate({
+      target: usersTable.id,
+      set: { ...insertData, updatedAt: new Date() },
+    })
+    .returning();
+
+  // If ADMIN_EMAILS is set and user is an admin email but not yet promoted, fix that
+  if (isAdminEmail && user.role !== "admin") {
+    const [promoted] = await db.update(usersTable)
+      .set({ role: "admin", subscriptionStatus: "active", updatedAt: new Date() })
+      .where(eq(usersTable.id, user.id))
+      .returning();
+    return promoted;
+  }
+
   return user;
 }
 
 router.get("/auth/user", (req: Request, res: Response) => {
-  res.json(GetCurrentAuthUserResponse.parse({ user: req.isAuthenticated() ? req.user : null }));
+  if (!req.isAuthenticated() || !req.user) {
+    res.json(GetCurrentAuthUserResponse.parse({ user: null }));
+    return;
+  }
+  res.json(GetCurrentAuthUserResponse.parse({ user: req.user }));
 });
 
 router.get("/login", async (req: Request, res: Response) => {
@@ -94,7 +125,21 @@ router.get("/callback", async (req: Request, res: Response) => {
   if (!claims) { res.redirect("/api/login"); return; }
   const dbUser = await upsertUser(claims as unknown as Record<string, unknown>);
   const now = Math.floor(Date.now() / 1000);
-  const sessionData: SessionData = { user: { id: dbUser.id, email: dbUser.email, firstName: dbUser.firstName, lastName: dbUser.lastName, profileImageUrl: dbUser.profileImageUrl }, access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_at: tokens.expiresIn() ? now + tokens.expiresIn()! : claims.exp };
+  const sessionData: SessionData = {
+    user: {
+      id: dbUser.id,
+      email: dbUser.email,
+      firstName: dbUser.firstName,
+      lastName: dbUser.lastName,
+      profileImageUrl: dbUser.profileImageUrl,
+      role: dbUser.role as "user" | "admin",
+      subscriptionStatus: dbUser.subscriptionStatus as "pending" | "active" | "suspended",
+      subscriptionExpiresAt: dbUser.subscriptionExpiresAt?.toISOString() ?? null,
+    },
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expires_at: tokens.expiresIn() ? now + tokens.expiresIn()! : claims.exp,
+  };
   const sid = await createSession(sessionData);
   setSessionCookie(res, sid);
   res.redirect(returnTo);
@@ -124,7 +169,21 @@ router.post("/mobile-auth/token-exchange", async (req: Request, res: Response) =
     if (!claims) { res.status(401).json({ error: "No claims in ID token" }); return; }
     const dbUser = await upsertUser(claims as unknown as Record<string, unknown>);
     const now = Math.floor(Date.now() / 1000);
-    const sessionData: SessionData = { user: { id: dbUser.id, email: dbUser.email, firstName: dbUser.firstName, lastName: dbUser.lastName, profileImageUrl: dbUser.profileImageUrl }, access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_at: tokens.expiresIn() ? now + tokens.expiresIn()! : claims.exp };
+    const sessionData: SessionData = {
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        firstName: dbUser.firstName,
+        lastName: dbUser.lastName,
+        profileImageUrl: dbUser.profileImageUrl,
+        role: dbUser.role as "user" | "admin",
+        subscriptionStatus: dbUser.subscriptionStatus as "pending" | "active" | "suspended",
+        subscriptionExpiresAt: dbUser.subscriptionExpiresAt?.toISOString() ?? null,
+      },
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: tokens.expiresIn() ? now + tokens.expiresIn()! : claims.exp,
+    };
     const sid = await createSession(sessionData);
     res.json(ExchangeMobileAuthorizationCodeResponse.parse({ token: sid }));
   } catch (err) {

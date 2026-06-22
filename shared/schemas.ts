@@ -10,6 +10,9 @@ export const GetCurrentAuthUserResponse = zod.object({
       firstName: zod.string().nullable(),
       lastName: zod.string().nullable(),
       profileImageUrl: zod.string().nullable(),
+      role: zod.enum(["user", "admin"]),
+      subscriptionStatus: zod.enum(["pending", "active", "suspended"]),
+      subscriptionExpiresAt: zod.string().nullable().optional(),
     }),
     zod.null(),
   ]),
@@ -82,6 +85,8 @@ export const LevelStatsSchema = zod.object({
   girls: zod.number(),
   admis: zod.number(),
   nonAdmis: zod.number(),
+  nouveau: zod.number(),
+  redoublant: zod.number(),
 });
 
 export const DashboardStatsResponse = zod.object({
@@ -90,6 +95,8 @@ export const DashboardStatsResponse = zod.object({
   girls: zod.number(),
   admis: zod.number(),
   nonAdmis: zod.number(),
+  nouveau: zod.number(),
+  redoublant: zod.number(),
   byLevel: zod.array(LevelStatsSchema),
 });
 

@@ -1,9 +1,15 @@
+export type SubscriptionStatus = "pending" | "active" | "suspended";
+export type UserRole = "user" | "admin";
+
 export interface AuthUser {
   id: string;
   email: string | null;
   firstName: string | null;
   lastName: string | null;
   profileImageUrl: string | null;
+  role: UserRole;
+  subscriptionStatus: SubscriptionStatus;
+  subscriptionExpiresAt?: string | null;
 }
 
 export interface SchoolInfo {
@@ -42,6 +48,8 @@ export interface LevelStats {
   girls: number;
   admis: number;
   nonAdmis: number;
+  nouveau: number;
+  redoublant: number;
 }
 
 export interface DashboardStats {
@@ -50,6 +58,8 @@ export interface DashboardStats {
   girls: number;
   admis: number;
   nonAdmis: number;
+  nouveau: number;
+  redoublant: number;
   byLevel: LevelStats[];
 }
 
@@ -80,29 +90,24 @@ export interface Absence {
   unjustifiedHours: number;
 }
 
-// Computed student result with trimester averages
 export interface StudentResult {
   student: Student;
-  // scores per trimestre per subject: { "1": { arabic: 14.5, ... }, "2": {...}, "3": {...} }
   scores: Record<string, Record<string, number>>;
-  // trimester averages (weighted)
   t1Avg: number | null;
   t2Avg: number | null;
   t3Avg: number | null;
   annualAvg: number | null;
   passed: boolean | null;
   rank: number | null;
-  // absences
   totalJustified: number;
   totalUnjustified: number;
 }
 
-// Subject with metadata
 export interface SubjectDef {
   key: string;
   arLabel: string;
   coef: number;
-  levels?: Niveau[]; // if undefined, all levels
+  levels?: Niveau[];
 }
 
 export interface SubjectAverage {

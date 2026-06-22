@@ -11,12 +11,18 @@ export const sessionsTable = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
+export const subscriptionStatusEnum = pgEnum("subscription_status", ["pending", "active", "suspended"]);
+export const roleEnum = pgEnum("user_role", ["user", "admin"]);
+
 export const usersTable = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  role: roleEnum("role").notNull().default("user"),
+  subscriptionStatus: subscriptionStatusEnum("subscription_status").notNull().default("pending"),
+  subscriptionExpiresAt: timestamp("subscription_expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -56,7 +62,6 @@ export const studentsTable = pgTable("students", {
   statut: statutEnum("statut").notNull().default("nouveau"),
   resultat: resultatEnum("resultat"),
   annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
-  // Sequence number from the official class list (رقم التلميذ)
   raqm: integer("raqm"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -69,7 +74,7 @@ export const gradesTable = pgTable("grades", {
   userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   studentId: varchar("student_id", { length: 64 }).notNull().references(() => studentsTable.id, { onDelete: "cascade" }),
   annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
-  trimestre: integer("trimestre").notNull(), // 1, 2, or 3
+  trimestre: integer("trimestre").notNull(),
   subject: varchar("subject", { length: 50 }).notNull(),
   score: numeric("score", { precision: 5, scale: 2 }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
