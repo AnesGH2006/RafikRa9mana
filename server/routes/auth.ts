@@ -80,6 +80,39 @@ async function upsertUser(claims: Record<string, unknown>) {
   return user;
 }
 
+// GET /api/dev-login — instant test login (only when ALLOW_DEV_LOGIN=true)
+router.get("/dev-login", async (req: Request, res: Response) => {
+  if (process.env.ALLOW_DEV_LOGIN !== "true") {
+    res.status(403).json({ error: "Dev login is disabled" });
+    return;
+  }
+  const testUser = {
+    id: "dev-test-user",
+    email: "dev@test.local",
+    firstName: "مدير",
+    lastName: "تجريبي",
+    profileImageUrl: null,
+    role: "admin" as const,
+    subscriptionStatus: "active" as const,
+    subscriptionExpiresAt: null,
+  };
+  // Upsert test user in DB
+  await db.insert(usersTable).values(testUser)
+    .onConflictDoUpdate({
+      target: usersTable.id,
+      set: { role: "admin", subscriptionStatus: "active", updatedAt: new Date() },
+    });
+  const now = Math.floor(Date.now() / 1000);
+  const sessionData: SessionData = {
+    user: testUser,
+    access_token: "dev-token",
+    expires_at: now + SESSION_TTL / 1000,
+  };
+  const sid = await createSession(sessionData);
+  setSessionCookie(res, sid);
+  res.redirect("/");
+});
+
 router.get("/auth/user", (req: Request, res: Response) => {
   if (!req.isAuthenticated() || !req.user) {
     res.json(GetCurrentAuthUserResponse.parse({ user: null }));
@@ -115,7 +148,10 @@ router.get("/callback", async (req: Request, res: Response) => {
   let tokens: oidc.TokenEndpointResponse & oidc.TokenEndpointResponseHelpers;
   try {
     tokens = await oidc.authorizationCodeGrant(config, currentUrl, { pkceCodeVerifier: codeVerifier, expectedNonce: nonce, expectedState, idTokenExpected: true });
-  } catch { res.redirect("/api/login"); return; }
+  } catch (err) {
+    req.log.error({ err, callbackUrl, codeVerifier: !!codeVerifier, expectedState: !!expectedState }, "OIDC callback failed");
+    res.redirect("/?auth_error=callback_failed"); return;
+  }
   const returnTo = getSafeReturnTo(req.cookies?.return_to);
   res.clearCookie("code_verifier", { path: "/" });
   res.clearCookie("nonce", { path: "/" });
