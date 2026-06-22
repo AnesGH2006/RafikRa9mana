@@ -1,8 +1,10 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-20"]
 
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
+run = ["node", "./dist/index.cjs"]
+build = ["npm", "run", "build"]
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
@@ -20,6 +22,10 @@ author = "agent"
 task = "workflow.run"
 args = "artifacts/school-video: Promo Video"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
 [[workflows.workflow]]
 name = "artifacts/school-video: Promo Video"
 author = "agent"
@@ -32,8 +38,17 @@ waitForPort = 5000
 [workflows.workflow.metadata]
 outputType = "webview"
 
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+waitForPort = 5000
+
 [agent]
-stack = "PNPM_WORKSPACE"
+stack = "FULLSTACK_JS"
 expertMode = true
 
 [postMerge]
