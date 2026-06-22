@@ -9,8 +9,9 @@ import {
   ClipboardList, GraduationCap, Compass, Database, Settings,
   ChevronDown, FileSpreadsheet, BarChart3, UserX, List, CheckSquare,
   User, BarChart2, CalendarOff, UserCheck, RefreshCw, AlertCircle,
-  TrendingUp, Star, CreditCard,
+  TrendingUp, Star, CreditCard, Upload,
 } from "lucide-react";
+import { QuickImportDialog } from "@/components/quick-import";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
 import Dashboard from "@/pages/dashboard";
@@ -339,14 +340,27 @@ function ThemeButton() {
 // ── Mobile bar ────────────────────────────────────────────────────────────────
 function MobileBar() {
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   return (
     <>
       <header className="h-12 border-b bg-background flex items-center justify-between px-4 lg:hidden">
         <motion.button onClick={() => setOpen(true)} whileTap={{ scale: 0.9 }}>
           <Menu className="w-5 h-5" />
         </motion.button>
-        <div className="flex items-center gap-2"><LangButtons /><ThemeButton /></div>
+        <div className="flex items-center gap-2">
+          <motion.button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-sky-500 to-blue-600 text-white text-xs font-semibold"
+            whileTap={{ scale: 0.92 }}
+            data-testid="button-mobile-import"
+          >
+            <Upload className="w-3 h-3" />
+            استيراد
+          </motion.button>
+          <LangButtons /><ThemeButton />
+        </div>
       </header>
+      <QuickImportDialog open={importOpen} onOpenChange={setImportOpen} />
       <AnimatePresence>
         {open && (
           <>
@@ -382,6 +396,7 @@ function ComingSoon({ title }: { title: string }) {
 // ── App layout ────────────────────────────────────────────────────────────────
 function AppLayout() {
   const [loc] = useLocation();
+  const [importOpen, setImportOpen] = useState(false);
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <aside className="hidden lg:flex w-56 xl:w-60 shrink-0 flex-col border-e">
@@ -391,8 +406,20 @@ function AppLayout() {
         <MobileBar />
         <motion.div className="hidden lg:flex items-center justify-end gap-2 px-5 py-1.5 border-b bg-background/95 backdrop-blur"
           initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
+            <Button
+              size="sm"
+              onClick={() => setImportOpen(true)}
+              className="gap-1.5 h-8 text-xs font-semibold bg-gradient-to-r from-sky-500 to-blue-600 text-white border-0 shadow-md shadow-sky-500/25 hover:from-sky-600 hover:to-blue-700"
+              data-testid="button-header-import"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              استيراد
+            </Button>
+          </motion.div>
           <LangButtons /><ThemeButton />
         </motion.div>
+        <QuickImportDialog open={importOpen} onOpenChange={setImportOpen} />
         <main className="flex-1 overflow-y-auto">
           <AnimatePresence mode="wait" initial={false}>
             <Switch key={loc}>

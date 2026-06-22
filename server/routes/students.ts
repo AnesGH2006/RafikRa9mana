@@ -65,15 +65,24 @@ export function parseHTMLWorkbook(buffer: Buffer): { rows: unknown[][]; error?: 
   }
 
   const rows: unknown[][] = [];
-  const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   const tagRegex = /<[^>]+>/g;
 
-  let trMatch: RegExpExecArray | null;
-  while ((trMatch = trRegex.exec(text)) !== null) {
+  // Split by <tr ...> to handle rows that lack </tr> closing tags (common in Excel HTML exports)
+  const trSplitRegex = /<tr[^>]*>/gi;
+  const segments: string[] = [];
+  let lastIdx = 0;
+  let m: RegExpExecArray | null;
+  while ((m = trSplitRegex.exec(text)) !== null) {
+    if (lastIdx > 0) segments.push(text.slice(lastIdx, m.index));
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx > 0) segments.push(text.slice(lastIdx));
+
+  for (const seg of segments) {
     const cells: string[] = [];
-    const tdRe = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+    const tdRe = /<t[dh][^>]*>([\s\S]*?)(?:<\/t[dh]>|$)/gi;
     let tdMatch: RegExpExecArray | null;
-    while ((tdMatch = tdRe.exec(trMatch[1]!)) !== null) {
+    while ((tdMatch = tdRe.exec(seg)) !== null) {
       const raw = tdMatch[1]!.replace(tagRegex, "");
       const cell = decodeHTMLEntities(raw).replace(/\s+/g, " ").trim();
       cells.push(cell);
