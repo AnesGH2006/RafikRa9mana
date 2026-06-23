@@ -12,7 +12,7 @@ import { Upload, Trash2, Search, Users, FileSpreadsheet, X, CheckCircle2, AlertC
 import { CountUp } from "@/components/count-up";
 import type { Student, Niveau, Sexe, Statut } from "@shared/types";
 import {
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
+  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid,
 } from "recharts";
 
 const BASE = import.meta.env.BASE_URL;
@@ -65,12 +65,35 @@ function StudentAnalytics({ students }: { students: Student[] }) {
     { name: "معيد",  value: students.filter(s => s.statut === "redoublant").length,  fill: "#f59e0b" },
   ].filter(d => d.value > 0);
 
+  // Class breakdown (by classe within current filter)
+  const classCounts = Object.entries(
+    students.reduce((acc, s) => {
+      acc[s.classe] = (acc[s.classe] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>)
+  ).sort(([a], [b]) => a.localeCompare(b, "ar")).map(([name, value]) => ({ name, value }));
+
+  // Per-level pass/fail rate
+  const levelPassData = LEVELS.map((lvl, i) => {
+    const lvlStudents = students.filter(s => s.niveau === lvl && (s.resultat === "admis" || s.resultat === "non_admis"));
+    const lvlPass = lvlStudents.filter(s => s.resultat === "admis");
+    return {
+      name: LEVEL_LABELS[lvl],
+      ناجح: lvlPass.length,
+      راسب: lvlStudents.length - lvlPass.length,
+      total: lvlStudents.length,
+      rate: lvlStudents.length > 0 ? Math.round((lvlPass.length / lvlStudents.length) * 100) : 0,
+      fill: LEVEL_COLORS[i],
+    };
+  }).filter(d => d.total > 0);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3"
+      className="space-y-4"
     >
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
       {/* KPI bar */}
       <Card className="border-0 shadow-md bg-gradient-to-br from-blue-500 to-indigo-700 overflow-hidden col-span-1">
         <CardContent className="p-4 relative">
@@ -149,6 +172,70 @@ function StudentAnalytics({ students }: { students: Student[] }) {
           </ResponsiveContainer>
         </CardContent>
       </Card>
+    </div>
+
+    {/* ── Row 2: Class breakdown + level pass rate ─────────────────── */}
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Class breakdown bar chart */}
+      {classCounts.length > 1 && (
+        <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-xs font-bold text-muted-foreground">التلاميذ حسب القسم</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 pb-3 px-2">
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={classCounts} barSize={22} margin={{ left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip content={<MiniTooltip />} />
+                <Bar dataKey="value" name="التلاميذ" radius={[5, 5, 0, 0]}>
+                  {classCounts.map((_, i) => <Cell key={i} fill={LEVEL_COLORS[i % LEVEL_COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Per-level pass rate progress bars */}
+      {levelPassData.length > 0 && (
+        <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-xs font-bold text-muted-foreground">نسبة النجاح حسب المستوى</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-3">
+            {levelPassData.map((l, i) => (
+              <div key={l.name} className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold" style={{ color: l.fill }}>{l.name}</span>
+                  <span className="flex gap-3">
+                    <span className="text-muted-foreground">{l.total} تلميذ</span>
+                    <span className={`font-bold ${l.rate >= 75 ? "text-emerald-600" : l.rate >= 50 ? "text-amber-600" : "text-red-500"}`}>
+                      {l.rate}%
+                    </span>
+                  </span>
+                </div>
+                <div className="h-2.5 rounded-full bg-muted overflow-hidden flex">
+                  <motion.div className="h-full bg-emerald-500 rounded-s-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(l.ناجح / l.total) * 100}%` }}
+                    transition={{ duration: 0.8, delay: i * 0.1 }} />
+                  <motion.div className="h-full bg-red-400 rounded-e-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(l.راسب / l.total) * 100}%` }}
+                    transition={{ duration: 0.8, delay: i * 0.1 + 0.05 }} />
+                </div>
+                <div className="flex gap-3 text-[10px] text-muted-foreground">
+                  <span className="text-emerald-600">{l.ناجح} ناجح</span>
+                  <span className="text-red-500">{l.راسب} راسب</span>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
     </motion.div>
   );
 }

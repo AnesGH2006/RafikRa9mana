@@ -7,22 +7,376 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, ClipboardList, Search, Upload, CheckCircle2, AlertCircle, X, FileSpreadsheet, Loader2, Printer } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Pencil, ClipboardList, Search, Upload, CheckCircle2, AlertCircle, X, FileSpreadsheet, Loader2, Printer, Trophy, TrendingUp, TrendingDown, BarChart3, Users } from "lucide-react";
 import { getSubjectsForLevel, calcWeightedAvg } from "@shared/subjects";
 import type { StudentResult } from "@shared/types";
 import type { Niveau } from "@shared/types";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, LineChart, Line, ReferenceLine, Legend,
+  RadialBarChart, RadialBar,
+} from "recharts";
+import { CountUp } from "@/components/count-up";
 
 const BASE = import.meta.env.BASE_URL;
 const LEVELS: Niveau[] = ["1AM", "2AM", "3AM", "4AM"];
 const LEVEL_LABELS: Record<Niveau, string> = {
   "1AM": "1ère AM", "2AM": "2ème AM", "3AM": "3ème AM", "4AM": "4ème AM",
 };
+const LEVEL_COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
 
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as const } },
   exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
+
+function MiniTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-background/95 border rounded-xl shadow-xl p-3 text-xs">
+      {label && <p className="font-bold mb-1">{label}</p>}
+      {payload.map((p: any, i: number) => (
+        <p key={i} style={{ color: p.color || p.fill }} className="font-semibold">{p.name}: {p.value}</p>
+      ))}
+    </div>
+  );
+}
+
+// ── Results analytics panel ───────────────────────────────────────────────────
+function ResultsAnalytics({ results }: { results: StudentResult[] }) {
+  const withAvg = results.filter(r => r.annualAvg !== null);
+  if (withAvg.length === 0) return null;
+
+  const passed  = withAvg.filter(r => r.passed === true);
+  const failed  = withAvg.filter(r => r.passed === false);
+  const successRate = withAvg.length > 0 ? Math.round((passed.length / withAvg.length) * 100) : 0;
+  const classAvg = withAvg.length > 0
+    ? (withAvg.reduce((s, r) => s + (r.annualAvg ?? 0), 0) / withAvg.length)
+    : 0;
+  const top = [...withAvg].sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+  const best  = top[0];
+
+  // Grade distribution histogram
+  const BUCKETS = [
+    { label: "0–5",   min: 0,  max: 5  },
+    { label: "5–7",   min: 5,  max: 7  },
+    { label: "7–9",   min: 7,  max: 9  },
+    { label: "9–10",  min: 9,  max: 10 },
+    { label: "10–12", min: 10, max: 12 },
+    { label: "12–15", min: 12, max: 15 },
+    { label: "15–18", min: 15, max: 18 },
+    { label: "18–20", min: 18, max: 20.01 },
+  ];
+  const histData = BUCKETS.map(b => ({
+    label: b.label,
+    ناجح: passed.filter(r => (r.annualAvg ?? 0) >= b.min && (r.annualAvg ?? 0) < b.max).length,
+    راسب: failed.filter(r => (r.annualAvg ?? 0) >= b.min && (r.annualAvg ?? 0) < b.max).length,
+  }));
+
+  // Trimester trend (class averages T1→T2→T3)
+  const t1s = withAvg.filter(r => r.t1Avg !== null).map(r => r.t1Avg!);
+  const t2s = withAvg.filter(r => r.t2Avg !== null).map(r => r.t2Avg!);
+  const t3s = withAvg.filter(r => r.t3Avg !== null).map(r => r.t3Avg!);
+  const trendData = [
+    { name: "الفصل 1", avg: t1s.length ? +(t1s.reduce((a, b) => a + b, 0) / t1s.length).toFixed(2) : null },
+    { name: "الفصل 2", avg: t2s.length ? +(t2s.reduce((a, b) => a + b, 0) / t2s.length).toFixed(2) : null },
+    { name: "الفصل 3", avg: t3s.length ? +(t3s.reduce((a, b) => a + b, 0) / t3s.length).toFixed(2) : null },
+  ].filter(d => d.avg !== null);
+
+  // By-level success rates
+  const levelSuccessData = LEVELS.map((lvl, i) => {
+    const lvlAll = withAvg.filter(r => r.student.niveau === lvl);
+    const lvlPass = lvlAll.filter(r => r.passed === true);
+    return {
+      name: LEVEL_LABELS[lvl],
+      ناجح: lvlPass.length,
+      راسب: lvlAll.length - lvlPass.length,
+      rate: lvlAll.length > 0 ? Math.round((lvlPass.length / lvlAll.length) * 100) : 0,
+      fill: LEVEL_COLORS[i],
+      total: lvlAll.length,
+    };
+  }).filter(d => d.total > 0);
+
+  // Gender success
+  const boysAll  = withAvg.filter(r => r.student.sexe === "M");
+  const girlsAll = withAvg.filter(r => r.student.sexe === "F");
+  const boysRate  = boysAll.length  > 0 ? Math.round((boysAll.filter(r => r.passed).length  / boysAll.length)  * 100) : null;
+  const girlsRate = girlsAll.length > 0 ? Math.round((girlsAll.filter(r => r.passed).length / girlsAll.length) * 100) : null;
+
+  // Top 5 students podium
+  const top5 = top.slice(0, 5);
+  const podiumColors = ["#f59e0b", "#94a3b8", "#d97706", "#6366f1", "#8b5cf6"];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.05 }}
+      className="space-y-4"
+    >
+      {/* ── KPI cards ─────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[
+          { label: "إجمالي النتائج", value: withAvg.length,        gradient: "from-blue-500 to-indigo-600",    icon: Users,        suffix: "" },
+          { label: "ناجح",          value: passed.length,          gradient: "from-emerald-500 to-green-600",  icon: TrendingUp,   suffix: "" },
+          { label: "راسب",          value: failed.length,          gradient: "from-red-500 to-rose-600",       icon: TrendingDown, suffix: "" },
+          { label: "نسبة النجاح",  value: successRate,             gradient: "from-violet-500 to-purple-600",  icon: BarChart3,    suffix: "%" },
+          { label: "المعدل العام", value: +classAvg.toFixed(2),    gradient: "from-cyan-500 to-blue-600",      icon: TrendingUp,   suffix: "/20" },
+          { label: "أعلى معدل",   value: +(best?.annualAvg ?? 0).toFixed(2), gradient: "from-amber-500 to-orange-500", icon: Trophy, suffix: "/20" },
+        ].map((c, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.06 }} whileHover={{ y: -3, scale: 1.03 }}>
+            <Card className="border-0 overflow-hidden shadow-md">
+              <div className={`bg-gradient-to-br ${c.gradient} p-3 relative overflow-hidden`}>
+                <div className="absolute -top-4 -right-4 w-14 h-14 rounded-full bg-white/10 blur-xl" />
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-white/75 text-[10px] font-semibold">{c.label}</p>
+                  <c.icon className="w-3.5 h-3.5 text-white/50" />
+                </div>
+                <p className="text-2xl font-extrabold text-white tabular-nums">
+                  {typeof c.value === "number" ? <CountUp to={c.value} /> : c.value}{c.suffix}
+                </p>
+              </div>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* ── Charts row 1 ──────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Grade distribution histogram */}
+        <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20 md:col-span-2">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-500" />
+              توزيع المعدلات السنوية
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 pb-3 px-3">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={histData} barSize={18} margin={{ left: -15, right: 5, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip content={<MiniTooltip />} />
+                <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="ناجح" fill="#10b981" radius={[4, 4, 0, 0]} stackId="a" />
+                <Bar dataKey="راسب" fill="#f43f5e" radius={[4, 4, 0, 0]} stackId="a" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Pass/fail radial gauge */}
+        <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+          <CardHeader className="pb-1 pt-3 px-4">
+            <CardTitle className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              نسبة النجاح
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center justify-center pb-3">
+            <div className="relative">
+              <ResponsiveContainer width={150} height={140}>
+                <RadialBarChart cx="50%" cy="55%" innerRadius={42} outerRadius={62}
+                  barSize={12} data={[{ value: successRate, fill: successRate >= 50 ? "#10b981" : "#f43f5e" }]}
+                  startAngle={90} endAngle={-270}>
+                  <RadialBar background={{ fill: "#e5e7eb" }} dataKey="value" cornerRadius={8} />
+                </RadialBarChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pb-2">
+                <span className={`text-3xl font-extrabold ${successRate >= 50 ? "text-emerald-500" : "text-red-500"}`}>{successRate}%</span>
+                <span className="text-[10px] text-muted-foreground">ناجح</span>
+              </div>
+            </div>
+            <div className="flex gap-4 text-xs mt-0">
+              <span className="text-emerald-600 font-bold">{passed.length} ناجح</span>
+              <span className="text-red-500 font-bold">{failed.length} راسب</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Charts row 2 ──────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Trimester trend line */}
+        {trendData.length >= 2 && (
+          <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardTitle className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-cyan-500" />
+                تطور المعدل العام عبر الفصول
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0 pb-3 px-3">
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart data={trendData} margin={{ left: -20, right: 5, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 20]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <ReferenceLine y={10} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1.5} />
+                  <Tooltip content={<MiniTooltip />} />
+                  <Line type="monotone" dataKey="avg" name="المعدل" stroke="#06b6d4"
+                    strokeWidth={2.5} dot={{ fill: "#06b6d4", r: 5 }}
+                    activeDot={{ r: 7 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* By-level pass rate */}
+        {levelSuccessData.length > 0 && (
+          <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardTitle className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-violet-500" />
+                النجاح حسب المستوى
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0 pb-3 px-3">
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={levelSuccessData} barSize={18} margin={{ left: -20, right: 5, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip content={<MiniTooltip />} />
+                  <Bar dataKey="ناجح" fill="#10b981" radius={[3, 3, 0, 0]} stackId="s" />
+                  <Bar dataKey="راسب" fill="#f43f5e" radius={[3, 3, 0, 0]} stackId="s" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Gender success rates */}
+        {(boysRate !== null || girlsRate !== null) && (
+          <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+            <CardHeader className="pb-1 pt-3 px-4">
+              <CardTitle className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-pink-500" />
+                نسبة النجاح حسب الجنس
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              {boysRate !== null && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-blue-600">ذكور ({boysAll.length})</span>
+                    <span className="font-bold text-blue-600">{boysRate}%</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-muted overflow-hidden">
+                    <motion.div className="h-full bg-blue-500 rounded-full"
+                      initial={{ width: 0 }} animate={{ width: `${boysRate}%` }}
+                      transition={{ duration: 0.9, ease: "easeOut" }} />
+                  </div>
+                </div>
+              )}
+              {girlsRate !== null && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-pink-600">إناث ({girlsAll.length})</span>
+                    <span className="font-bold text-pink-600">{girlsRate}%</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-muted overflow-hidden">
+                    <motion.div className="h-full bg-pink-500 rounded-full"
+                      initial={{ width: 0 }} animate={{ width: `${girlsRate}%` }}
+                      transition={{ duration: 0.9, delay: 0.15, ease: "easeOut" }} />
+                  </div>
+                </div>
+              )}
+              {boysRate !== null && girlsRate !== null && (
+                <p className={`text-[11px] text-center font-semibold mt-1 ${
+                  girlsRate > boysRate ? "text-pink-600" : boysRate > girlsRate ? "text-blue-600" : "text-muted-foreground"
+                }`}>
+                  {girlsRate > boysRate ? "الإناث أفضل أداءً" : boysRate > girlsRate ? "الذكور أفضل أداءً" : "متساوون"}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* ── Top 5 Podium ──────────────────────────────────────────────── */}
+      {top5.length > 0 && (
+        <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/10">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
+              <Trophy className="w-3.5 h-3.5 text-amber-500" />
+              أوائل التلاميذ
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="flex gap-3 flex-wrap">
+              {top5.map((r, i) => (
+                <motion.div key={r.student.id}
+                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.07 }}
+                  className="flex items-center gap-2 bg-muted/40 rounded-xl px-3 py-2 min-w-0"
+                >
+                  <span className="text-lg font-black shrink-0" style={{ color: podiumColors[i] }}>
+                    {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm truncate max-w-[140px]">{r.student.nomPrenom}</p>
+                    <p className="text-xs text-muted-foreground">{LEVEL_LABELS[r.student.niveau as Niveau]} — {r.student.classe}</p>
+                  </div>
+                  <span className={`ms-auto text-base font-extrabold tabular-nums shrink-0 ${
+                    (r.annualAvg ?? 0) >= 15 ? "text-amber-500" : "text-emerald-600"
+                  }`}>
+                    {r.annualAvg?.toFixed(2)}
+                  </span>
+                </motion.div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Per-level success rate progress bars ──────────────────────── */}
+      {levelSuccessData.length > 1 && (
+        <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/10">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-indigo-500" />
+              نسبة النجاح التفصيلية حسب المستوى
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-3">
+            {levelSuccessData.map((l, i) => (
+              <div key={l.name} className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold" style={{ color: l.fill }}>{l.name}</span>
+                  <span className="flex gap-3">
+                    <span className="text-muted-foreground">{l.total} تلميذ</span>
+                    <span className={`font-bold ${l.rate >= 75 ? "text-emerald-600" : l.rate >= 50 ? "text-amber-600" : "text-red-500"}`}>
+                      {l.rate}%
+                    </span>
+                  </span>
+                </div>
+                <div className="h-2.5 rounded-full bg-muted overflow-hidden flex gap-0.5">
+                  <motion.div className="h-full bg-emerald-500 rounded-s-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(l.ناجح / l.total) * 100}%` }}
+                    transition={{ duration: 0.8, delay: i * 0.1 }} />
+                  <motion.div className="h-full bg-red-400 rounded-e-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${(l.راسب / l.total) * 100}%` }}
+                    transition={{ duration: 0.8, delay: i * 0.1 + 0.05 }} />
+                </div>
+                <div className="flex gap-3 text-[10px] text-muted-foreground">
+                  <span className="text-emerald-600">{l.ناجح} ناجح</span>
+                  <span className="text-red-500">{l.راسب} راسب</span>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </motion.div>
+  );
+}
 
 function avg2(v: number | null) {
   if (v === null) return "—";
@@ -698,6 +1052,9 @@ export default function Results() {
           </SelectContent>
         </Select>
       </motion.div>
+
+      {/* Analytics panel — shown when results are loaded */}
+      {!loading && results.length > 0 && <ResultsAnalytics results={results} />}
 
       {/* Table */}
       <AnimatePresence mode="wait">

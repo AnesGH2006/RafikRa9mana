@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useLanguage } from "@/contexts/language-provider";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart2, TrendingUp } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { BarChart2, TrendingUp, TrendingDown, Star, Award } from "lucide-react";
 import type { SubjectAverage } from "@shared/types";
 import type { Niveau } from "@shared/types";
 
@@ -184,6 +185,53 @@ export default function ExamResultsPage() {
           </div>
         </div>
       </motion.div>
+
+      {/* KPI summary cards — shown when data is available */}
+      {hasData && (() => {
+        const allSubjectAvgs = [...(data?.t1 ?? []), ...(data?.t2 ?? []), ...(data?.t3 ?? [])];
+        const subjectMap = new Map<string, { label: string; avgs: number[] }>();
+        for (const s of allSubjectAvgs) {
+          if (!subjectMap.has(s.subject)) subjectMap.set(s.subject, { label: s.arLabel, avgs: [] });
+          subjectMap.get(s.subject)!.avgs.push(s.avg);
+        }
+        const subjectOveralls = Array.from(subjectMap.entries()).map(([, v]) => ({
+          label: v.label,
+          avg: v.avgs.reduce((a, b) => a + b, 0) / v.avgs.length,
+        }));
+        const bestSubj  = subjectOveralls.reduce((b, s) => s.avg > b.avg ? s : b, subjectOveralls[0]);
+        const worstSubj = subjectOveralls.reduce((b, s) => s.avg < b.avg ? s : b, subjectOveralls[0]);
+        const overallAvg = subjectOveralls.length > 0
+          ? subjectOveralls.reduce((a, b) => a + b.avg, 0) / subjectOveralls.length : 0;
+        const abovePass = subjectOveralls.filter(s => s.avg >= 10).length;
+
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+            className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+          >
+            {[
+              { label: "المعدل العام", value: overallAvg.toFixed(2), suffix: "/20", gradient: "from-blue-500 to-indigo-600", icon: BarChart2, color: overallAvg >= 10 ? "text-emerald-300" : "text-red-300" },
+              { label: "أفضل مادة", value: bestSubj?.label ?? "—", suffix: "", gradient: "from-emerald-500 to-teal-600", icon: Award, color: "text-white" },
+              { label: "أصعب مادة", value: worstSubj?.label ?? "—", suffix: "", gradient: "from-red-500 to-rose-600", icon: TrendingDown, color: "text-white" },
+              { label: "مواد فوق 10", value: `${abovePass}`, suffix: `/${subjectOveralls.length}`, gradient: "from-violet-500 to-purple-600", icon: Star, color: "text-white" },
+            ].map((c, i) => (
+              <motion.div key={i} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.07 }} whileHover={{ y: -2, scale: 1.02 }}>
+                <Card className="border-0 overflow-hidden shadow-md">
+                  <div className={`bg-gradient-to-br ${c.gradient} p-4 relative overflow-hidden`}>
+                    <div className="absolute -top-3 -right-3 w-12 h-12 rounded-full bg-white/10 blur-xl" />
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-white/75 text-[10px] font-semibold">{c.label}</p>
+                      <c.icon className="w-3.5 h-3.5 text-white/50" />
+                    </div>
+                    <p className={`text-lg font-extrabold ${c.color} truncate`}>{c.value}{c.suffix}</p>
+                  </div>
+                </Card>
+              </motion.div>
+            ))}
+          </motion.div>
+        );
+      })()}
 
       {/* Chart */}
       <AnimatePresence mode="wait">
