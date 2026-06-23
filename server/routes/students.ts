@@ -375,9 +375,33 @@ router.get("/stats", async (req, res): Promise<void> => {
     const conds = [eq(studentsTable.userId, userId)];
     if (annee) conds.push(eq(studentsTable.annee, annee));
     const all = await db.select().from(studentsTable).where(and(...conds));
+    const currentYear = new Date().getFullYear();
+    const calcAge = (dob: string | null): number | null => {
+      if (!dob) return null;
+      // Accepts formats: YYYY-MM-DD, DD/MM/YYYY
+      let year: number | null = null;
+      const isoMatch = dob.match(/^(\d{4})-\d{2}-\d{2}/);
+      const slashMatch = dob.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+      if (isoMatch) year = parseInt(isoMatch[1]!);
+      else if (slashMatch) year = parseInt(slashMatch[3]!);
+      if (!year || year < 1990 || year > currentYear) return null;
+      return currentYear - year;
+    };
+
     const LEVELS = ["1AM","2AM","3AM","4AM"] as const;
     const byLevel = LEVELS.map(niveau => {
       const g = all.filter(s => s.niveau === niveau);
+      const ages = g.map(s => calcAge(s.dateNaissance)).filter((a): a is number => a !== null);
+      const avgAge = ages.length ? Math.round((ages.reduce((s, a) => s + a, 0) / ages.length) * 10) / 10 : null;
+      const minAge = ages.length ? Math.min(...ages) : null;
+      const maxAge = ages.length ? Math.max(...ages) : null;
+      const ageDist: { age: number; count: number }[] = [];
+      for (const age of ages) {
+        const existing = ageDist.find(a => a.age === age);
+        if (existing) existing.count++;
+        else ageDist.push({ age, count: 1 });
+      }
+      ageDist.sort((a, b) => a.age - b.age);
       return {
         niveau, total: g.length,
         boys: g.filter(s => s.sexe === "M").length,
@@ -386,6 +410,7 @@ router.get("/stats", async (req, res): Promise<void> => {
         nonAdmis: g.filter(s => s.resultat === "non_admis").length,
         nouveau: g.filter(s => s.statut === "nouveau").length,
         redoublant: g.filter(s => s.statut === "redoublant").length,
+        avgAge, minAge, maxAge, ageDist,
       };
     }).filter(l => l.total > 0);
     res.json(DashboardStatsResponse.parse({

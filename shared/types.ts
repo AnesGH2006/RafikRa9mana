@@ -50,6 +50,10 @@ export interface LevelStats {
   nonAdmis: number;
   nouveau: number;
   redoublant: number;
+  avgAge: number | null;
+  minAge: number | null;
+  maxAge: number | null;
+  ageDist: { age: number; count: number }[];
 }
 
 export interface DashboardStats {

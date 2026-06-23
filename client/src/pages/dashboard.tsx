@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Users, UserCheck, UserX, Pencil, School, MapPin, Calendar,
-  GraduationCap, TrendingUp, BarChart3, Award,
+  GraduationCap, TrendingUp, BarChart3, Award, Baby,
 } from "lucide-react";
 import { CountUp } from "@/components/count-up";
 import {
@@ -425,6 +425,12 @@ export default function Dashboard() {
                                 <th className="pb-2 text-center font-semibold text-red-500">{t("val.non_admis")}</th>
                               </>
                             )}
+                            {stats.byLevel.some(l => l.avgAge !== null) && (
+                              <>
+                                <th className="pb-2 text-center font-semibold text-amber-600">متوسط العمر</th>
+                                <th className="pb-2 text-center font-semibold text-muted-foreground">المدى</th>
+                              </>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
@@ -440,12 +446,36 @@ export default function Dashboard() {
                                 </span>
                               </td>
                               <td className="py-3 text-center font-bold"><CountUp to={l.total} /></td>
-                              <td className="py-3 text-center text-blue-600 dark:text-blue-400 font-semibold"><CountUp to={l.boys} /></td>
-                              <td className="py-3 text-center text-pink-600 dark:text-pink-400 font-semibold"><CountUp to={l.girls} /></td>
+                              <td className="py-3 text-center">
+                                <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 font-semibold">
+                                  <CountUp to={l.boys} />
+                                  <span className="text-xs text-muted-foreground">({l.total > 0 ? Math.round(l.boys / l.total * 100) : 0}%)</span>
+                                </span>
+                              </td>
+                              <td className="py-3 text-center">
+                                <span className="inline-flex items-center gap-1 text-pink-600 dark:text-pink-400 font-semibold">
+                                  <CountUp to={l.girls} />
+                                  <span className="text-xs text-muted-foreground">({l.total > 0 ? Math.round(l.girls / l.total * 100) : 0}%)</span>
+                                </span>
+                              </td>
                               {stats.byLevel.some(ll => ll.admis > 0 || ll.nonAdmis > 0) && (
                                 <>
                                   <td className="py-3 text-center text-emerald-600 font-semibold">{l.admis ? <CountUp to={l.admis} /> : "—"}</td>
                                   <td className="py-3 text-center text-red-500 font-semibold">{l.nonAdmis ? <CountUp to={l.nonAdmis} /> : "—"}</td>
+                                </>
+                              )}
+                              {stats.byLevel.some(ll => ll.avgAge !== null) && (
+                                <>
+                                  <td className="py-3 text-center">
+                                    {l.avgAge !== null ? (
+                                      <span className="inline-flex items-center gap-1 text-amber-600 font-bold">
+                                        <Baby className="w-3 h-3" />{l.avgAge} سنة
+                                      </span>
+                                    ) : "—"}
+                                  </td>
+                                  <td className="py-3 text-center text-xs text-muted-foreground font-medium">
+                                    {l.minAge !== null && l.maxAge !== null ? `${l.minAge}–${l.maxAge}` : "—"}
+                                  </td>
                                 </>
                               )}
                             </motion.tr>
@@ -464,9 +494,66 @@ export default function Dashboard() {
                                 <td className="py-3 text-center text-red-500"><CountUp to={stats.nonAdmis} /></td>
                               </>
                             )}
+                            {stats.byLevel.some(l => l.avgAge !== null) && (
+                              <><td /><td /></>
+                            )}
                           </motion.tr>
                         </tbody>
                       </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Age distribution mini-cards */}
+            {stats.byLevel.some(l => l.ageDist.length > 0) && (
+              <motion.div variants={cardVariants}>
+                <Card className="shadow-sm border-0 bg-gradient-to-br from-card to-muted/10">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <Baby className="w-4 h-4 text-amber-500" />
+                      توزيع الأعمار حسب المستوى
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                      {stats.byLevel.filter(l => l.ageDist.length > 0).map((l, i) => {
+                        const maxCount = Math.max(...l.ageDist.map(a => a.count));
+                        return (
+                          <motion.div key={l.niveau}
+                            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.07 }}
+                            className="rounded-xl border bg-muted/20 p-3 space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold" style={{ color: LEVEL_COLORS[i % LEVEL_COLORS.length] }}>
+                                {LEVEL_LABELS[l.niveau as Niveau]}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {l.minAge}–{l.maxAge} سنة
+                              </span>
+                            </div>
+                            <div className="space-y-1">
+                              {l.ageDist.map(({ age, count }) => (
+                                <div key={age} className="flex items-center gap-2">
+                                  <span className="text-xs w-14 text-muted-foreground shrink-0">{age} سنة</span>
+                                  <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                    <motion.div
+                                      className="h-full rounded-full"
+                                      style={{ backgroundColor: LEVEL_COLORS[i % LEVEL_COLORS.length] }}
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${(count / maxCount) * 100}%` }}
+                                      transition={{ duration: 0.7, delay: i * 0.05 }}
+                                    />
+                                  </div>
+                                  <span className="text-xs font-bold w-6 text-end shrink-0">{count}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        );
+                      })}
                     </div>
                   </CardContent>
                 </Card>

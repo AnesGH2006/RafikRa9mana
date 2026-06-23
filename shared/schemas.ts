@@ -87,6 +87,10 @@ export const LevelStatsSchema = zod.object({
   nonAdmis: zod.number(),
   nouveau: zod.number(),
   redoublant: zod.number(),
+  avgAge: zod.number().nullable(),
+  minAge: zod.number().nullable(),
+  maxAge: zod.number().nullable(),
+  ageDist: zod.array(zod.object({ age: zod.number(), count: zod.number() })),
 });
 
 export const DashboardStatsResponse = zod.object({
