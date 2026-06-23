@@ -20,6 +20,8 @@ const LEVELS: Niveau[] = ["1AM", "2AM", "3AM", "4AM"];
 const LEVEL_LABELS: Record<Niveau, string> = { "1AM": "1ère AM", "2AM": "2ème AM", "3AM": "3ème AM", "4AM": "4ème AM" };
 const LEVEL_COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
 const GENDER_COLORS = ["#3b82f6", "#ec4899"];
+const ACADEMIC_YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024", "2022-2023"];
+const DEFAULT_YEAR  = "2025-2026";
 
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
@@ -255,7 +257,7 @@ export default function Students() {
   const [listKey, setListKey] = useState(0);
   const [showAnalytics, setShowAnalytics] = useState(true);
 
-  const [filters, setFilters] = useState({ q: "", niveau: "", classe: "", sexe: "", statut: "", annee: "" });
+  const [filters, setFilters] = useState({ q: "", niveau: "", classe: "", sexe: "", statut: "", annee: DEFAULT_YEAR });
 
   const fetchStudents = useCallback(async () => {
     setLoading(true);
@@ -398,6 +400,14 @@ export default function Students() {
           <Input className="ps-9 transition-shadow focus:shadow-md" placeholder={t("students.search")}
             value={filters.q} onChange={e => setFilters(p => ({ ...p, q: e.target.value }))} />
         </div>
+        <Select value={filters.annee || DEFAULT_YEAR} onValueChange={v => setFilter("annee", v)}>
+          <SelectTrigger className="w-36 font-semibold border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+          </SelectContent>
+        </Select>
         {([
           { key: "niveau", placeholder: t("students.filterLevel"), opts: LEVELS.map(l => ({ v: l, label: LEVEL_LABELS[l] })), allLabel: t("students.allLevels"), w: "w-36" },
           { key: "sexe", placeholder: t("students.filterGender"), opts: [{ v: "M", label: t("val.male") }, { v: "F", label: t("val.female") }], allLabel: t("students.allGenders"), w: "w-28" },

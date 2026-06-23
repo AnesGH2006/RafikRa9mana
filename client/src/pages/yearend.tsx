@@ -17,6 +17,8 @@ const BASE = import.meta.env.BASE_URL;
 const LEVELS: Niveau[] = ["1AM", "2AM", "3AM", "4AM"];
 const LEVEL_LABELS: Record<Niveau, string> = { "1AM": "1ère AM", "2AM": "2ème AM", "3AM": "3ème AM", "4AM": "4ème AM" };
 const LEVEL_COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
+const ACADEMIC_YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024", "2022-2023"];
+const DEFAULT_YEAR  = "2025-2026";
 
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
@@ -43,18 +45,19 @@ export default function YearEnd() {
   const [results, setResults] = useState<StudentResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"passed" | "failed" | "all">("all");
+  const [annee, setAnnee] = useState(DEFAULT_YEAR);
   const [filters, setFilters] = useState({ niveau: "", classe: "" });
 
   useEffect(() => {
     setLoading(true);
-    const p = new URLSearchParams();
+    const p = new URLSearchParams({ annee });
     if (filters.niveau) p.set("niveau", filters.niveau);
     if (filters.classe) p.set("classe", filters.classe);
     fetch(`${BASE}api/results?${p}`, { credentials: "include" })
       .then(r => r.ok ? r.json() : [])
       .then((d: StudentResult[]) => { setResults(d); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [filters]);
+  }, [filters, annee]);
 
   const withAvg = results.filter(r => r.annualAvg !== null);
   const passed  = withAvg.filter(r => r.passed === true).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
@@ -197,6 +200,18 @@ export default function YearEnd() {
           )}
         </motion.div>
       )}
+
+      {/* Year selector */}
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+        <Select value={annee} onValueChange={v => { setAnnee(v); setFilters({ niveau: "", classe: "" }); }}>
+          <SelectTrigger className="w-40 font-semibold border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/30">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </motion.div>
 
       {/* Tabs + filters */}
       <motion.div className="flex flex-wrap gap-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>

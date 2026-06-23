@@ -9,6 +9,8 @@ import type { Niveau } from "@shared/types";
 
 const BASE = import.meta.env.BASE_URL;
 const LEVELS: Niveau[] = ["1AM", "2AM", "3AM", "4AM"];
+const ACADEMIC_YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024", "2022-2023"];
+const DEFAULT_YEAR  = "2025-2026";
 
 const TRIMESTRE_COLORS = [
   { bar: "bg-blue-500",   text: "text-blue-600 dark:text-blue-400",   light: "bg-blue-100 dark:bg-blue-950/50",   label: "الفصل 1" },
@@ -93,6 +95,7 @@ function SubjectGroup({ subject, t1, t2, t3, index }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ExamResultsPage() {
   const { t } = useLanguage();
+  const [annee, setAnnee] = useState(DEFAULT_YEAR);
   const [niveau, setNiveau] = useState<string>("");
   const [classe, setClasse] = useState<string>("");
   const [data, setData] = useState<{ t1: SubjectAverage[]; t2: SubjectAverage[]; t3: SubjectAverage[] } | null>(null);
@@ -102,7 +105,7 @@ export default function ExamResultsPage() {
     setLoading(true);
     setData(null);
     try {
-      const p = new URLSearchParams();
+      const p = new URLSearchParams({ annee });
       if (niveau) p.set("niveau", niveau);
       if (classe) p.set("classe", classe);
 
@@ -118,7 +121,7 @@ export default function ExamResultsPage() {
       ]);
       setData({ t1, t2, t3 });
     } finally { setLoading(false); }
-  }, [niveau, classe]);
+  }, [niveau, classe, annee]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -156,6 +159,14 @@ export default function ExamResultsPage() {
       {/* Filters */}
       <motion.div className="flex gap-3 flex-wrap items-center"
         initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+        <Select value={annee} onValueChange={v => { setAnnee(v); setNiveau(""); setClasse(""); }}>
+          <SelectTrigger className="w-36 font-semibold border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 bg-violet-50/50 dark:bg-violet-950/30">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={niveau || "__all__"} onValueChange={v => setNiveau(v === "__all__" ? "" : v)}>
           <SelectTrigger className="w-36"><SelectValue placeholder="كل المستويات" /></SelectTrigger>
           <SelectContent>

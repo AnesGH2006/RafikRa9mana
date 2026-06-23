@@ -25,6 +25,8 @@ const LEVEL_LABELS: Record<Niveau, string> = {
   "1AM": "1ère AM", "2AM": "2ème AM", "3AM": "3ème AM", "4AM": "4ème AM",
 };
 const LEVEL_COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
+const ACADEMIC_YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024", "2022-2023"];
+const DEFAULT_YEAR  = "2025-2026";
 
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
@@ -974,20 +976,20 @@ export default function Results() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<StudentResult | null>(null);
   const [showImport, setShowImport] = useState(false);
-  const [annee, setAnnee] = useState("2025-2026");
+  const [annee, setAnnee] = useState(DEFAULT_YEAR);
   const [filters, setFilters] = useState({ niveau: "", classe: "", q: "" });
   const [listKey, setListKey] = useState(0);
 
   const fetchResults = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams();
+      const p = new URLSearchParams({ annee });
       if (filters.niveau) p.set("niveau", filters.niveau);
       if (filters.classe) p.set("classe", filters.classe);
       const res = await fetch(`${BASE}api/results?${p}`, { credentials: "include" });
       if (res.ok) { setResults(await res.json()); setListKey(k => k + 1); }
     } finally { setLoading(false); }
-  }, [filters]);
+  }, [filters, annee]);
 
   useEffect(() => { fetchResults(); }, [fetchResults]);
 
@@ -1035,6 +1037,14 @@ export default function Results() {
           <Input className="ps-9" placeholder={t("students.search")} value={filters.q}
             onChange={e => setFilters(p => ({ ...p, q: e.target.value }))} />
         </div>
+        <Select value={annee} onValueChange={setAnnee}>
+          <SelectTrigger className="w-36 font-semibold border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={filters.niveau || "__all__"}
           onValueChange={v => setFilters(p => ({ ...p, niveau: v === "__all__" ? "" : v, classe: "" }))}>
           <SelectTrigger className="w-36"><SelectValue placeholder={t("students.filterLevel")} /></SelectTrigger>

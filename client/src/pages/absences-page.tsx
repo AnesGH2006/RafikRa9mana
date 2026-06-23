@@ -9,7 +9,8 @@ import {
 } from "recharts";
 
 const BASE = import.meta.env.BASE_URL;
-const CURRENT_YEAR = "2024-2025";
+const ACADEMIC_YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024", "2022-2023"];
+const DEFAULT_YEAR  = "2025-2026";
 
 interface AbsenceRow {
   id: string;
@@ -38,6 +39,7 @@ function MiniTooltip({ active, payload, label }: any) {
 export default function AbsencesPage() {
   const [absences, setAbsences] = useState<AbsenceRow[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [annee, setAnnee] = useState(DEFAULT_YEAR);
   const [trimestre, setTrimestre] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
@@ -45,13 +47,13 @@ export default function AbsencesPage() {
     setLoading(true);
     try {
       const [aRes, sRes] = await Promise.all([
-        fetch(`${BASE}api/absences?annee=${CURRENT_YEAR}`, { credentials: "include" }),
-        fetch(`${BASE}api/students?annee=${CURRENT_YEAR}`, { credentials: "include" }),
+        fetch(`${BASE}api/absences?annee=${annee}`, { credentials: "include" }),
+        fetch(`${BASE}api/students?annee=${annee}`, { credentials: "include" }),
       ]);
       if (aRes.ok) setAbsences(await aRes.json());
       if (sRes.ok) { const d = await sRes.json(); setStudents(d.students ?? d); }
     } finally { setLoading(false); }
-  }, []);
+  }, [annee]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -209,8 +211,16 @@ export default function AbsencesPage() {
         </motion.div>
       )}
 
-      {/* Filter */}
-      <motion.div className="flex gap-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}>
+      {/* Filters */}
+      <motion.div className="flex gap-3 flex-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}>
+        <Select value={annee} onValueChange={v => { setAnnee(v); setTrimestre(""); }}>
+          <SelectTrigger className="w-36 font-semibold border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 bg-red-50/50 dark:bg-red-950/30 text-xs h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={trimestre || "__all__"} onValueChange={v => setTrimestre(v === "__all__" ? "" : v)}>
           <SelectTrigger className="w-40 bg-gradient-to-r from-slate-600 to-slate-800 text-white border-0 font-semibold text-xs h-9">
             <SelectValue placeholder="كل الفصول" />

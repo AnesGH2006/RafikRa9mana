@@ -9,7 +9,8 @@ import {
 } from "recharts";
 
 const BASE = import.meta.env.BASE_URL;
-const CURRENT_YEAR = "2025-2026";
+const ACADEMIC_YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024", "2022-2023"];
+const DEFAULT_YEAR  = "2025-2026";
 const LEVEL_COLORS: Record<string, string> = {
   "1AM": "#6366f1", "2AM": "#8b5cf6", "3AM": "#a855f7", "4AM": "#d946ef",
 };
@@ -35,18 +36,19 @@ function MiniTooltip({ active, payload, label }: any) {
 
 export default function RepeatersPage() {
   const [results, setResults] = useState<ResultRow[]>([]);
+  const [annee, setAnnee] = useState(DEFAULT_YEAR);
   const [niveau, setNiveau] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ annee: CURRENT_YEAR });
+      const p = new URLSearchParams({ annee });
       if (niveau) p.set("niveau", niveau);
       const res = await fetch(`${BASE}api/results?${p}`, { credentials: "include" });
       if (res.ok) setResults(await res.json());
     } finally { setLoading(false); }
-  }, [niveau]);
+  }, [niveau, annee]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -165,6 +167,14 @@ export default function RepeatersPage() {
 
       {/* Filters + count */}
       <div className="flex gap-3 flex-wrap items-center">
+        <Select value={annee} onValueChange={v => { setAnnee(v); setNiveau(""); }}>
+          <SelectTrigger className="w-36 font-semibold border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300 bg-orange-50/50 dark:bg-orange-950/30 text-xs h-9">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={niveau || "__all__"} onValueChange={v => setNiveau(v === "__all__" ? "" : v)}>
           <SelectTrigger className="w-40 bg-gradient-to-r from-orange-500 to-amber-600 text-white border-0 font-semibold text-xs h-9">
             <SelectValue placeholder="كل المستويات" />
