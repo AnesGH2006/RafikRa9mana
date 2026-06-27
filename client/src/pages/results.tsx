@@ -1406,13 +1406,44 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
     let saved = 0;
     for (const s of students) {
       try {
+        // Use the triAvg values read directly from the Ministry Excel file
+        // (معدل الفصل X columns) — these are already coefficient-weighted by the
+        // Ministry software. If missing, fall back to the parsed value.
+        // We send these pre-weighted triAvg values so the backend doesn't
+        // recalculate them from raw scores (which would ignore coefficients).
+        const triAvgMap: Record<number, number | null> = {
+          1: s.t1Avg,
+          2: s.t2Avg,
+          3: s.t3Avg,
+        };
+
+        // Compute annualAvg from the weighted triAvgs (not raw scores)
+        const validTriAvgs = [s.t1Avg, s.t2Avg, s.t3Avg].filter((v): v is number => v !== null);
+        const weightedAnnualAvg = validTriAvgs.length > 0
+          ? Math.round((validTriAvgs.reduce((a, b) => a + b, 0) / validTriAvgs.length) * 100) / 100
+          : null;
+
         for (const tri of [1, 2, 3] as const) {
           const grades = s.grades[tri];
           if (Object.keys(grades).length === 0) continue;
           await fetch(`${BASE}api/grades/bulk`, {
             method: "POST", credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ studentName: s.nomPrenom, raqm: s.raqm, annee, trimestre: tri, grades, triAvg: tri === 1 ? s.t1Avg : tri === 2 ? s.t2Avg : s.t3Avg, annualAvg: s.annualAvg }),
+            body: JSON.stringify({
+              studentName: s.nomPrenom,
+              raqm: s.raqm,
+              annee,
+              trimestre: tri,
+              grades,
+              // Send the pre-weighted triAvg from the Excel file directly.
+              // This prevents the backend from recalculating it from raw scores.
+              triAvg: triAvgMap[tri],
+              annualAvg: weightedAnnualAvg,
+              // Also send as finalAnnualAvg — use this value as-is, do NOT
+              // recompute from raw scores (raw scores lack coefficient weighting)
+              finalAnnualAvg: weightedAnnualAvg,
+              useProvidedAvg: true,
+            }),
           });
         }
         saved++;
