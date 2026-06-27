@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "postgresql-16"]
+modules = ["nodejs-20", "web"]
 
 [deployment]
 router = "application"
@@ -47,6 +47,9 @@ task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [agent]
 stack = "FULLSTACK_JS"
 expertMode = true
@@ -57,11 +60,7 @@ timeoutMs = 20000
 
 [[ports]]
 localPort = 5000
-externalPort = 5000
-
-[[ports]]
-localPort = 5001
-externalPort = 3002
+externalPort = 80
 
 [[ports]]
 localPort = 5173
