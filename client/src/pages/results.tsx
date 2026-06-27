@@ -292,38 +292,50 @@ function TabGeneral({ results }: { results: StudentResult[] }) {
 function TabSubjects({ results }: { results: StudentResult[] }) {
   const withAvg = results.filter(r => r.annualAvg !== null);
 
-  // Build per-subject stats from scores
-  const allSubjectKeys = new Set<string>();
-  withAvg.forEach(r => Object.keys(r.scores ?? {}).forEach(t =>
-    Object.keys((r.scores as any)[t] ?? {}).forEach(k => allSubjectKeys.add(k))
-  ));
-
   const niveau = withAvg[0]?.student.niveau as Niveau | undefined;
-  const subjects = niveau ? getSubjectsForLevel(niveau) : [];
+  const subjects = niveau ? getSubjectsWithCorrectCoefs(niveau) : [];
 
   const subjectStats = subjects.map(s => {
-    const allScores: number[] = [];
+    // Collect each student's annual average for this subject
+    // (average of their T1+T2+T3 scores for this subject)
+    const studentSubjectAvgs: number[] = [];
     withAvg.forEach(r => {
+      const triScores: number[] = [];
       for (const t of [1, 2, 3] as const) {
         const v = (r.scores as any)?.[t]?.[s.key];
-        if (typeof v === "number") allScores.push(v);
+        if (typeof v === "number" && v >= 0) triScores.push(v);
+      }
+      if (triScores.length > 0) {
+        const subAvg = triScores.reduce((a, b) => a + b, 0) / triScores.length;
+        studentSubjectAvgs.push(subAvg);
       }
     });
-    const avg = allScores.length ? allScores.reduce((a, b) => a + b, 0) / allScores.length : null;
-    const pass = allScores.filter(v => v >= 10).length;
-    return { ...s, avg, passCount: pass, total: allScores.length, passRate: allScores.length ? (pass / allScores.length) * 100 : 0 };
+    const avg = studentSubjectAvgs.length
+      ? studentSubjectAvgs.reduce((a, b) => a + b, 0) / studentSubjectAvgs.length
+      : null;
+    const pass = studentSubjectAvgs.filter(v => v >= 10).length;
+    const total = studentSubjectAvgs.length;
+    return {
+      ...s,
+      avg,
+      passCount: pass,
+      total,
+      passRate: total > 0 ? (pass / total) * 100 : 0,
+    };
   }).filter(s => s.total > 0);
 
   const top = [...withAvg].sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0))[0];
   const radarData = subjectStats.map(s => {
-    const topScore = (() => {
-      for (const t of [1, 2, 3] as const) {
-        const v = (top?.scores as any)?.[t]?.[s.key];
-        if (typeof v === "number") return v;
-      }
-      return 0;
-    })();
-    return { subject: s.arLabel, "أعلى تلميذ": topScore, "معدل القسم": s.avg ?? 0 };
+    // Top student's average for this subject across trimesters
+    const topTriScores: number[] = [];
+    for (const t of [1, 2, 3] as const) {
+      const v = (top?.scores as any)?.[t]?.[s.key];
+      if (typeof v === "number" && v >= 0) topTriScores.push(v);
+    }
+    const topScore = topTriScores.length
+      ? topTriScores.reduce((a, b) => a + b, 0) / topTriScores.length
+      : 0;
+    return { subject: s.arLabel, "أعلى تلميذ": +topScore.toFixed(2), "معدل القسم": +(s.avg ?? 0).toFixed(2) };
   });
 
   return (
@@ -403,10 +415,10 @@ function TabSubjects({ results }: { results: StudentResult[] }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {subjectStats.map((s, i) => (
+              {subjectStats.map((s, i) => (
                     <tr key={i} className={`border-b ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
                       <td className="py-2 pr-2 font-medium">{s.arLabel}</td>
-                      <td className="py-2 text-center text-muted-foreground">{s.coef}</td>
+                      <td className="py-2 text-center text-muted-foreground font-mono font-semibold">{s.coef}</td>
                       <td className={`py-2 text-center font-mono font-bold ${(s.avg ?? 0) >= 10 ? "text-emerald-600" : "text-red-500"}`}>{avg2(s.avg)}</td>
                       <td className="py-2 text-center text-xs">{s.passCount}/{s.total}</td>
                       <td className="py-2 text-center">
@@ -1221,9 +1233,31 @@ function ResultsAnalyticsDashboard({ results }: { results: StudentResult[] }) {
   );
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// Existing helpers (unchanged)
-// ════════════════════════════════════════════════════════════════════════════════
+// ─── 4AM coefficient override (Algerian Ministry official values) ─────────────
+const COEF_OVERRIDE_4AM: Record<string, number> = {
+  arabe:       5,
+  maths:       4,
+  francais:    3,
+  histoire_geo:3,
+  anglais:     2,
+  physique:    2,
+  svt:         2,
+  islam:       2,
+  civique:     1,
+  eps:         1,
+};
+
+// Returns subjects with overridden coefficients for 4AM
+function getSubjectsWithCorrectCoefs(niveau: Niveau) {
+  const base = getSubjectsForLevel(niveau);
+  if (niveau !== "4AM") return base;
+  return base.map(s => ({
+    ...s,
+    coef: COEF_OVERRIDE_4AM[s.key] ?? s.coef,
+  }));
+}
+
+
 
 const SUBJECT_HEADER_MAP: Record<string, string> = {
   "اللغة العربية":              "arabe",
@@ -1501,7 +1535,7 @@ function GradeModal({ result, annee, onClose, onSaved }: {
   const [tri, setTri] = useState<1 | 2 | 3>(1);
   const [grades, setGrades] = useState<Record<string, Record<string, string>>>({ "1": {}, "2": {}, "3": {} });
   const [saving, setSaving] = useState(false);
-  const subjects = getSubjectsForLevel(result.student.niveau as Niveau);
+  const subjects = getSubjectsWithCorrectCoefs(result.student.niveau as Niveau);
 
   useEffect(() => {
     const g: Record<string, Record<string, string>> = { "1": {}, "2": {}, "3": {} };
