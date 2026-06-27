@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   FileSpreadsheet, RotateCcw, Printer, BarChart3, TrendingUp,
   Award, Users, Target, Zap, BookOpen, ArrowUpRight, ArrowDownRight,
-  ChevronUp, ChevronDown, Minus, Search, Filter,
+  ChevronUp, ChevronDown, Minus, Search, Filter, Clock, ChevronRight,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -1020,6 +1020,70 @@ function MentorsTab({ result }: { result: BEMResult }) {
   );
 }
 
+// ── Saved-sessions sidebar card ───────────────────────────────────────────────
+interface SessionMeta { id: string; fileName: string; label: string | null; createdAt: string }
+
+function SavedSessions({ onLoad }: { onLoad: (r: BEMResult) => void }) {
+  const { toast } = useToast();
+  const [sessions, setSessions] = useState<SessionMeta[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [fetching, setFetching] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`${BASE}api/bem/sessions`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : [])
+      .then(setSessions)
+      .catch(() => setSessions([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return null;
+  if (sessions.length === 0) return null;
+
+  const handleLoad = async (id: string) => {
+    setFetching(id);
+    try {
+      const res = await fetch(`${BASE}api/bem/sessions/${id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("فشل تحميل الجلسة");
+      const data = await res.json();
+      onLoad(data);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "خطأ", description: e.message });
+    } finally { setFetching(null); }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+      className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b bg-gradient-to-r from-muted/50 to-transparent flex items-center gap-2">
+        <Clock className="w-4 h-4 text-violet-500" />
+        <span className="text-sm font-semibold">الجلسات المحفوظة</span>
+        <Badge variant="secondary" className="ms-auto text-[10px]">{sessions.length}</Badge>
+      </div>
+      <div className="divide-y max-h-52 overflow-y-auto">
+        {sessions.map(s => (
+          <motion.button key={s.id} whileHover={{ backgroundColor: "rgba(99,102,241,0.06)" }}
+            onClick={() => handleLoad(s.id)} disabled={fetching === s.id}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-start transition-colors"
+            data-testid={`button-load-bem-session-${s.id}`}>
+            <FileSpreadsheet className="w-4 h-4 text-violet-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold truncate">{s.label || s.fileName}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {new Date(s.createdAt).toLocaleDateString("ar-DZ", { year: "numeric", month: "short", day: "numeric" })}
+              </p>
+            </div>
+            {fetching === s.id
+              ? <motion.div className="w-3.5 h-3.5 border-2 border-violet-500 border-t-transparent rounded-full shrink-0"
+                  animate={{ rotate: 360 }} transition={{ duration: 0.7, repeat: Infinity, ease: "linear" }} />
+              : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+          </motion.button>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function BEMPage() {
   const [result,    setResult]    = useState<BEMResult | null>(null);
@@ -1065,6 +1129,7 @@ export default function BEMPage() {
           <motion.div key="upload" exit={{ opacity: 0, y: -12, scale: 0.97 }}
             transition={{ duration: 0.25 }} className="max-w-2xl mx-auto space-y-5 print:hidden">
             <UploadZone onResult={setResult} />
+            <SavedSessions onLoad={setResult} />
             <motion.div className="rounded-2xl bg-muted/40 border p-5 space-y-3"
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
               <p className="font-semibold text-sm">المواد المعتمدة في BEM وأوزانها:</p>

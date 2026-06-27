@@ -96,3 +96,15 @@ export const absencesTable = pgTable("absences", {
 
 export type Absence = typeof absencesTable.$inferSelect;
 export type InsertAbsence = typeof absencesTable.$inferInsert;
+
+export const bemSessionsTable = pgTable("bem_sessions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  label: varchar("label", { length: 255 }),
+  data: jsonb("data").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type BemSession = typeof bemSessionsTable.$inferSelect;
+export type InsertBemSession = typeof bemSessionsTable.$inferInsert;
