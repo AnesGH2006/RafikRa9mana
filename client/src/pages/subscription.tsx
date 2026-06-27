@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/language-provider";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,12 +13,14 @@ const pageVariants = {
 
 export default function SubscriptionPage() {
   const { t } = useLanguage();
+  const [premiumBilling, setPremiumBilling] = useState<"year" | "quarter">("year");
 
   const plans = [
     {
       key: "free",
       name: t("sub.free"),
       price: "0",
+      priceNote: null,
       period: null,
       icon: Star,
       gradient: "from-slate-500 to-slate-700",
@@ -32,7 +35,8 @@ export default function SubscriptionPage() {
     {
       key: "pro",
       name: t("sub.pro"),
-      price: "3000",
+      price: "3 000",
+      priceNote: null,
       period: t("sub.year"),
       icon: Zap,
       gradient: "from-violet-600 to-indigo-700",
@@ -47,8 +51,10 @@ export default function SubscriptionPage() {
     {
       key: "premium",
       name: t("sub.premium"),
-      price: "6000",
-      period: t("sub.year"),
+      // price is dynamic — handled inline
+      price: premiumBilling === "year" ? "6 000" : "2 000",
+      priceNote: premiumBilling === "quarter" ? "≈ 8 000 DA/سنة" : null,
+      period: premiumBilling === "year" ? t("sub.year") : "3 أشهر",
       icon: Crown,
       gradient: "from-amber-500 to-orange-600",
       shadow: "shadow-amber-500/30",
@@ -80,18 +86,17 @@ export default function SubscriptionPage() {
         </h1>
         <p className="text-muted-foreground text-base max-w-md mx-auto">{t("sub.subtitle")}</p>
 
-        {/* Annual badge */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-sm font-semibold"
         >
           <Calendar className="w-4 h-4" />
-          اشتراك سنوي — فوفر أكثر مع الدفع السنوي
+          اشتراك سنوي — وفّر أكثر مع الدفع السنوي
         </motion.div>
       </motion.div>
 
       {/* Plans */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
         {plans.map((plan, i) => (
           <motion.div
             key={plan.key}
@@ -118,25 +123,58 @@ export default function SubscriptionPage() {
               <div className={`bg-gradient-to-br ${plan.gradient} p-6 relative overflow-hidden`}>
                 <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-white/10 blur-xl" />
                 <div className="absolute -bottom-6 -left-6 w-16 h-16 rounded-full bg-white/10 blur-xl" />
+
                 <motion.div
                   className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center mb-4 relative"
                   whileHover={{ rotate: 12, scale: 1.1 }} transition={{ type: "spring", stiffness: 300 }}
                 >
                   <plan.icon className="w-6 h-6 text-white" />
                 </motion.div>
+
                 <h2 className="text-xl font-extrabold text-white mb-1">{plan.name}</h2>
+
+                {/* Price */}
                 <div className="flex items-end gap-1">
                   <span className="text-4xl font-black text-white">{plan.price === "0" ? "0" : plan.price}</span>
                   {plan.price !== "0" && plan.period ? (
                     <div className="mb-1.5">
-                      <span className="text-white/70 text-sm">DA</span>
+                      <span className="text-white/70 text-sm"> DA</span>
                       <span className="text-white/70 text-xs block leading-none">{plan.period}</span>
                     </div>
                   ) : (
-                    <span className="text-white/70 text-sm mb-1.5">DA</span>
+                    <span className="text-white/70 text-sm mb-1.5"> DA</span>
                   )}
                 </div>
-                {plan.price !== "0" && (
+
+                {/* Equivalent note for quarterly */}
+                {plan.priceNote && (
+                  <p className="text-white/60 text-[11px] mt-0.5">{plan.priceNote}</p>
+                )}
+
+                {/* Billing toggle — premium card only */}
+                {plan.key === "premium" && (
+                  <motion.div
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+                    className="mt-3 inline-flex rounded-xl bg-white/15 p-0.5 gap-0.5"
+                  >
+                    {(["year", "quarter"] as const).map(opt => (
+                      <button
+                        key={opt}
+                        onClick={() => setPremiumBilling(opt)}
+                        className={`px-3 py-1 rounded-[10px] text-[11px] font-bold transition-all ${
+                          premiumBilling === opt
+                            ? "bg-white text-orange-600 shadow"
+                            : "text-white/80 hover:text-white"
+                        }`}
+                      >
+                        {opt === "year" ? "سنوي" : "3 أشهر"}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+
+                {/* Badge for non-premium paid plans */}
+                {plan.price !== "0" && plan.key !== "premium" && (
                   <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15 text-white/90 text-[10px] font-semibold">
                     <Calendar className="w-3 h-3" />
                     اشتراك سنوي
@@ -145,7 +183,6 @@ export default function SubscriptionPage() {
               </div>
 
               <CardContent className="p-5 space-y-4 flex flex-col">
-                {/* Features */}
                 <ul className="space-y-3 flex-1">
                   {plan.features.map((f, j) => (
                     <motion.li
@@ -162,11 +199,8 @@ export default function SubscriptionPage() {
                   ))}
                 </ul>
 
-                {/* CTA */}
-                <motion.div
-                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                >
+                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}>
                   <Button
                     variant={plan.ctaVariant}
                     disabled={plan.current}
@@ -189,28 +223,59 @@ export default function SubscriptionPage() {
         ))}
       </div>
 
+      {/* Pricing clarity note */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
+        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+      >
+        <div className="rounded-xl border bg-violet-50/50 dark:bg-violet-950/20 border-violet-200/50 dark:border-violet-800/50 px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center shrink-0">
+            <Zap className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-violet-700 dark:text-violet-300">Pro — 3 000 DA / سنة</p>
+            <p className="text-xs text-muted-foreground">250 DA / شهر — الأنسب للمدارس المتوسطة</p>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-800/50 px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center shrink-0">
+            <Crown className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Premium — 6 000 DA / سنة أو 2 000 DA / 3 أشهر</p>
+            <p className="text-xs text-muted-foreground">خيار الفصول الدراسية للمرونة القصوى</p>
+          </div>
+        </div>
+      </motion.div>
+
       {/* Comparison table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
         className="rounded-2xl border overflow-hidden shadow-sm"
       >
-        <div className="bg-muted/50 px-5 py-3 font-bold text-sm">مقارنة المزايا</div>
+        <div className="bg-muted/50 px-5 py-3 grid grid-cols-4 text-xs font-bold text-muted-foreground">
+          <span>الميزة</span>
+          <span className="text-center">مجاني</span>
+          <span className="text-center text-violet-600">Pro</span>
+          <span className="text-center text-amber-600">Premium</span>
+        </div>
         <div className="divide-y">
           {[
-            { label: "عدد التلاميذ", free: "200", pro: "غير محدود", prem: "غير محدود" },
-            { label: "استيراد Excel", free: "✓", pro: "✓", prem: "✓" },
-            { label: "التحليلات المتقدمة", free: "—", pro: "✓", prem: "✓" },
-            { label: "طباعة PDF", free: "—", pro: "✓", prem: "✓" },
-            { label: "مقارنة السنوات", free: "—", pro: "✓", prem: "✓" },
-            { label: "تقارير شاملة", free: "—", pro: "✓", prem: "✓" },
-            { label: "إدارة متعدد المدارس", free: "—", pro: "—", prem: "✓" },
-            { label: "تقارير مخصصة", free: "—", pro: "—", prem: "✓" },
+            { label: "عدد التلاميذ",          free: "200",        pro: "غير محدود", prem: "غير محدود" },
+            { label: "استيراد Excel",          free: "✓",          pro: "✓",         prem: "✓"         },
+            { label: "التحليلات المتقدمة",     free: "—",          pro: "✓",         prem: "✓"         },
+            { label: "طباعة PDF",              free: "—",          pro: "✓",         prem: "✓"         },
+            { label: "مقارنة السنوات",         free: "—",          pro: "✓",         prem: "✓"         },
+            { label: "تقارير شاملة",           free: "—",          pro: "✓",         prem: "✓"         },
+            { label: "خيار 3 أشهر",            free: "—",          pro: "—",         prem: "✓"         },
+            { label: "إدارة متعدد المدارس",    free: "—",          pro: "—",         prem: "✓"         },
+            { label: "تقارير مخصصة",           free: "—",          pro: "—",         prem: "✓"         },
           ].map((row, i) => (
-            <div key={i} className="grid grid-cols-4 px-5 py-2.5 text-sm">
+            <div key={i} className="grid grid-cols-4 px-5 py-2.5 text-sm hover:bg-muted/20 transition-colors">
               <span className="text-muted-foreground font-medium">{row.label}</span>
-              <span className={`text-center font-semibold ${row.free === "✓" ? "text-emerald-600" : row.free === "—" ? "text-muted-foreground" : "text-foreground"}`}>{row.free}</span>
-              <span className={`text-center font-semibold ${row.pro === "✓" ? "text-violet-600" : row.pro === "—" ? "text-muted-foreground" : "text-violet-600"}`}>{row.pro}</span>
-              <span className={`text-center font-semibold ${row.prem === "✓" ? "text-amber-600" : row.prem === "—" ? "text-muted-foreground" : "text-amber-600"}`}>{row.prem}</span>
+              <span className={`text-center font-semibold ${row.free === "✓" ? "text-emerald-600" : row.free === "—" ? "text-muted-foreground/40" : "text-foreground"}`}>{row.free}</span>
+              <span className={`text-center font-semibold ${row.pro  === "✓" ? "text-violet-600"  : row.pro  === "—" ? "text-muted-foreground/40" : "text-violet-600"}`}>{row.pro}</span>
+              <span className={`text-center font-semibold ${row.prem === "✓" ? "text-amber-600"   : row.prem === "—" ? "text-muted-foreground/40" : "text-amber-600"}`}>{row.prem}</span>
             </div>
           ))}
         </div>
