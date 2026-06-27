@@ -183,7 +183,8 @@ export const translations: TranslationMap = {
   "sub.free":        { en: "Free",                 ar: "مجاني",                fr: "Gratuit" },
   "sub.pro":         { en: "Pro",                  ar: "احترافي",              fr: "Pro" },
   "sub.premium":     { en: "Premium",              ar: "مميز",                 fr: "Premium" },
-  "sub.month":       { en: "/ month",              ar: "/ شهر",               fr: "/ mois" },
+  "sub.month":       { en: "/ year",               ar: "/ سنة",               fr: "/ an" },
+  "sub.year":        { en: "/ year",               ar: "/ سنة",               fr: "/ an" },
   "sub.current":     { en: "Current Plan",         ar: "الخطة الحالية",        fr: "Plan actuel" },
   "sub.upgrade":     { en: "Upgrade",              ar: "ترقية",                fr: "Mettre à niveau" },
   "sub.contact":     { en: "Contact Us",           ar: "تواصل معنا",           fr: "Nous contacter" },
@@ -227,4 +228,12 @@ export const translations: TranslationMap = {
   "val.na":         { en: "—",        ar: "—",     fr: "—" },
 
   toggleTheme: { en: "Toggle Theme", ar: "تبديل المظهر", fr: "Changer de thème" },
+
+  // Reports
+  "nav.reports":         { en: "Reports",           ar: "التقارير",              fr: "Rapports" },
+  "nav.reports_section": { en: "Reports & Print",   ar: "التقارير والطباعة",     fr: "Rapports & Impression" },
+  "reports.title":       { en: "Comprehensive Reports", ar: "التقارير الشاملة", fr: "Rapports complets" },
+  "reports.print":       { en: "Print PDF",          ar: "طباعة PDF",            fr: "Imprimer PDF" },
+  "reports.noData":      { en: "No data for this year.", ar: "لا توجد بيانات لهذه السنة.", fr: "Aucune donnée pour cette année." },
 };
+

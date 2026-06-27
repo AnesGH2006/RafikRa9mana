@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, Trash2, Search, Users, FileSpreadsheet, X, CheckCircle2, AlertCircle, BarChart2 } from "lucide-react";
+import { Upload, Trash2, Search, Users, FileSpreadsheet, X, CheckCircle2, AlertCircle, BarChart2, Printer } from "lucide-react";
 import { CountUp } from "@/components/count-up";
 import type { Student, Niveau, Sexe, Statut } from "@shared/types";
 import {
@@ -336,6 +336,17 @@ export default function Students() {
             >
               <BarChart2 className="w-3.5 h-3.5" />
               {showAnalytics ? "إخفاء الإحصاءات" : "إظهار الإحصاءات"}
+            </Button>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Button
+              size="sm" variant="outline"
+              className="gap-1.5 h-9 text-xs font-semibold text-slate-600 hover:text-slate-800"
+              onClick={() => window.print()}
+              data-testid="button-print-students"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              طباعة
             </Button>
           </motion.div>
 

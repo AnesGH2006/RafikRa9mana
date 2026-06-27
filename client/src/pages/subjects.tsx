@@ -3,7 +3,7 @@ import { useLanguage } from "@/contexts/language-provider";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, TrendingUp, TrendingDown, Award } from "lucide-react";
+import { BarChart3, TrendingUp, TrendingDown, Award, Printer } from "lucide-react";
 import type { SubjectAverage } from "@shared/types";
 import type { Niveau } from "@shared/types";
 import {
@@ -119,6 +119,15 @@ export default function SubjectsPage() {
               {type === "bar" ? "أعمدة" : "رادار"}
             </motion.button>
           ))}
+          <motion.button
+            whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+            onClick={() => window.print()}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-muted text-muted-foreground hover:text-foreground flex items-center gap-1.5 no-print"
+            data-testid="button-print-subjects"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            طباعة
+          </motion.button>
         </div>
       </div>
 

@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, Users, UserCheck, UserX, Award, BarChart3,
-  GitCompare, ChevronDown, ChevronUp,
+  GitCompare, ChevronDown, ChevronUp, Printer,
 } from "lucide-react";
 import { CountUp } from "@/components/count-up";
 import type { DashboardStats } from "@shared/types";
@@ -373,6 +373,18 @@ export default function AnalyticsPage() {
               {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
             </SelectContent>
           </Select>
+
+          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
+            <Button
+              size="sm" variant="outline"
+              onClick={() => window.print()}
+              className="gap-2 h-9 font-semibold text-xs no-print"
+              data-testid="button-print-analytics"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              طباعة
+            </Button>
+          </motion.div>
 
           <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
             <Button

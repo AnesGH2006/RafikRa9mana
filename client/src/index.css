@@ -289,4 +289,46 @@ html[dir="ltr"] body {
     size: A4;
     margin: 1.5cm;
   }
+
+  /* Hide sidebar, header, controls when printing */
+  aside,
+  header,
+  .no-print,
+  [data-testid="button-header-import"],
+  [data-testid="button-mobile-import"] {
+    display: none !important;
+  }
+
+  /* Print area fills the page */
+  .print-area {
+    display: block !important;
+  }
+
+  /* Ensure cards look good in print */
+  .print-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Hide buttons + selects in print mode */
+  button:not(.print-show),
+  select:not(.print-show),
+  .print-hide {
+    display: none !important;
+  }
+
+  /* Remove shadows for print */
+  .shadow-lg, .shadow-md, .shadow-sm, .shadow-xl {
+    box-shadow: none !important;
+  }
+
+  /* Force dark text on white for print */
+  .text-white {
+    color: #000 !important;
+  }
+
+  /* Show print-only elements */
+  .print-only {
+    display: block !important;
+  }
 }

@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/language-provider";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, Zap, Star, Crown } from "lucide-react";
+import { Check, Zap, Star, Crown, Calendar } from "lucide-react";
 
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
@@ -18,6 +18,7 @@ export default function SubscriptionPage() {
       key: "free",
       name: t("sub.free"),
       price: "0",
+      period: null,
       icon: Star,
       gradient: "from-slate-500 to-slate-700",
       shadow: "shadow-slate-400/20",
@@ -31,7 +32,8 @@ export default function SubscriptionPage() {
     {
       key: "pro",
       name: t("sub.pro"),
-      price: "1500",
+      price: "3000",
+      period: t("sub.year"),
       icon: Zap,
       gradient: "from-violet-600 to-indigo-700",
       shadow: "shadow-violet-500/30",
@@ -45,7 +47,8 @@ export default function SubscriptionPage() {
     {
       key: "premium",
       name: t("sub.premium"),
-      price: "4000",
+      price: "6000",
+      period: t("sub.year"),
       icon: Crown,
       gradient: "from-amber-500 to-orange-600",
       shadow: "shadow-amber-500/30",
@@ -76,6 +79,15 @@ export default function SubscriptionPage() {
           {t("sub.title")}
         </h1>
         <p className="text-muted-foreground text-base max-w-md mx-auto">{t("sub.subtitle")}</p>
+
+        {/* Annual badge */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-sm font-semibold"
+        >
+          <Calendar className="w-4 h-4" />
+          اشتراك سنوي — فوفر أكثر مع الدفع السنوي
+        </motion.div>
       </motion.div>
 
       {/* Plans */}
@@ -115,15 +127,21 @@ export default function SubscriptionPage() {
                 <h2 className="text-xl font-extrabold text-white mb-1">{plan.name}</h2>
                 <div className="flex items-end gap-1">
                   <span className="text-4xl font-black text-white">{plan.price === "0" ? "0" : plan.price}</span>
-                  {plan.price !== "0" && (
-                    <span className="text-white/70 text-sm mb-1.5">
-                      DA{t("sub.month")}
-                    </span>
-                  )}
-                  {plan.price === "0" && (
+                  {plan.price !== "0" && plan.period ? (
+                    <div className="mb-1.5">
+                      <span className="text-white/70 text-sm">DA</span>
+                      <span className="text-white/70 text-xs block leading-none">{plan.period}</span>
+                    </div>
+                  ) : (
                     <span className="text-white/70 text-sm mb-1.5">DA</span>
                   )}
                 </div>
+                {plan.price !== "0" && (
+                  <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15 text-white/90 text-[10px] font-semibold">
+                    <Calendar className="w-3 h-3" />
+                    اشتراك سنوي
+                  </div>
+                )}
               </div>
 
               <CardContent className="p-5 space-y-4 flex flex-col">
@@ -171,9 +189,36 @@ export default function SubscriptionPage() {
         ))}
       </div>
 
-      {/* Info banner */}
+      {/* Comparison table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+        className="rounded-2xl border overflow-hidden shadow-sm"
+      >
+        <div className="bg-muted/50 px-5 py-3 font-bold text-sm">مقارنة المزايا</div>
+        <div className="divide-y">
+          {[
+            { label: "عدد التلاميذ", free: "200", pro: "غير محدود", prem: "غير محدود" },
+            { label: "استيراد Excel", free: "✓", pro: "✓", prem: "✓" },
+            { label: "التحليلات المتقدمة", free: "—", pro: "✓", prem: "✓" },
+            { label: "طباعة PDF", free: "—", pro: "✓", prem: "✓" },
+            { label: "مقارنة السنوات", free: "—", pro: "✓", prem: "✓" },
+            { label: "تقارير شاملة", free: "—", pro: "✓", prem: "✓" },
+            { label: "إدارة متعدد المدارس", free: "—", pro: "—", prem: "✓" },
+            { label: "تقارير مخصصة", free: "—", pro: "—", prem: "✓" },
+          ].map((row, i) => (
+            <div key={i} className="grid grid-cols-4 px-5 py-2.5 text-sm">
+              <span className="text-muted-foreground font-medium">{row.label}</span>
+              <span className={`text-center font-semibold ${row.free === "✓" ? "text-emerald-600" : row.free === "—" ? "text-muted-foreground" : "text-foreground"}`}>{row.free}</span>
+              <span className={`text-center font-semibold ${row.pro === "✓" ? "text-violet-600" : row.pro === "—" ? "text-muted-foreground" : "text-violet-600"}`}>{row.pro}</span>
+              <span className={`text-center font-semibold ${row.prem === "✓" ? "text-amber-600" : row.prem === "—" ? "text-muted-foreground" : "text-amber-600"}`}>{row.prem}</span>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Info banner */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
         className="rounded-2xl bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 border border-blue-200/50 dark:border-blue-800/50 p-5 text-center"
       >
         <p className="text-sm text-muted-foreground">

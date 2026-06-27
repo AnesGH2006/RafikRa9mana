@@ -9,7 +9,7 @@ import {
   ClipboardList, GraduationCap, Compass, Database, Settings,
   ChevronDown, FileSpreadsheet, BarChart3, UserX, List, CheckSquare,
   User, BarChart2, CalendarOff, UserCheck, RefreshCw, AlertCircle,
-  TrendingUp, Star, CreditCard, Upload,
+  TrendingUp, Star, CreditCard, Upload, FileText,
 } from "lucide-react";
 import { QuickImportDialog } from "@/components/quick-import";
 import { motion, AnimatePresence } from "framer-motion";
@@ -29,6 +29,7 @@ import OrientationResultsPage from "@/pages/orientation-results";
 import TransferResultsPage from "@/pages/transfer-results";
 import CouncilsPage from "@/pages/councils";
 import AnalyticsPage from "@/pages/analytics";
+import ReportsPage from "@/pages/reports";
 import SubscriptionPage from "@/pages/subscription";
 import AdminPage from "@/pages/admin";
 import PaywallScreen from "@/pages/paywall";
@@ -91,6 +92,7 @@ const SECTIONS: SectionDef[] = [
     color: "text-cyan-400", gradient: "from-cyan-500 to-blue-600",
     items: [
       { href: "/analytics", icon: BarChart3, labelKey: "nav.analytics", accent: "text-cyan-400" },
+      { href: "/reports",   icon: FileText,  labelKey: "nav.reports",   accent: "text-cyan-400" },
     ],
   },
   {
@@ -439,6 +441,7 @@ function AppLayout() {
               <Route path="/yearend/passed">{() => <YearEnd />}</Route>
               <Route path="/yearend/failed">{() => <YearEnd />}</Route>
               <Route path="/analytics"           component={AnalyticsPage} />
+              <Route path="/reports"             component={ReportsPage} />
               <Route path="/subscription"        component={SubscriptionPage} />
               <Route path="/admin"               component={AdminPage} />
               <Route path="/orientation">{() => <ComingSoon title="التوجيه النهائي" />}</Route>

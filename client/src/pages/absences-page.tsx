@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CalendarOff, AlertTriangle, CheckCircle } from "lucide-react";
+import { CalendarOff, AlertTriangle, CheckCircle, Printer } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, Legend, CartesianGrid,
@@ -108,15 +108,23 @@ export default function AbsencesPage() {
       className="p-6 space-y-6 max-w-5xl mx-auto"
     >
       {/* Header */}
-      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <span className="inline-flex w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 items-center justify-center shadow-lg shadow-orange-500/30">
-            <CalendarOff className="w-5 h-5 text-white" />
-          </span>
-          إجازات التلاميذ
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5 ms-11">سجل الغيابات المبررة وغير المبررة بالساعات</p>
-      </motion.div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <span className="inline-flex w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 items-center justify-center shadow-lg shadow-orange-500/30">
+              <CalendarOff className="w-5 h-5 text-white" />
+            </span>
+            إجازات التلاميذ
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5 ms-11">سجل الغيابات المبررة وغير المبررة بالساعات</p>
+        </motion.div>
+        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+          <Button variant="outline" size="sm" className="gap-2 h-9 text-xs font-semibold no-print" onClick={() => window.print()} data-testid="button-print-absences">
+            <Printer className="w-3.5 h-3.5" />
+            طباعة PDF
+          </Button>
+        </motion.div>
+      </div>
 
       {/* Summary KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
