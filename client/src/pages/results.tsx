@@ -1244,6 +1244,7 @@ const COEF_OVERRIDE_4AM: Record<string, number> = {
   svt:         2,
   islam:       2,
   civique:     1,
+  musique:     1,
   eps:         1,
 };
 
@@ -1296,7 +1297,9 @@ function parseHTMLExcel(text: string): ParsedStudent[] {
   let headerRowIdx = -1;
   let headers: string[] = [];
   for (let i = 0; i < tableRows.length; i++) {
-    const cells = Array.from(tableRows[i].querySelectorAll("td,th")).map(c => c.textContent?.trim() ?? "");
+    const cells = Array.from(tableRows[i].querySelectorAll("td,th")).map(c =>
+      (c.textContent ?? "").replace(/\s+/g, " ").trim()
+    );
     if (cells.some(c => c === "الرقم")) { headerRowIdx = i; headers = cells; break; }
   }
   if (headerRowIdx === -1) throw new Error("لم يتم العثور على صف العناوين (الرقم)");
@@ -1306,16 +1309,23 @@ function parseHTMLExcel(text: string): ParsedStudent[] {
     subjectKey?: string; tri?: 1 | 2 | 3;
   }
   const colMeta: ColMeta[] = headers.map(h => {
-    if (h === "الرقم") return { type: "raqm" };
-    if (h === "اللقب و الاسم" || h === "اللقب والاسم") return { type: "name" };
-    if (h === "الجنس") return { type: "gender" };
+    const hNorm = h.replace(/\s+/g, " ").trim(); // normalize multiple spaces
+    if (hNorm === "الرقم") return { type: "raqm" };
+    if (hNorm === "اللقب و الاسم" || hNorm === "اللقب والاسم" || hNorm === "اللقب  والاسم") return { type: "name" };
+    if (hNorm === "الجنس") return { type: "gender" };
     for (const [arLabel, key] of Object.entries(SUBJECT_HEADER_MAP)) {
       for (const tri of [1, 2, 3] as const) {
-        if (h === `${arLabel} ف ${tri}`) return { type: "subject", subjectKey: key, tri };
+        // Match both "مادة ف 1" and "مادة ف1" (with or without space before number)
+        if (hNorm === `${arLabel} ف ${tri}` || hNorm === `${arLabel} ف${tri}`) {
+          return { type: "subject", subjectKey: key, tri };
+        }
       }
     }
     for (const tri of [1, 2, 3] as const) {
-      if (h === `معدل الفصل ${tri}`) return { type: "avg", tri };
+      // Match "معدل الفصل 3", "معدل الفصل3", "معدل  الفصل 3"
+      if (hNorm === `معدل الفصل ${tri}` || hNorm === `معدل الفصل${tri}`) {
+        return { type: "avg", tri };
+      }
     }
     return { type: "skip" };
   });
@@ -1326,7 +1336,9 @@ function parseHTMLExcel(text: string): ParsedStudent[] {
   const students: ParsedStudent[] = [];
 
   for (let i = headerRowIdx + 1; i < tableRows.length; i++) {
-    const cells = Array.from(tableRows[i].querySelectorAll("td,th")).map(c => c.textContent?.trim() ?? "");
+    const cells = Array.from(tableRows[i].querySelectorAll("td,th")).map(c =>
+      (c.textContent ?? "").replace(/\s+/g, " ").trim()
+    );
     const raqmRaw = cells[iRaqm];
     if (!raqmRaw || isNaN(Number(raqmRaw))) continue;
 
@@ -1336,11 +1348,15 @@ function parseHTMLExcel(text: string): ParsedStudent[] {
     cells.forEach((val, ci) => {
       const meta = colMeta[ci];
       if (!meta) return;
-      const n = parseFloat(val);
-      if (meta.type === "subject" && meta.subjectKey && meta.tri && !isNaN(n) && n > 0)
+      // Normalize French decimal comma → dot, trim whitespace
+      const normalized = val.replace(/,/g, ".").trim();
+      const n = parseFloat(normalized);
+      if (meta.type === "subject" && meta.subjectKey && meta.tri && !isNaN(n) && n >= 0)
         grades[meta.tri][meta.subjectKey] = Math.max(0, Math.min(20, n));
-      if (meta.type === "avg" && meta.tri && !isNaN(n) && n > 0)
-        triAvgs[meta.tri] = n;
+      // For triAvg: accept n >= 0 (a trimester avg of 0 is valid edge case)
+      // but ignore truly empty cells (val was empty → NaN)
+      if (meta.type === "avg" && meta.tri && !isNaN(n) && normalized !== "")
+        triAvgs[meta.tri] = Math.max(0, Math.min(20, n));
     });
 
     const available = ([1, 2, 3] as const).map(t => triAvgs[t]).filter((v): v is number => v !== null);
