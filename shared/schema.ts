@@ -108,3 +108,23 @@ export const bemSessionsTable = pgTable("bem_sessions", {
 
 export type BemSession = typeof bemSessionsTable.$inferSelect;
 export type InsertBemSession = typeof bemSessionsTable.$inferInsert;
+
+export const dailyAbsenceReportsTable = pgTable("daily_absence_reports", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  reportDate: varchar("report_date", { length: 20 }).notNull(),
+  studentsTotal: integer("students_total").notNull().default(0),
+  studentsAbsent: integer("students_absent").notNull().default(0),
+  teachersTotal: integer("teachers_total").notNull().default(0),
+  teachersAbsent: integer("teachers_absent").notNull().default(0),
+  adminTotal: integer("admin_total").notNull().default(0),
+  adminAbsent: integer("admin_absent").notNull().default(0),
+  workersTotal: integer("workers_total").notNull().default(0),
+  workersAbsent: integer("workers_absent").notNull().default(0),
+  cafeteriaSuspended: boolean("cafeteria_suspended"),
+  fileName: varchar("file_name", { length: 255 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DailyAbsenceReport = typeof dailyAbsenceReportsTable.$inferSelect;
+export type InsertDailyAbsenceReport = typeof dailyAbsenceReportsTable.$inferInsert;

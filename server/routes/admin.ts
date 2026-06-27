@@ -28,7 +28,7 @@ router.get("/admin/users", async (req: Request, res: Response): Promise<void> =>
 // PATCH /api/admin/users/:id — update subscription/role (admin only)
 router.patch("/admin/users/:id", async (req: Request, res: Response): Promise<void> => {
   if (!isAdmin(req)) { res.status(403).json({ error: "Forbidden" }); return; }
-  const { id } = req.params;
+  const id = String(req.params["id"]);
   const { subscriptionStatus, role, subscriptionExpiresAt } = req.body as {
     subscriptionStatus?: "pending" | "active" | "suspended";
     role?: "user" | "admin";
