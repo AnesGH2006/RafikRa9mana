@@ -424,7 +424,8 @@ export default function ImportPage() {
         onClick={() => fileInputRef.current?.click()}
       >
         <input ref={fileInputRef} type="file" accept=".xlsx,.xls"
-          multiple className="hidden" onChange={onFileInput} />
+          multiple className="hidden" onChange={onFileInput}
+          onClick={e => e.stopPropagation()} />
 
         <motion.div animate={dragOver ? { scale: 1.15, rotate: -5 } : { y: [0, -6, 0] }}
           transition={dragOver ? { type: "spring", stiffness: 300 } : { duration: 2.5, repeat: Infinity, ease: "easeInOut" }}>
