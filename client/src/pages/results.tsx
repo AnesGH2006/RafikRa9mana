@@ -1419,54 +1419,35 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
 
   const handleImport = async () => {
     setStatus("importing"); setProgress({ done: 0, total: students.length });
-    let saved = 0;
-    for (const s of students) {
-      try {
-        // Use the triAvg values read directly from the Ministry Excel file
-        // (معدل الفصل X columns) — these are already coefficient-weighted by the
-        // Ministry software. If missing, fall back to the parsed value.
-        // We send these pre-weighted triAvg values so the backend doesn't
-        // recalculate them from raw scores (which would ignore coefficients).
-        const triAvgMap: Record<number, number | null> = {
-          1: s.t1Avg,
-          2: s.t2Avg,
-          3: s.t3Avg,
-        };
-
-        // Compute annualAvg from the weighted triAvgs (not raw scores)
-        const validTriAvgs = [s.t1Avg, s.t2Avg, s.t3Avg].filter((v): v is number => v !== null);
-        const weightedAnnualAvg = validTriAvgs.length > 0
-          ? Math.round((validTriAvgs.reduce((a, b) => a + b, 0) / validTriAvgs.length) * 100) / 100
-          : null;
-
-        for (const tri of [1, 2, 3] as const) {
-          const grades = s.grades[tri];
-          if (Object.keys(grades).length === 0) continue;
-          await fetch(`${BASE}api/grades/bulk`, {
-            method: "POST", credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              studentName: s.nomPrenom,
-              raqm: s.raqm,
-              annee,
-              trimestre: tri,
-              grades,
-              // Send the pre-weighted triAvg from the Excel file directly.
-              // This prevents the backend from recalculating it from raw scores.
-              triAvg: triAvgMap[tri],
-              annualAvg: weightedAnnualAvg,
-              // Also send as finalAnnualAvg — use this value as-is, do NOT
-              // recompute from raw scores (raw scores lack coefficient weighting)
-              finalAnnualAvg: weightedAnnualAvg,
-              useProvidedAvg: true,
-            }),
-          });
-        }
-        saved++;
-      } catch { /* skip */ }
-      setProgress(p => ({ ...p, done: p.done + 1 }));
+    try {
+      // Send all students in a single batch request instead of N×3 sequential calls
+      const payload = {
+        annee,
+        students: students.map(s => ({
+          studentName: s.nomPrenom,
+          raqm: s.raqm,
+          trimesters: {
+            ...(Object.keys(s.grades[1]).length > 0 ? { "1": s.grades[1] } : {}),
+            ...(Object.keys(s.grades[2]).length > 0 ? { "2": s.grades[2] } : {}),
+            ...(Object.keys(s.grades[3]).length > 0 ? { "3": s.grades[3] } : {}),
+          },
+        })),
+      };
+      const res = await fetch(`${BASE}api/grades/batch-import`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json() as { saved: number; notFound?: string[] };
+      setProgress({ done: students.length, total: students.length });
+      if (result.notFound && result.notFound.length > 0) {
+        toast({ title: `✓ تم استيراد ${result.saved} تلميذ`, description: `لم يتم العثور على: ${result.notFound.slice(0, 3).join("، ")}${result.notFound.length > 3 ? "…" : ""}` });
+      } else {
+        toast({ title: `✓ تم استيراد نتائج ${result.saved} تلميذ` });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "خطأ في الاستيراد" });
     }
-    toast({ title: `✓ تم استيراد نتائج ${saved} تلميذ` });
     setStatus("done"); onDone();
   };
 
@@ -1551,11 +1532,11 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
             <motion.div key="importing" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="flex flex-col items-center gap-4 py-10">
               <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
-              <p className="text-sm text-muted-foreground">جارٍ الحفظ… {progress.done} / {progress.total}</p>
+              <p className="text-sm text-muted-foreground">جارٍ حفظ نتائج {progress.total} تلميذ…</p>
               <div className="w-48 h-1.5 bg-muted rounded-full overflow-hidden">
                 <motion.div className="h-full bg-emerald-500 rounded-full"
-                  animate={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }}
-                  transition={{ duration: 0.3 }} />
+                  animate={{ width: ["0%", "80%"] }}
+                  transition={{ duration: 2, ease: "easeOut" }} />
               </div>
             </motion.div>
           )}

@@ -92,8 +92,10 @@ router.post("/grades/bulk", async (req, res): Promise<void> => {
     eq(gradesTable.trimestre, trimestre),
   ));
 
+  // Allow grade 0 — it is a valid score (student attempted subject and scored zero).
+  // Only exclude NaN / non-numeric / out-of-range values.
   const validGrades = Object.entries(grades).filter(([, score]) =>
-    typeof score === "number" && !isNaN(score) && score > 0
+    typeof score === "number" && !isNaN(score) && score >= 0 && score <= 20
   );
 
   if (validGrades.length > 0) {
@@ -115,6 +117,108 @@ router.post("/grades/bulk", async (req, res): Promise<void> => {
     "Grades saved"
   );
   res.json({ success: true, studentId: student.id, saved: validGrades.length });
+});
+
+// ── POST /api/grades/batch-import ────────────────────────────────────────────
+// Saves ALL students' grades in a single request instead of N×3 sequential calls.
+// Body: { annee, students: [{ studentName, raqm?, trimesters: { "1"?: Record<subject,score>, "2"?: ..., "3"?: ... }, triAvgs?: { "1"?: number, "2"?: number, "3"?: number } }] }
+router.post("/grades/batch-import", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const { annee, students } = req.body as {
+    annee: string;
+    students: Array<{
+      studentName: string;
+      raqm?: number;
+      trimesters: Record<string, Record<string, number>>;
+    }>;
+  };
+
+  if (!annee || !Array.isArray(students) || students.length === 0) {
+    res.status(400).json({ error: "Missing annee or students array" });
+    return;
+  }
+
+  // ── 1. Load all students for this user at once ────────────────────────────
+  const allStudents = await db.select().from(studentsTable)
+    .where(eq(studentsTable.userId, userId));
+
+  const normalize = (n: string) => n.replace(/\s+/g, " ").trim();
+  const studentByName = new Map(allStudents.map(s => [normalize(s.nomPrenom), s]));
+
+  // ── 2. Build insert rows and collect which student+trimestre pairs to clear ─
+  const toDelete: Array<{ studentId: string; trimestre: number }> = [];
+  const toInsert: Array<{
+    id: string; userId: string; studentId: string;
+    annee: string; trimestre: number; subject: string; score: string;
+  }> = [];
+  const raqmUpdates: Array<{ studentId: string; raqm: number }> = [];
+
+  let savedCount = 0;
+  const errors: string[] = [];
+
+  for (const s of students) {
+    const student = studentByName.get(normalize(s.studentName));
+    if (!student) { errors.push(s.studentName); continue; }
+
+    // Update raqm if provided and not already set
+    if (s.raqm && !student.raqm) {
+      raqmUpdates.push({ studentId: student.id, raqm: s.raqm });
+    }
+
+    for (const [triStr, grades] of Object.entries(s.trimesters)) {
+      const tri = parseInt(triStr);
+      if (isNaN(tri)) continue;
+
+      const validGrades = Object.entries(grades).filter(([, score]) =>
+        typeof score === "number" && !isNaN(score) && score >= 0 && score <= 20
+      );
+      if (validGrades.length === 0) continue;
+
+      toDelete.push({ studentId: student.id, trimestre: tri });
+      for (const [subject, score] of validGrades) {
+        toInsert.push({
+          id: crypto.randomBytes(8).toString("hex"),
+          userId, studentId: student.id, annee, trimestre: tri,
+          subject, score: String(Math.max(0, Math.min(20, score))),
+        });
+      }
+    }
+    savedCount++;
+  }
+
+  // ── 3. Execute: delete stale grades, bulk-insert new ones ─────────────────
+  if (toDelete.length > 0) {
+    for (const { studentId, trimestre } of toDelete) {
+      await db.delete(gradesTable).where(and(
+        eq(gradesTable.userId, userId),
+        eq(gradesTable.studentId, studentId),
+        eq(gradesTable.annee, annee),
+        eq(gradesTable.trimestre, trimestre),
+      ));
+    }
+  }
+
+  if (toInsert.length > 0) {
+    // Insert in chunks of 500 to stay within DB limits
+    const CHUNK = 500;
+    for (let i = 0; i < toInsert.length; i += CHUNK) {
+      await db.insert(gradesTable).values(toInsert.slice(i, i + CHUNK));
+    }
+  }
+
+  // Update raqm values
+  for (const { studentId, raqm } of raqmUpdates) {
+    await db.update(studentsTable).set({ raqm }).where(
+      and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId))
+    );
+  }
+
+  req.log.info(
+    { saved: savedCount, gradeRows: toInsert.length, notFound: errors.length },
+    "Batch import complete"
+  );
+  res.json({ success: true, saved: savedCount, gradeRows: toInsert.length, notFound: errors });
 });
 
 // ── GET /api/results ──────────────────────────────────────────────────────────

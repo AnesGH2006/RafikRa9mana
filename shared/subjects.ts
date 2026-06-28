@@ -84,7 +84,9 @@ export function calcWeightedAvg(
 
   for (const s of subjects) {
     const grade = grades[s.key];
-    if (grade === undefined || grade === null || grade <= 0 || s.coef === 0) continue;
+    // Exclude truly missing grades (undefined/null) and negative values.
+    // Grade 0 IS valid and must be included so the denominator matches the Ministry's calculation.
+    if (grade === undefined || grade === null || isNaN(grade) || grade < 0 || s.coef === 0) continue;
     weightedSum += grade * s.coef;
     totalCoef   += s.coef;
   }
