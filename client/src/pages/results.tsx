@@ -1450,6 +1450,13 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
             ...(Object.keys(s.grades[2]).length > 0 ? { "2": s.grades[2] } : {}),
             ...(Object.keys(s.grades[3]).length > 0 ? { "3": s.grades[3] } : {}),
           },
+          // Ministry pre-calculated trimester averages — stored verbatim so the
+          // server doesn't recalculate from raw scores (which may differ).
+          triAvgs: {
+            ...(s.t1Avg !== null ? { "1": s.t1Avg } : {}),
+            ...(s.t2Avg !== null ? { "2": s.t2Avg } : {}),
+            ...(s.t3Avg !== null ? { "3": s.t3Avg } : {}),
+          },
         })),
       };
       const res = await fetch(`${BASE}api/grades/batch-import`, {

@@ -122,6 +122,10 @@ router.post("/grades/bulk", async (req, res): Promise<void> => {
 // ── POST /api/grades/batch-import ────────────────────────────────────────────
 // Saves ALL students' grades in a single request instead of N×3 sequential calls.
 // Body: { annee, students: [{ studentName, raqm?, trimesters: { "1"?: Record<subject,score>, "2"?: ..., "3"?: ... }, triAvgs?: { "1"?: number, "2"?: number, "3"?: number } }] }
+// Special subject key used to store Ministry-provided trimester averages verbatim.
+// When present, /api/results uses this value instead of recalculating from raw scores.
+const AVG_SUBJECT = "__avg__";
+
 router.post("/grades/batch-import", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
@@ -131,6 +135,8 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
       studentName: string;
       raqm?: number;
       trimesters: Record<string, Record<string, number>>;
+      // Ministry pre-calculated averages per trimestre (authoritative)
+      triAvgs?: Record<string, number | null>;
     }>;
   };
 
@@ -146,7 +152,7 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
   const normalize = (n: string) => n.replace(/\s+/g, " ").trim();
   const studentByName = new Map(allStudents.map(s => [normalize(s.nomPrenom), s]));
 
-  // ── 2. Build insert rows and collect which student+trimestre pairs to clear ─
+  // ── 2. Build insert rows ───────────────────────────────────────────────────
   const toDelete: Array<{ studentId: string; trimestre: number }> = [];
   const toInsert: Array<{
     id: string; userId: string; studentId: string;
@@ -161,7 +167,6 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
     const student = studentByName.get(normalize(s.studentName));
     if (!student) { errors.push(s.studentName); continue; }
 
-    // Update raqm if provided and not already set
     if (s.raqm && !student.raqm) {
       raqmUpdates.push({ studentId: student.id, raqm: s.raqm });
     }
@@ -176,6 +181,8 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
       if (validGrades.length === 0) continue;
 
       toDelete.push({ studentId: student.id, trimestre: tri });
+
+      // Raw subject scores
       for (const [subject, score] of validGrades) {
         toInsert.push({
           id: crypto.randomBytes(8).toString("hex"),
@@ -183,31 +190,37 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
           subject, score: String(Math.max(0, Math.min(20, score))),
         });
       }
+
+      // Store Ministry pre-calculated average as a sentinel row (__avg__)
+      // so /api/results can use it directly without recalculating from raw scores.
+      const providedAvg = s.triAvgs?.[String(tri)];
+      if (typeof providedAvg === "number" && !isNaN(providedAvg) && providedAvg >= 0) {
+        toInsert.push({
+          id: crypto.randomBytes(8).toString("hex"),
+          userId, studentId: student.id, annee, trimestre: tri,
+          subject: AVG_SUBJECT,
+          score: String(Math.round(providedAvg * 100) / 100),
+        });
+      }
     }
     savedCount++;
   }
 
   // ── 3. Execute: delete stale grades, bulk-insert new ones ─────────────────
-  if (toDelete.length > 0) {
-    for (const { studentId, trimestre } of toDelete) {
-      await db.delete(gradesTable).where(and(
-        eq(gradesTable.userId, userId),
-        eq(gradesTable.studentId, studentId),
-        eq(gradesTable.annee, annee),
-        eq(gradesTable.trimestre, trimestre),
-      ));
-    }
+  for (const { studentId, trimestre } of toDelete) {
+    await db.delete(gradesTable).where(and(
+      eq(gradesTable.userId, userId),
+      eq(gradesTable.studentId, studentId),
+      eq(gradesTable.annee, annee),
+      eq(gradesTable.trimestre, trimestre),
+    ));
   }
 
-  if (toInsert.length > 0) {
-    // Insert in chunks of 500 to stay within DB limits
-    const CHUNK = 500;
-    for (let i = 0; i < toInsert.length; i += CHUNK) {
-      await db.insert(gradesTable).values(toInsert.slice(i, i + CHUNK));
-    }
+  const CHUNK = 500;
+  for (let i = 0; i < toInsert.length; i += CHUNK) {
+    await db.insert(gradesTable).values(toInsert.slice(i, i + CHUNK));
   }
 
-  // Update raqm values
   for (const { studentId, raqm } of raqmUpdates) {
     await db.update(studentsTable).set({ raqm }).where(
       and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId))
@@ -246,11 +259,21 @@ router.get("/results", async (req, res): Promise<void> => {
     and(eq(absencesTable.userId, userId), inArray(absencesTable.studentId, studentIds))
   );
 
+  // gradeMap: studentId → trimestre → subject → score
+  // storedAvgMap: studentId → trimestre → pre-calculated Ministry average (from __avg__ sentinel)
   const gradeMap: Record<string, Record<string, Record<string, number>>> = {};
+  const storedAvgMap: Record<string, Record<string, number>> = {};
+
   for (const g of allGrades) {
-    gradeMap[g.studentId] ??= {};
-    gradeMap[g.studentId][String(g.trimestre)] ??= {};
-    gradeMap[g.studentId][String(g.trimestre)]![g.subject] = parseFloat(String(g.score));
+    if (g.subject === AVG_SUBJECT) {
+      // Ministry-provided trimester average — use verbatim, do not recalculate
+      storedAvgMap[g.studentId] ??= {};
+      storedAvgMap[g.studentId]![String(g.trimestre)] = parseFloat(String(g.score));
+    } else {
+      gradeMap[g.studentId] ??= {};
+      gradeMap[g.studentId][String(g.trimestre)] ??= {};
+      gradeMap[g.studentId][String(g.trimestre)]![g.subject] = parseFloat(String(g.score));
+    }
   }
 
   const absMap: Record<string, { j: number; u: number }> = {};
@@ -262,11 +285,14 @@ router.get("/results", async (req, res): Promise<void> => {
 
   const results = students.map(s => {
     const scores = gradeMap[s.id] ?? {};
+    const storedAvgs = storedAvgMap[s.id] ?? {};
     const subs = getSubjectsForLevel(s.niveau as Niveau);
 
-    const t1Avg = calcWeightedAvg(scores["1"] ?? {}, subs);
-    const t2Avg = calcWeightedAvg(scores["2"] ?? {}, subs);
-    const t3Avg = calcWeightedAvg(scores["3"] ?? {}, subs);
+    // Prefer Ministry-provided average (stored as __avg__) over recalculation.
+    // Fall back to calcWeightedAvg for manually-entered grades.
+    const t1Avg = storedAvgs["1"] ?? calcWeightedAvg(scores["1"] ?? {}, subs);
+    const t2Avg = storedAvgs["2"] ?? calcWeightedAvg(scores["2"] ?? {}, subs);
+    const t3Avg = storedAvgs["3"] ?? calcWeightedAvg(scores["3"] ?? {}, subs);
 
     const avgs = [t1Avg, t2Avg, t3Avg].filter((v): v is number => v !== null);
     const annualAvg = avgs.length > 0
