@@ -1405,16 +1405,35 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
   const fileRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<"idle" | "parsing" | "preview" | "importing" | "done" | "error">("idle");
   const [students, setStudents] = useState<ParsedStudent[]>([]);
+  const [fileCount, setFileCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
 
-  const handleFile = async (file: File) => {
+  const handleFiles = async (files: FileList | File[]) => {
+    const arr = Array.from(files).filter(f => /\.(xls|xlsx|html?|htm)$/i.test(f.name));
+    if (arr.length === 0) { setError("لم يتم اختيار ملفات صحيحة"); setStatus("error"); return; }
     setStatus("parsing"); setError(null);
-    try {
-      const text = await file.text();
-      const parsed = parseHTMLExcel(text);
-      setStudents(parsed); setStatus("preview");
-    } catch (e: any) { setError(e.message ?? "خطأ في قراءة الملف"); setStatus("error"); }
+    const all: ParsedStudent[] = [];
+    const errs: string[] = [];
+    for (const file of arr) {
+      try {
+        const text = await file.text();
+        const parsed = parseHTMLExcel(text);
+        all.push(...parsed);
+      } catch (e: any) {
+        errs.push(file.name);
+      }
+    }
+    if (all.length === 0) {
+      setError(errs.length > 0 ? `خطأ في قراءة: ${errs.join("، ")}` : "لم يتم العثور على بيانات");
+      setStatus("error"); return;
+    }
+    // Deduplicate by name — keep last occurrence (latest file wins)
+    const byName = new Map<string, ParsedStudent>();
+    for (const s of all) byName.set(s.nomPrenom.trim(), s);
+    setStudents([...byName.values()]);
+    setFileCount(arr.length);
+    setStatus("preview");
   };
 
   const handleImport = async () => {
@@ -1463,15 +1482,20 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
         <AnimatePresence mode="wait">
           {(status === "idle" || status === "parsing") && (
             <motion.div key="drop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div onDrop={e => { e.preventDefault(); e.dataTransfer.files[0] && handleFile(e.dataTransfer.files[0]); }}
+              <div
+                onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); }}
                 onDragOver={e => e.preventDefault()} onClick={() => fileRef.current?.click()}
                 className="mt-1 border-2 border-dashed border-muted-foreground/25 rounded-xl p-12 text-center cursor-pointer hover:border-emerald-500/50 hover:bg-emerald-50/5 transition-all">
-                {status === "parsing" ? <Loader2 className="w-8 h-8 mx-auto mb-3 text-emerald-500 animate-spin" /> : <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />}
-                <p className="text-sm font-medium">{status === "parsing" ? "جارٍ تحليل الملف…" : "اسحب ملف Excel هنا أو انقر للاختيار"}</p>
-                <p className="text-xs text-muted-foreground mt-1">يدعم ملفات تحليل النتائج (.xls)</p>
+                {status === "parsing"
+                  ? <Loader2 className="w-8 h-8 mx-auto mb-3 text-emerald-500 animate-spin" />
+                  : <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />}
+                <p className="text-sm font-medium">
+                  {status === "parsing" ? "جارٍ تحليل الملفات…" : "اسحب ملفات Excel هنا أو انقر للاختيار"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">يمكنك اختيار أكثر من ملف دفعة واحدة — يدعم ملفات تحليل النتائج (.xls)</p>
               </div>
-              <input ref={fileRef} type="file" accept=".xls,.xlsx,.html,.htm" className="hidden"
-                onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+              <input ref={fileRef} type="file" accept=".xls,.xlsx,.html,.htm" multiple className="hidden"
+                onChange={e => e.target.files && handleFiles(e.target.files)} />
             </motion.div>
           )}
           {status === "error" && (
@@ -1485,7 +1509,12 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
           {status === "preview" && (
             <motion.div key="preview" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
               <div className="flex items-center justify-between my-3">
-                <p className="text-sm text-muted-foreground">تم تحليل <span className="font-bold text-foreground">{students.length}</span> تلميذ</p>
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    {fileCount > 1 && <span className="font-semibold text-blue-500 me-1">{fileCount} ملفات ·</span>}
+                    تم تحليل <span className="font-bold text-foreground">{students.length}</span> تلميذ
+                  </p>
+                </div>
                 <div className="flex gap-2 text-xs text-muted-foreground">
                   <span className="text-emerald-500 font-semibold">{students.filter(s => s.passed).length} ناجح</span>
                   <span>·</span>
