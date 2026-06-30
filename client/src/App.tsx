@@ -406,7 +406,8 @@ function AppLayout() {
       </aside>
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <MobileBar />
-        <motion.div className="hidden lg:flex items-center justify-end gap-2 px-5 py-1.5 border-b bg-background/95 backdrop-blur"
+        <motion.div className="hidden lg:flex items-center justify-end gap-2 px-5 py-2 border-b bg-background/90 backdrop-blur-md"
+          style={{ borderImage: "linear-gradient(to right, transparent, hsl(var(--border)), transparent) 1" }}
           initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
             <Button
@@ -422,7 +423,7 @@ function AppLayout() {
           <LangButtons /><ThemeButton />
         </motion.div>
         <QuickImportDialog open={importOpen} onOpenChange={setImportOpen} />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto bg-dot-grid">
           <AnimatePresence mode="wait" initial={false}>
             <Switch key={loc}>
               <Route path="/"                    component={Dashboard} />
@@ -465,32 +466,38 @@ function LoginScreen() {
   const featureIcons = [Users, BarChart3, LayoutDashboard, GraduationCap];
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-background overflow-hidden relative">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-background overflow-hidden relative bg-dot-grid">
       {/* Decorative blobs */}
-      <div className="absolute inset-0 pointer-events-none">
-        <motion.div className="absolute -top-40 -end-40 w-96 h-96 rounded-full bg-blue-400/12 blur-3xl"
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <motion.div className="absolute -top-40 -end-40 w-[500px] h-[500px] rounded-full bg-blue-500/10 blur-3xl"
           animate={{ scale: [1, 1.14, 1], rotate: [0, 12, 0] }} transition={{ duration: 9, repeat: Infinity }} />
-        <motion.div className="absolute -bottom-40 -start-40 w-96 h-96 rounded-full bg-violet-400/12 blur-3xl"
+        <motion.div className="absolute -bottom-40 -start-40 w-[500px] h-[500px] rounded-full bg-violet-500/10 blur-3xl"
           animate={{ scale: [1, 1.2, 1], rotate: [0, -12, 0] }} transition={{ duration: 11, repeat: Infinity, delay: 2 }} />
-        <motion.div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-indigo-400/6 blur-3xl"
+        <motion.div className="absolute top-1/3 start-1/4 w-64 h-64 rounded-full bg-cyan-400/8 blur-3xl"
           animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 7, repeat: Infinity, delay: 1 }} />
+        <motion.div className="absolute bottom-1/3 end-1/4 w-48 h-48 rounded-full bg-pink-400/8 blur-3xl"
+          animate={{ scale: [1, 1.4, 1] }} transition={{ duration: 8, repeat: Infinity, delay: 3 }} />
       </div>
 
       <motion.div className="text-center max-w-xl mx-auto relative z-10">
         {/* Brand pill */}
         <motion.div
-          className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-blue-500/15 to-indigo-500/15 border border-blue-400/20 text-blue-600 dark:text-blue-300 text-sm font-bold mb-8 shadow-lg"
+          className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-gradient-to-r from-blue-500/15 to-indigo-500/15 border border-blue-400/25 text-blue-600 dark:text-blue-300 text-sm font-bold mb-8 shadow-lg backdrop-blur-sm"
           initial={{ opacity: 0, y: -20, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.5, type: "spring", stiffness: 260 }}
         >
-          <motion.div animate={{ rotate: [0, -10, 10, 0] }} transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 4 }}>
-            <BookOpen className="w-4 h-4" />
+          <motion.div
+            animate={{ rotate: [0, -10, 10, 0] }}
+            transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 4 }}
+            className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-white" />
           </motion.div>
           {t("appName")}
         </motion.div>
 
         <motion.h1
-          className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground mb-4 leading-tight"
+          className="text-4xl md:text-5xl font-black tracking-tight bg-gradient-to-br from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent mb-4 leading-tight"
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
         >
           {t("login.hero")}
@@ -506,17 +513,23 @@ function LoginScreen() {
         <div className="grid grid-cols-2 gap-3 max-w-md mx-auto mb-10">
           {features.map((k, i) => {
             const Icon = featureIcons[i];
+            const gradients = [
+              "from-blue-500 to-indigo-600",
+              "from-violet-500 to-purple-600",
+              "from-cyan-500 to-blue-600",
+              "from-emerald-500 to-teal-600",
+            ];
             return (
               <motion.div key={k}
                 initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{ delay: 0.25 + i * 0.07, type: "spring", stiffness: 260 }}
-                whileHover={{ y: -4, scale: 1.04 }}
-                className="flex items-center gap-2.5 p-3 rounded-xl bg-card border shadow-sm text-sm text-muted-foreground hover:border-blue-300 dark:hover:border-blue-700 transition-colors cursor-default"
+                whileHover={{ y: -4, scale: 1.03 }}
+                className="flex items-center gap-2.5 p-3.5 rounded-2xl bg-card/80 backdrop-blur-sm border shadow-sm text-sm text-muted-foreground hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all cursor-default"
               >
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
-                  <Icon className="w-3.5 h-3.5 text-white" />
+                <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${gradients[i]} flex items-center justify-center shrink-0 shadow-md`}>
+                  <Icon className="w-4 h-4 text-white" />
                 </div>
-                {t(k)}
+                <span className="font-medium">{t(k)}</span>
               </motion.div>
             );
           })}
@@ -529,12 +542,15 @@ function LoginScreen() {
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
           >
             <Button size="lg"
-              className="px-12 py-6 text-base font-extrabold rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-xl shadow-blue-500/35 border-0 tracking-wide"
+              className="px-14 py-6 text-base font-extrabold rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:from-blue-700 hover:via-indigo-700 hover:to-violet-700 text-white shadow-2xl shadow-blue-500/30 border-0 tracking-wide"
               onClick={login}
             >
               {t("login.cta")}
             </Button>
           </motion.div>
+          <motion.p className="text-xs text-muted-foreground mt-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}>
+            تسجيل الدخول عبر حساب Replit • آمن ومشفر
+          </motion.p>
         </motion.div>
       </motion.div>
     </div>

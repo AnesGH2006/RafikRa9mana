@@ -48,6 +48,7 @@ export interface LevelStats {
   girls: number;
   admis: number;
   nonAdmis: number;
+  mustarrak: number;
   nouveau: number;
   redoublant: number;
   avgAge: number | null;
@@ -62,6 +63,7 @@ export interface DashboardStats {
   girls: number;
   admis: number;
   nonAdmis: number;
+  mustarrak: number;
   nouveau: number;
   redoublant: number;
   byLevel: LevelStats[];

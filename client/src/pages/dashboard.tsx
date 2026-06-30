@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Users, UserCheck, UserX, Pencil, School, MapPin, Calendar,
-  GraduationCap, TrendingUp, BarChart3, Award, Baby,
+  GraduationCap, TrendingUp, BarChart3, Award, Baby, LayoutDashboard,
 } from "lucide-react";
 import { CountUp } from "@/components/count-up";
 import {
@@ -181,12 +181,15 @@ export default function Dashboard() {
     >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <motion.h1
-          className="text-2xl font-bold text-foreground"
-          initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}
-        >
-          {t("dashboard.title")}
-        </motion.h1>
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
+          <h1 className="text-2xl font-black bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-500 bg-clip-text text-transparent flex items-center gap-2.5">
+            <span className="inline-flex w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 items-center justify-center shadow-lg shadow-blue-500/30">
+              <LayoutDashboard className="w-4.5 h-4.5 text-white" />
+            </span>
+            {t("dashboard.title")}
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5 ms-11">نظرة عامة على المتوسطة</p>
+        </motion.div>
         <motion.div className="flex items-center gap-2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
           {/* Year selector */}
           <Select value={viewYear} onValueChange={setViewYear}>
