@@ -170,8 +170,8 @@ export default function Dashboard() {
     color: LEVEL_COLORS[i % LEVEL_COLORS.length],
   })) || [];
 
-  const successRate = stats && (stats.admis + stats.nonAdmis) > 0
-    ? Math.round((stats.admis / (stats.admis + stats.nonAdmis)) * 100)
+  const successRate = stats && (stats.admis + stats.nonAdmis + stats.mustarrak) > 0
+    ? Math.round((stats.admis / (stats.admis + stats.nonAdmis + stats.mustarrak)) * 100)
     : null;
 
   return (
@@ -304,26 +304,38 @@ export default function Dashboard() {
             </div>
 
             {/* Pass/fail bar */}
-            {(stats.admis > 0 || stats.nonAdmis > 0) && stats.total > 0 && (
+            {(stats.admis > 0 || stats.nonAdmis > 0 || stats.mustarrak > 0) && stats.total > 0 && (
               <motion.div variants={cardVariants}>
                 <Card className="border-0 shadow-sm overflow-hidden">
                   <CardContent className="pt-4 pb-4">
-                    <div className="flex items-center justify-between mb-2 text-sm">
+                    <div className="flex items-center justify-between mb-2 text-sm flex-wrap gap-y-1">
                       <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                         <UserCheck className="w-3.5 h-3.5" />{t("val.admis")} — <CountUp to={stats.admis} />
                       </span>
+                      {stats.mustarrak > 0 && (
+                        <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                          <UserCheck className="w-3.5 h-3.5" />{t("val.mustarrak")} — <CountUp to={stats.mustarrak} />
+                        </span>
+                      )}
                       <span className="font-bold text-red-500 flex items-center gap-1.5">
                         <UserX className="w-3.5 h-3.5" />{t("val.non_admis")} — <CountUp to={stats.nonAdmis} />
                       </span>
                     </div>
                     <div className="h-4 rounded-full bg-muted overflow-hidden flex gap-0.5">
                       <motion.div
-                        className="h-full bg-gradient-to-r from-emerald-400 to-green-500 rounded-full"
+                        className="h-full bg-gradient-to-r from-emerald-400 to-green-500 rounded-l-full"
                         initial={{ width: 0 }} animate={{ width: `${(stats.admis / stats.total) * 100}%` }}
                         transition={{ duration: 1.2, ease: "easeOut" as any, delay: 0.3 }}
                       />
+                      {stats.mustarrak > 0 && (
+                        <motion.div
+                          className="h-full bg-gradient-to-r from-amber-400 to-orange-400"
+                          initial={{ width: 0 }} animate={{ width: `${(stats.mustarrak / stats.total) * 100}%` }}
+                          transition={{ duration: 1.2, ease: "easeOut" as any, delay: 0.35 }}
+                        />
+                      )}
                       <motion.div
-                        className="h-full bg-gradient-to-r from-red-400 to-rose-500 rounded-full"
+                        className="h-full bg-gradient-to-r from-red-400 to-rose-500 rounded-r-full"
                         initial={{ width: 0 }} animate={{ width: `${(stats.nonAdmis / stats.total) * 100}%` }}
                         transition={{ duration: 1.2, ease: "easeOut" as any, delay: 0.4 }}
                       />

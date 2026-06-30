@@ -1545,10 +1545,12 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
                         {[s.t1Avg, s.t2Avg, s.t3Avg].map((a, ti) => (
                           <td key={ti} className={`px-3 py-2 text-center font-mono text-xs ${a === null ? "text-muted-foreground" : a >= 10 ? "text-emerald-600" : "text-red-500"}`}>{a !== null ? a.toFixed(2) : "—"}</td>
                         ))}
-                        <td className={`px-3 py-2 text-center font-mono font-bold text-xs ${s.annualAvg === null ? "text-muted-foreground" : s.annualAvg >= 10 ? "text-emerald-600" : "text-red-500"}`}>{s.annualAvg !== null ? s.annualAvg.toFixed(2) : "—"}</td>
+                        <td className={`px-3 py-2 text-center font-mono font-bold text-xs ${s.annualAvg === null ? "text-muted-foreground" : s.annualAvg >= 10 ? "text-emerald-600" : s.annualAvg >= 9 ? "text-amber-600" : "text-red-500"}`}>{s.annualAvg !== null ? s.annualAvg.toFixed(2) : "—"}</td>
                         <td className="px-3 py-2 text-center">
-                          {s.passed === null ? "—" : s.passed
+                          {s.annualAvg === null ? "—" : s.annualAvg >= 10
                             ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-semibold">ناجح</span>
+                            : s.annualAvg >= 9
+                            ? <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 font-semibold">استدراك</span>
                             : <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 font-semibold">راسب</span>}
                         </td>
                       </tr>

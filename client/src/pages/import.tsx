@@ -263,7 +263,7 @@ export default function ImportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [files, setFiles] = useState<FileItem[]>([]);
-  const [annee, setAnnee] = useState("2025-2026");
+  const [annee, setAnnee] = useState("");
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [summary, setSummary] = useState<BatchSummary | null>(null);
@@ -317,6 +317,10 @@ export default function ImportPage() {
   const uploadAll = async () => {
     const pending = files.filter(f => f.status === "pending");
     if (!pending.length) return;
+    if (!annee) {
+      toast({ variant: "destructive", title: "يجب اختيار السنة الدراسية", description: "اختر السنة الدراسية قبل رفع الملفات." });
+      return;
+    }
     setUploading(true);
     setProgress({ done: 0, total: pending.length });
 
@@ -401,10 +405,20 @@ export default function ImportPage() {
 
         {/* Year selector */}
         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">السنة الدراسية:</span>
+          className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-colors ${
+            annee
+              ? "border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20"
+              : "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/30 animate-pulse"
+          }`}>
+          <Clock className={`w-4 h-4 shrink-0 ${annee ? "text-blue-500" : "text-amber-500"}`} />
+          <span className={`text-sm font-semibold ${annee ? "text-blue-700 dark:text-blue-300" : "text-amber-700 dark:text-amber-300"}`}>
+            السنة الدراسية:
+          </span>
           <select value={annee} onChange={e => setAnnee(e.target.value)} disabled={uploading}
-            className="text-sm border rounded-lg px-3 py-1.5 bg-background cursor-pointer">
+            className={`text-sm font-bold border-0 rounded-lg px-2 py-0.5 bg-transparent cursor-pointer focus:outline-none ${
+              annee ? "text-blue-700 dark:text-blue-300" : "text-amber-600 dark:text-amber-400"
+            }`}>
+            <option value="">— اختر السنة —</option>
             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </motion.div>

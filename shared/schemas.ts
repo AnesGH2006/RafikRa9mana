@@ -52,7 +52,7 @@ export const UpsertSchoolInfoBody = zod.object({
 export const NiveauEnum = zod.enum(["1AM", "2AM", "3AM", "4AM"]);
 export const SexeEnum = zod.enum(["M", "F"]);
 export const StatutEnum = zod.enum(["nouveau", "redoublant"]);
-export const ResultatEnum = zod.enum(["admis", "non_admis"]);
+export const ResultatEnum = zod.enum(["admis", "non_admis", "mustarrak"]);
 
 export const StudentSchema = zod.object({
   id: zod.string(),
@@ -85,6 +85,7 @@ export const LevelStatsSchema = zod.object({
   girls: zod.number(),
   admis: zod.number(),
   nonAdmis: zod.number(),
+  mustarrak: zod.number().default(0),
   nouveau: zod.number(),
   redoublant: zod.number(),
   avgAge: zod.number().nullable(),
@@ -99,6 +100,7 @@ export const DashboardStatsResponse = zod.object({
   girls: zod.number(),
   admis: zod.number(),
   nonAdmis: zod.number(),
+  mustarrak: zod.number().default(0),
   nouveau: zod.number(),
   redoublant: zod.number(),
   byLevel: zod.array(LevelStatsSchema),

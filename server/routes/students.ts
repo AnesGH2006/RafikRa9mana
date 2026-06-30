@@ -216,10 +216,11 @@ function normalizeStatut(val: string): "nouveau" | "redoublant" {
   return "nouveau";
 }
 
-function normalizeResultat(val: string): "admis" | "non_admis" | null {
+function normalizeResultat(val: string): "admis" | "non_admis" | "mustarrak" | null {
   if (!val) return null;
   const v = norm(val);
   if (/^(a|admis|ناجح|نجح|recu|reçu|pass|oui)/.test(v)) return "admis";
+  if (/^(m|must|استدراك|مستدرك|rattrap|oral)/.test(v)) return "mustarrak";
   if (/^(n|non|راسب|رسب|non_admis|refuse|refusé|fail|la)/.test(v)) return "non_admis";
   return null;
 }
@@ -408,6 +409,7 @@ router.get("/stats", async (req, res): Promise<void> => {
         girls: g.filter(s => s.sexe === "F").length,
         admis: g.filter(s => s.resultat === "admis").length,
         nonAdmis: g.filter(s => s.resultat === "non_admis").length,
+        mustarrak: g.filter(s => s.resultat === "mustarrak").length,
         nouveau: g.filter(s => s.statut === "nouveau").length,
         redoublant: g.filter(s => s.statut === "redoublant").length,
         avgAge, minAge, maxAge, ageDist,
@@ -419,6 +421,7 @@ router.get("/stats", async (req, res): Promise<void> => {
       girls: all.filter(s => s.sexe === "F").length,
       admis: all.filter(s => s.resultat === "admis").length,
       nonAdmis: all.filter(s => s.resultat === "non_admis").length,
+      mustarrak: all.filter(s => s.resultat === "mustarrak").length,
       nouveau: all.filter(s => s.statut === "nouveau").length,
       redoublant: all.filter(s => s.statut === "redoublant").length,
       byLevel,

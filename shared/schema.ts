@@ -49,7 +49,7 @@ export type InsertSchoolInfo = typeof schoolInfoTable.$inferInsert;
 export const niveauEnum = pgEnum("niveau", ["1AM", "2AM", "3AM", "4AM"]);
 export const sexeEnum = pgEnum("sexe", ["M", "F"]);
 export const statutEnum = pgEnum("statut_eleve", ["nouveau", "redoublant"]);
-export const resultatEnum = pgEnum("resultat_eleve", ["admis", "non_admis"]);
+export const resultatEnum = pgEnum("resultat_eleve", ["admis", "non_admis", "mustarrak"]);
 
 export const studentsTable = pgTable("students", {
   id: varchar("id", { length: 64 }).primaryKey(),

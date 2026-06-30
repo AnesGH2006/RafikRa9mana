@@ -44,7 +44,7 @@ export default function YearEnd() {
   const { t } = useLanguage();
   const [results, setResults] = useState<StudentResult[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"passed" | "failed" | "all">("all");
+  const [tab, setTab] = useState<"passed" | "mustarrak" | "failed" | "all">("all");
   const [annee, setAnnee] = useState(DEFAULT_YEAR);
   const [filters, setFilters] = useState({ niveau: "", classe: "" });
 
@@ -59,15 +59,17 @@ export default function YearEnd() {
       .catch(() => setLoading(false));
   }, [filters, annee]);
 
-  const withAvg = results.filter(r => r.annualAvg !== null);
-  const passed  = withAvg.filter(r => r.passed === true).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
-  const failed  = withAvg.filter(r => r.passed === false).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
-  const all     = withAvg.sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+  const withAvg   = results.filter(r => r.annualAvg !== null);
+  const passed    = withAvg.filter(r => (r.annualAvg ?? 0) >= 10).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+  const mustarrak = withAvg.filter(r => (r.annualAvg ?? 0) >= 9 && (r.annualAvg ?? 0) < 10).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+  const failed    = withAvg.filter(r => (r.annualAvg ?? 0) < 9).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+  const all       = withAvg.sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
 
-  const displayed = tab === "passed" ? passed : tab === "failed" ? failed : all;
+  const displayed = tab === "passed" ? passed : tab === "mustarrak" ? mustarrak : tab === "failed" ? failed : all;
   const classes   = [...new Set(results.map(r => r.student.classe))].sort();
 
   const successRate = all.length > 0 ? Math.round((passed.length / all.length) * 100) : null;
+  const mustarrakRate = all.length > 0 ? Math.round((mustarrak.length / all.length) * 100) : null;
 
   // Analytics data
   const radialData = successRate !== null
@@ -216,20 +218,22 @@ export default function YearEnd() {
       {/* Tabs + filters */}
       <motion.div className="flex flex-wrap gap-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
         <div className="flex gap-2">
-          {(["all", "passed", "failed"] as const).map(tb => (
+          {(["all", "passed", "mustarrak", "failed"] as const).map(tb => (
             <motion.button key={tb} onClick={() => setTab(tb)} whileTap={{ scale: 0.95 }}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                 tab === tb
                   ? tb === "passed"
                     ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-md shadow-emerald-500/30"
+                    : tb === "mustarrak"
+                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/30"
                     : tb === "failed"
                     ? "bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-md shadow-red-500/30"
                     : "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-500/30"
                   : "bg-muted text-muted-foreground hover:text-foreground"
               }`}>
-              {tb === "all" ? t("yearend.all") : tb === "passed" ? t("yearend.passed") : t("yearend.failed")}
+              {tb === "all" ? t("yearend.all") : tb === "passed" ? t("yearend.passed") : tb === "mustarrak" ? t("val.mustarrak") : t("yearend.failed")}
               <span className={`ms-2 text-xs px-1.5 py-0.5 rounded-full ${tab === tb ? "bg-white/20" : "bg-muted-foreground/10"}`}>
-                {tb === "all" ? all.length : tb === "passed" ? passed.length : failed.length}
+                {tb === "all" ? all.length : tb === "passed" ? passed.length : tb === "mustarrak" ? mustarrak.length : failed.length}
               </span>
             </motion.button>
           ))}
@@ -256,8 +260,9 @@ export default function YearEnd() {
           {[
             { label: "مجموع", value: all.length, color: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300" },
             { label: t("yearend.passed"), value: passed.length, color: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300" },
+            ...(mustarrak.length > 0 ? [{ label: t("val.mustarrak"), value: mustarrak.length, color: "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300" }] : []),
             { label: t("yearend.failed"), value: failed.length, color: "bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300" },
-            { label: "أعلى معدل", value: (passed[0]?.annualAvg ?? 0).toFixed(2), color: "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300" },
+            { label: "أعلى معدل", value: (passed[0]?.annualAvg ?? 0).toFixed(2), color: "bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300" },
           ].map((s, i) => (
             <motion.div key={i} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm ${s.color}`}
               initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }}>
@@ -317,12 +322,14 @@ export default function YearEnd() {
                         {a !== null ? a.toFixed(2) : "—"}
                       </td>
                     ))}
-                    <td className={`px-3 py-2.5 font-bold font-mono ${(r.annualAvg ?? 0) >= 10 ? "text-emerald-600" : "text-red-500"}`}>
+                    <td className={`px-3 py-2.5 font-bold font-mono ${(r.annualAvg ?? 0) >= 10 ? "text-emerald-600" : (r.annualAvg ?? 0) >= 9 ? "text-amber-600" : "text-red-500"}`}>
                       {r.annualAvg?.toFixed(2) ?? "—"}
                     </td>
                     <td className="px-3 py-2.5">
-                      {r.passed
+                      {(r.annualAvg ?? 0) >= 10
                         ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{t("val.admis")}</span>
+                        : (r.annualAvg ?? 0) >= 9
+                        ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">{t("val.mustarrak")}</span>
                         : <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">{t("val.non_admis")}</span>}
                     </td>
                   </motion.tr>
