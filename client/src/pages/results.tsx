@@ -1281,12 +1281,45 @@ interface ParsedStudent {
   raqm: number;
   nomPrenom: string;
   gender: string;
+  sexe: "M" | "F";
+  niveau: string | null;
+  classe: string | null;
   grades: { 1: Record<string, number>; 2: Record<string, number>; 3: Record<string, number> };
   t1Avg: number | null;
   t2Avg: number | null;
   t3Avg: number | null;
   annualAvg: number | null;
   passed: boolean | null;
+}
+
+function extractNiveauClasse(tableRows: Element[]): { niveau: string | null; classe: string | null } {
+  let niveau: string | null = null;
+  let classe: string | null = null;
+  for (const row of tableRows) {
+    const text = (row.textContent ?? "").replace(/\s+/g, " ");
+    if (!niveau) {
+      const digitMatch = text.match(/(\d)\s*متوسط/);
+      if (digitMatch) {
+        niveau = `${digitMatch[1]}AM`;
+      } else if (/رابع/.test(text)) niveau = "4AM";
+      else if (/ثالث/.test(text)) niveau = "3AM";
+      else if (/ثاني/.test(text)) niveau = "2AM";
+      else if (/أول|اول|الأولى|الاولى/.test(text)) niveau = "1AM";
+    }
+    if (!classe) {
+      const classeMatch = text.match(/(?:الفوج|فوج|القسم|قسم)\s*[:\s]?\s*(\d+)/)
+        ?? text.match(/(\d+)\s*(?:الفوج|فوج)/);
+      if (classeMatch) classe = classeMatch[1]!.replace(/^0+/, "") || "1";
+    }
+    if (niveau && classe) break;
+  }
+  return { niveau, classe };
+}
+
+function normalizeGenderStr(g: string): "M" | "F" {
+  const v = g.trim();
+  if (/أنثى|انثى|انثي|f|female|fille/i.test(v)) return "F";
+  return "M";
 }
 
 function parseHTMLExcel(text: string): ParsedStudent[] {
@@ -1303,6 +1336,9 @@ function parseHTMLExcel(text: string): ParsedStudent[] {
     if (cells.some(c => c === "الرقم")) { headerRowIdx = i; headers = cells; break; }
   }
   if (headerRowIdx === -1) throw new Error("لم يتم العثور على صف العناوين (الرقم)");
+
+  // Extract niveau/classe from rows BEFORE the header (metadata rows)
+  const { niveau: fileNiveau, classe: fileClasse } = extractNiveauClasse(tableRows.slice(0, headerRowIdx));
 
   interface ColMeta {
     type: "raqm" | "name" | "gender" | "subject" | "avg" | "skip";
@@ -1364,10 +1400,14 @@ function parseHTMLExcel(text: string): ParsedStudent[] {
       ? Math.round((available.reduce((a, b) => a + b, 0) / available.length) * 100) / 100
       : null;
 
+    const genderStr = cells[iGender] ?? "";
     students.push({
       raqm: Number(raqmRaw),
       nomPrenom: cells[iName] ?? "",
-      gender: cells[iGender] ?? "",
+      gender: genderStr,
+      sexe: normalizeGenderStr(genderStr),
+      niveau: fileNiveau,
+      classe: fileClasse,
       grades, t1Avg: triAvgs[1], t2Avg: triAvgs[2], t3Avg: triAvgs[3],
       annualAvg,
       passed: annualAvg !== null ? annualAvg >= 10 : null,
@@ -1445,13 +1485,15 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
         students: students.map(s => ({
           studentName: s.nomPrenom,
           raqm: s.raqm,
+          niveau: s.niveau ?? undefined,
+          classe: s.classe ?? undefined,
+          sexe: s.sexe,
+          annualPassed: s.passed,
           trimesters: {
             ...(Object.keys(s.grades[1]).length > 0 ? { "1": s.grades[1] } : {}),
             ...(Object.keys(s.grades[2]).length > 0 ? { "2": s.grades[2] } : {}),
             ...(Object.keys(s.grades[3]).length > 0 ? { "3": s.grades[3] } : {}),
           },
-          // Ministry pre-calculated trimester averages — stored verbatim so the
-          // server doesn't recalculate from raw scores (which may differ).
           triAvgs: {
             ...(s.t1Avg !== null ? { "1": s.t1Avg } : {}),
             ...(s.t2Avg !== null ? { "2": s.t2Avg } : {}),
@@ -1464,12 +1506,19 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const result = await res.json() as { saved: number; notFound?: string[] };
+      const result = await res.json() as { saved: number; notFound?: string[]; autoCreated?: number };
       setProgress({ done: students.length, total: students.length });
+      const autoCreatedCount = result.autoCreated ?? 0;
       if (result.notFound && result.notFound.length > 0) {
-        toast({ title: `✓ تم استيراد ${result.saved} تلميذ`, description: `لم يتم العثور على: ${result.notFound.slice(0, 3).join("، ")}${result.notFound.length > 3 ? "…" : ""}` });
+        toast({
+          title: `✓ تم استيراد نتائج ${result.saved} تلميذ${autoCreatedCount > 0 ? ` (${autoCreatedCount} تلميذ جديد تم إنشاؤه)` : ""}`,
+          description: `لم يتم التعرف على: ${result.notFound.slice(0, 3).join("، ")}${result.notFound.length > 3 ? "…" : ""}`,
+        });
       } else {
-        toast({ title: `✓ تم استيراد نتائج ${result.saved} تلميذ` });
+        toast({
+          title: `✓ تم استيراد نتائج ${result.saved} تلميذ`,
+          description: autoCreatedCount > 0 ? `تم إنشاء ${autoCreatedCount} تلميذ جديد تلقائياً` : undefined,
+        });
       }
     } catch {
       toast({ variant: "destructive", title: "خطأ في الاستيراد" });

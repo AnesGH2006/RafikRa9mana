@@ -134,8 +134,11 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
     students: Array<{
       studentName: string;
       raqm?: number;
+      niveau?: string;
+      classe?: string;
+      sexe?: string;
+      annualPassed?: boolean | null;
       trimesters: Record<string, Record<string, number>>;
-      // Ministry pre-calculated averages per trimestre (authoritative)
       triAvgs?: Record<string, number | null>;
     }>;
   };
@@ -159,13 +162,41 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
     annee: string; trimestre: number; subject: string; score: string;
   }> = [];
   const raqmUpdates: Array<{ studentId: string; raqm: number }> = [];
+  const autoCreated: typeof studentsTable.$inferInsert[] = [];
 
   let savedCount = 0;
   const errors: string[] = [];
 
   for (const s of students) {
-    const student = studentByName.get(normalize(s.studentName));
-    if (!student) { errors.push(s.studentName); continue; }
+    let student = studentByName.get(normalize(s.studentName));
+    if (!student) {
+      // Auto-create student if we have enough info (niveau + classe from parsed file)
+      if (s.niveau && s.classe) {
+        const validNiveaux = ["1AM", "2AM", "3AM", "4AM"];
+        const niv = validNiveaux.includes(s.niveau) ? s.niveau as "1AM"|"2AM"|"3AM"|"4AM" : null;
+        if (niv) {
+          const newStudent = {
+            id: crypto.randomBytes(16).toString("hex"),
+            userId,
+            nomPrenom: normalize(s.studentName),
+            niveau: niv,
+            classe: s.classe,
+            sexe: (s.sexe === "F" ? "F" : "M") as "M" | "F",
+            statut: "nouveau" as const,
+            resultat: s.annualPassed === true ? "admis" as const
+                    : s.annualPassed === false ? "non_admis" as const
+                    : null,
+            annee,
+            raqm: s.raqm ?? null,
+            dateNaissance: null,
+          };
+          autoCreated.push(newStudent);
+          studentByName.set(normalize(s.studentName), newStudent as typeof allStudents[0]);
+          student = newStudent as typeof allStudents[0];
+        }
+      }
+      if (!student) { errors.push(s.studentName); continue; }
+    }
 
     if (s.raqm && !student.raqm) {
       raqmUpdates.push({ studentId: student.id, raqm: s.raqm });
@@ -206,7 +237,14 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
     savedCount++;
   }
 
-  // ── 3. Execute: delete stale grades, bulk-insert new ones ─────────────────
+  // ── 3. Execute: insert auto-created students first ────────────────────────
+  if (autoCreated.length > 0) {
+    for (let i = 0; i < autoCreated.length; i += 200) {
+      await db.insert(studentsTable).values(autoCreated.slice(i, i + 200) as any);
+    }
+  }
+
+  // ── 4. Execute: delete stale grades, bulk-insert new ones ─────────────────
   for (const { studentId, trimestre } of toDelete) {
     await db.delete(gradesTable).where(and(
       eq(gradesTable.userId, userId),
@@ -228,10 +266,10 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
   }
 
   req.log.info(
-    { saved: savedCount, gradeRows: toInsert.length, notFound: errors.length },
+    { saved: savedCount, gradeRows: toInsert.length, notFound: errors.length, autoCreated: autoCreated.length },
     "Batch import complete"
   );
-  res.json({ success: true, saved: savedCount, gradeRows: toInsert.length, notFound: errors });
+  res.json({ success: true, saved: savedCount, gradeRows: toInsert.length, notFound: errors, autoCreated: autoCreated.length });
 });
 
 // ── GET /api/results ──────────────────────────────────────────────────────────
