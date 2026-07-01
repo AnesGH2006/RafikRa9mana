@@ -10,6 +10,7 @@ import {
   ChevronDown, FileSpreadsheet, BarChart3, UserX, List, CheckSquare,
   User, BarChart2, CalendarOff, UserCheck, RefreshCw, AlertCircle,
   TrendingUp, Star, CreditCard, Upload, FileText,
+  CircleArrowRight, CircleDot, Trophy, FileBarChart,
 } from "lucide-react";
 import { QuickImportDialog } from "@/components/quick-import";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,6 +27,11 @@ import ExamResultsPage from "@/pages/exam-results";
 import AbsencesPage from "@/pages/absences-page";
 import RepeatersPage from "@/pages/repeaters";
 import OrientationResultsPage from "@/pages/orientation-results";
+import PreOrientTrackingPage from "@/pages/preorient-tracking";
+import PreOrientFirstPage from "@/pages/preorient-first";
+import PreOrientSecondPage from "@/pages/preorient-second";
+import PreOrientFinalPage from "@/pages/preorient-final";
+import PreOrientReportsPage from "@/pages/preorient-reports";
 import TransferResultsPage from "@/pages/transfer-results";
 import CouncilsPage from "@/pages/councils";
 import AnalyticsPage from "@/pages/analytics";
@@ -99,7 +105,11 @@ const SECTIONS: SectionDef[] = [
     id: "orient", icon: Compass, labelKey: "nav.orient_section",
     color: "text-amber-400", gradient: "from-amber-500 to-orange-700",
     items: [
-      { href: "/orientation", icon: Compass, labelKey: "nav.orientation", badge: "قريباً" },
+      { href: "/preorient/tracking", icon: ClipboardList, labelKey: "nav.orient_tracking" },
+      { href: "/preorient/first",    icon: CircleArrowRight, labelKey: "nav.orient_first"    },
+      { href: "/preorient/second",   icon: CircleDot,    labelKey: "nav.orient_second"   },
+      { href: "/preorient/final",    icon: Trophy,       labelKey: "nav.orient_final"    },
+      { href: "/preorient/reports",  icon: FileBarChart, labelKey: "nav.orient_reports"  },
     ],
   },
   {
@@ -445,6 +455,11 @@ function AppLayout() {
               <Route path="/reports"             component={ReportsPage} />
               <Route path="/subscription"        component={SubscriptionPage} />
               <Route path="/admin"               component={AdminPage} />
+              <Route path="/preorient/tracking" component={PreOrientTrackingPage} />
+              <Route path="/preorient/first"    component={PreOrientFirstPage} />
+              <Route path="/preorient/second"   component={PreOrientSecondPage} />
+              <Route path="/preorient/final"    component={PreOrientFinalPage} />
+              <Route path="/preorient/reports"  component={PreOrientReportsPage} />
               <Route path="/orientation">{() => <ComingSoon title="التوجيه النهائي" />}</Route>
               <Route path="/import"              component={ImportPage} />
               <Route path="/settings"            component={SettingsPage} />
