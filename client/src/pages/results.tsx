@@ -1292,25 +1292,36 @@ interface ParsedStudent {
   passed: boolean | null;
 }
 
+function extractNiveauClasseFromText(text: string): { niveau: string | null; classe: string | null } {
+  let niveau: string | null = null;
+  let classe: string | null = null;
+
+  // Niveau detection — order matters (longer matches first)
+  const digitMatch = text.match(/(\d)\s*متوسط/);
+  if (digitMatch) {
+    niveau = `${digitMatch[1]}AM`;
+  } else if (/رابع\s*متوسط|السنة الرابعة|4\s*ème/.test(text)) niveau = "4AM";
+  else if (/ثالث\s*متوسط|السنة الثالثة|3\s*ème/.test(text)) niveau = "3AM";
+  else if (/ثاني\s*متوسط|السنة الثانية|2\s*ème/.test(text)) niveau = "2AM";
+  else if (/أول\s*متوسط|اول\s*متوسط|الأولى|الاولى|1\s*ème/.test(text)) niveau = "1AM";
+
+  // Classe/foj detection
+  const classeMatch = text.match(/(?:الفوج|فوج|القسم|قسم|الشعبة)\s*[:\s]?\s*(\d+)/)
+    ?? text.match(/(\d+)\s*(?:الفوج|فوج)/)
+    ?? text.match(/[Cc]lasse\s*[:\s]?\s*(\d+)/);
+  if (classeMatch) classe = classeMatch[1]!.replace(/^0+/, "") || "1";
+
+  return { niveau, classe };
+}
+
 function extractNiveauClasse(tableRows: Element[]): { niveau: string | null; classe: string | null } {
   let niveau: string | null = null;
   let classe: string | null = null;
   for (const row of tableRows) {
     const text = (row.textContent ?? "").replace(/\s+/g, " ");
-    if (!niveau) {
-      const digitMatch = text.match(/(\d)\s*متوسط/);
-      if (digitMatch) {
-        niveau = `${digitMatch[1]}AM`;
-      } else if (/رابع/.test(text)) niveau = "4AM";
-      else if (/ثالث/.test(text)) niveau = "3AM";
-      else if (/ثاني/.test(text)) niveau = "2AM";
-      else if (/أول|اول|الأولى|الاولى/.test(text)) niveau = "1AM";
-    }
-    if (!classe) {
-      const classeMatch = text.match(/(?:الفوج|فوج|القسم|قسم)\s*[:\s]?\s*(\d+)/)
-        ?? text.match(/(\d+)\s*(?:الفوج|فوج)/);
-      if (classeMatch) classe = classeMatch[1]!.replace(/^0+/, "") || "1";
-    }
+    const { niveau: n, classe: c } = extractNiveauClasseFromText(text);
+    if (!niveau && n) niveau = n;
+    if (!classe && c) classe = c;
     if (niveau && classe) break;
   }
   return { niveau, classe };
@@ -1322,99 +1333,110 @@ function normalizeGenderStr(g: string): "M" | "F" {
   return "M";
 }
 
-function parseHTMLExcel(text: string): ParsedStudent[] {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(text, "text/html");
-  const tableRows = Array.from(doc.querySelectorAll("tr"));
+interface ColMeta {
+  type: "raqm" | "name" | "gender" | "subject" | "avg" | "skip";
+  subjectKey?: string; tri?: 1 | 2 | 3;
+}
 
-  let headerRowIdx = -1;
-  let headers: string[] = [];
-  for (let i = 0; i < tableRows.length; i++) {
-    const cells = Array.from(tableRows[i].querySelectorAll("td,th")).map(c =>
-      (c.textContent ?? "").replace(/\s+/g, " ").trim()
-    );
-    if (cells.some(c => c === "الرقم")) { headerRowIdx = i; headers = cells; break; }
-  }
-  if (headerRowIdx === -1) throw new Error("لم يتم العثور على صف العناوين (الرقم)");
-
-  // Extract niveau/classe from rows BEFORE the header (metadata rows)
-  const { niveau: fileNiveau, classe: fileClasse } = extractNiveauClasse(tableRows.slice(0, headerRowIdx));
-
-  interface ColMeta {
-    type: "raqm" | "name" | "gender" | "subject" | "avg" | "skip";
-    subjectKey?: string; tri?: 1 | 2 | 3;
-  }
-  const colMeta: ColMeta[] = headers.map(h => {
-    const hNorm = h.replace(/\s+/g, " ").trim(); // normalize multiple spaces
+function buildColMeta(headers: string[]): ColMeta[] {
+  return headers.map(h => {
+    const hNorm = h.replace(/\s+/g, " ").trim();
     if (hNorm === "الرقم") return { type: "raqm" };
-    if (hNorm === "اللقب و الاسم" || hNorm === "اللقب والاسم" || hNorm === "اللقب  والاسم") return { type: "name" };
+    if (/^(اللقب\s*و\s*الاسم|الاسم\s*واللقب)$/.test(hNorm)) return { type: "name" };
     if (hNorm === "الجنس") return { type: "gender" };
     for (const [arLabel, key] of Object.entries(SUBJECT_HEADER_MAP)) {
       for (const tri of [1, 2, 3] as const) {
-        // Match both "مادة ف 1" and "مادة ف1" (with or without space before number)
         if (hNorm === `${arLabel} ف ${tri}` || hNorm === `${arLabel} ف${tri}`) {
           return { type: "subject", subjectKey: key, tri };
         }
       }
     }
     for (const tri of [1, 2, 3] as const) {
-      // Match "معدل الفصل 3", "معدل الفصل3", "معدل  الفصل 3"
       if (hNorm === `معدل الفصل ${tri}` || hNorm === `معدل الفصل${tri}`) {
         return { type: "avg", tri };
       }
     }
     return { type: "skip" };
   });
+}
 
-  const iRaqm   = colMeta.findIndex(c => c.type === "raqm");
-  const iName   = colMeta.findIndex(c => c.type === "name");
-  const iGender = colMeta.findIndex(c => c.type === "gender");
-  const students: ParsedStudent[] = [];
+function parseHTMLExcel(text: string): ParsedStudent[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(text, "text/html");
+  const tableRows = Array.from(doc.querySelectorAll("tr"));
 
-  for (let i = headerRowIdx + 1; i < tableRows.length; i++) {
+  // Find ALL header rows (rows containing "الرقم" cell) — handles multi-table files
+  const headerIndices: number[] = [];
+  for (let i = 0; i < tableRows.length; i++) {
     const cells = Array.from(tableRows[i].querySelectorAll("td,th")).map(c =>
       (c.textContent ?? "").replace(/\s+/g, " ").trim()
     );
-    const raqmRaw = cells[iRaqm];
-    if (!raqmRaw || isNaN(Number(raqmRaw))) continue;
-
-    const grades: ParsedStudent["grades"] = { 1: {}, 2: {}, 3: {} };
-    const triAvgs: Record<number, number | null> = { 1: null, 2: null, 3: null };
-
-    cells.forEach((val, ci) => {
-      const meta = colMeta[ci];
-      if (!meta) return;
-      // Normalize French decimal comma → dot, trim whitespace
-      const normalized = val.replace(/,/g, ".").trim();
-      const n = parseFloat(normalized);
-      if (meta.type === "subject" && meta.subjectKey && meta.tri && !isNaN(n) && n >= 0)
-        grades[meta.tri][meta.subjectKey] = Math.max(0, Math.min(20, n));
-      // For triAvg: accept n >= 0 (a trimester avg of 0 is valid edge case)
-      // but ignore truly empty cells (val was empty → NaN)
-      if (meta.type === "avg" && meta.tri && !isNaN(n) && normalized !== "")
-        triAvgs[meta.tri] = Math.max(0, Math.min(20, n));
-    });
-
-    const available = ([1, 2, 3] as const).map(t => triAvgs[t]).filter((v): v is number => v !== null);
-    const annualAvg = available.length > 0
-      ? Math.round((available.reduce((a, b) => a + b, 0) / available.length) * 100) / 100
-      : null;
-
-    const genderStr = cells[iGender] ?? "";
-    students.push({
-      raqm: Number(raqmRaw),
-      nomPrenom: cells[iName] ?? "",
-      gender: genderStr,
-      sexe: normalizeGenderStr(genderStr),
-      niveau: fileNiveau,
-      classe: fileClasse,
-      grades, t1Avg: triAvgs[1], t2Avg: triAvgs[2], t3Avg: triAvgs[3],
-      annualAvg,
-      passed: annualAvg !== null ? annualAvg >= 10 : null,
-    });
+    if (cells.some(c => c === "الرقم")) headerIndices.push(i);
   }
-  if (students.length === 0) throw new Error("لم يتم العثور على بيانات تلاميذ في الملف");
-  return students;
+  if (headerIndices.length === 0) throw new Error("لم يتم العثور على صف العناوين (الرقم)");
+
+  const allStudents: ParsedStudent[] = [];
+
+  for (let hi = 0; hi < headerIndices.length; hi++) {
+    const headerRowIdx = headerIndices[hi]!;
+    const nextHeaderIdx = headerIndices[hi + 1] ?? tableRows.length;
+
+    // Metadata rows = rows before this header (since previous header end or file start)
+    const metaStart = hi === 0 ? 0 : headerIndices[hi - 1]! + 1;
+    const { niveau: tableNiveau, classe: tableClasse } =
+      extractNiveauClasse(tableRows.slice(metaStart, headerRowIdx));
+
+    const headers = Array.from(tableRows[headerRowIdx]!.querySelectorAll("td,th")).map(c =>
+      (c.textContent ?? "").replace(/\s+/g, " ").trim()
+    );
+    const colMeta = buildColMeta(headers);
+    const iRaqm   = colMeta.findIndex(c => c.type === "raqm");
+    const iName   = colMeta.findIndex(c => c.type === "name");
+    const iGender = colMeta.findIndex(c => c.type === "gender");
+
+    for (let i = headerRowIdx + 1; i < nextHeaderIdx; i++) {
+      const cells = Array.from(tableRows[i]!.querySelectorAll("td,th")).map(c =>
+        (c.textContent ?? "").replace(/\s+/g, " ").trim()
+      );
+      const raqmRaw = cells[iRaqm];
+      if (!raqmRaw || isNaN(Number(raqmRaw))) continue;
+
+      const grades: ParsedStudent["grades"] = { 1: {}, 2: {}, 3: {} };
+      const triAvgs: Record<number, number | null> = { 1: null, 2: null, 3: null };
+
+      cells.forEach((val, ci) => {
+        const meta = colMeta[ci];
+        if (!meta) return;
+        const normalized = val.replace(/,/g, ".").trim();
+        const n = parseFloat(normalized);
+        if (meta.type === "subject" && meta.subjectKey && meta.tri && !isNaN(n) && n >= 0)
+          grades[meta.tri][meta.subjectKey] = Math.max(0, Math.min(20, n));
+        if (meta.type === "avg" && meta.tri && !isNaN(n) && normalized !== "")
+          triAvgs[meta.tri] = Math.max(0, Math.min(20, n));
+      });
+
+      const available = ([1, 2, 3] as const).map(t => triAvgs[t]).filter((v): v is number => v !== null);
+      const annualAvg = available.length > 0
+        ? Math.round((available.reduce((a, b) => a + b, 0) / available.length) * 100) / 100
+        : null;
+
+      const genderStr = cells[iGender] ?? "";
+      allStudents.push({
+        raqm: Number(raqmRaw),
+        nomPrenom: cells[iName] ?? "",
+        gender: genderStr,
+        sexe: normalizeGenderStr(genderStr),
+        niveau: tableNiveau,
+        classe: tableClasse,
+        grades, t1Avg: triAvgs[1], t2Avg: triAvgs[2], t3Avg: triAvgs[3],
+        annualAvg,
+        passed: annualAvg !== null ? annualAvg >= 10 : null,
+      });
+    }
+  }
+
+  if (allStudents.length === 0) throw new Error("لم يتم العثور على بيانات تلاميذ في الملف");
+  return allStudents;
 }
 
 function printResults(results: StudentResult[], niveauLabel: string, classeLabel: string, t: (k: string) => string) {
@@ -1448,6 +1470,14 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
   const [fileCount, setFileCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
+  // Manual override for niveau+classe when auto-extraction from file fails
+  const [overrideNiveau, setOverrideNiveau] = useState<string>("");
+  const [overrideClasse, setOverrideClasse] = useState<string>("");
+
+  // Derived: how many students are missing niveau/classe from the file
+  const missingNiveauClasse = students.filter(s => !s.niveau || !s.classe).length;
+  // Whether user needs to fill override (any student missing info)
+  const needsOverride = missingNiveauClasse > 0;
 
   const handleFiles = async (files: FileList | File[]) => {
     const arr = Array.from(files).filter(f => /\.(xls|xlsx|html?|htm)$/i.test(f.name));
@@ -1471,8 +1501,14 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
     // Deduplicate by name — keep last occurrence (latest file wins)
     const byName = new Map<string, ParsedStudent>();
     for (const s of all) byName.set(s.nomPrenom.trim(), s);
-    setStudents([...byName.values()]);
+    const deduped = [...byName.values()];
+    setStudents(deduped);
     setFileCount(arr.length);
+    // Pre-fill override dropdowns from auto-extracted values (first student that has them)
+    const sample = deduped.find(s => s.niveau);
+    if (sample?.niveau) setOverrideNiveau(sample.niveau);
+    const sampleC = deduped.find(s => s.classe);
+    if (sampleC?.classe) setOverrideClasse(sampleC.classe);
     setStatus("preview");
   };
 
@@ -1485,8 +1521,9 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
         students: students.map(s => ({
           studentName: s.nomPrenom,
           raqm: s.raqm,
-          niveau: s.niveau ?? undefined,
-          classe: s.classe ?? undefined,
+          // Use per-student niveau/classe if available; fall back to manual override
+          niveau: s.niveau ?? (overrideNiveau || undefined),
+          classe: s.classe ?? (overrideClasse || undefined),
           sexe: s.sexe,
           annualPassed: s.passed,
           trimesters: {
@@ -1577,6 +1614,35 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
                   <span className="text-red-500 font-semibold">{students.filter(s => s.passed === false).length} راسب</span>
                 </div>
               </div>
+
+              {/* Niveau + classe override — shown when file is missing this info */}
+              {needsOverride && (
+                <div className="mb-3 p-3 rounded-lg border border-amber-300/60 bg-amber-50/40 dark:bg-amber-950/20 dark:border-amber-700/40">
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2">
+                    ⚠ لم يتم التعرف على المستوى/الفوج تلقائياً — يرجى تحديدهما يدوياً ({missingNiveauClasse} تلميذ)
+                  </p>
+                  <div className="flex gap-2">
+                    <Select value={overrideNiveau} onValueChange={setOverrideNiveau}>
+                      <SelectTrigger className="flex-1 h-8 text-xs">
+                        <SelectValue placeholder="المستوى" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LEVELS.map(l => <SelectItem key={l} value={l}>{LEVEL_LABELS[l]}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={overrideClasse} onValueChange={setOverrideClasse}>
+                      <SelectTrigger className="w-28 h-8 text-xs">
+                        <SelectValue placeholder="الفوج" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["1","2","3","4","5","6","7","8","9","10"].map(c => (
+                          <SelectItem key={c} value={c}>فوج {c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
               <div className="rounded-lg border overflow-hidden max-h-72 overflow-y-auto text-sm">
                 <table className="w-full">
                   <thead className="bg-muted/60 sticky top-0 z-10">
@@ -1609,7 +1675,10 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
               </div>
               <div className="flex gap-2 justify-end mt-4">
                 <Button variant="outline" onClick={() => { setStudents([]); setStatus("idle"); }}><X className="w-4 h-4 me-1" /> إلغاء</Button>
-                <Button onClick={handleImport} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+                <Button
+                  onClick={handleImport}
+                  disabled={needsOverride && (!overrideNiveau || !overrideClasse)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 disabled:opacity-50">
                   <Upload className="w-4 h-4" /> حفظ نتائج {students.length} تلميذ
                 </Button>
               </div>
