@@ -24,6 +24,15 @@ const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 const router: IRouter = Router();
 
 function getOrigin(req: Request): string {
+  // Prefer the canonical Replit dev domain (injected by the platform, not spoofable via headers)
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  }
+  // Explicit override for non-Replit deployments (e.g. custom domain, production URL)
+  if (process.env.APP_BASE_URL) {
+    return process.env.APP_BASE_URL.replace(/\/$/, "");
+  }
+  // Fallback: trust forwarded headers (only safe behind a controlled proxy)
   const proto = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
   return `${proto}://${host}`;

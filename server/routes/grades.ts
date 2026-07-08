@@ -84,33 +84,35 @@ router.post("/grades/bulk", async (req, res): Promise<void> => {
       .where(and(eq(studentsTable.id, student.id), eq(studentsTable.userId, userId)));
   }
 
-  // ── Upsert grades ─────────────────────────────────────────────────────────
-  await db.delete(gradesTable).where(and(
-    eq(gradesTable.userId, userId),
-    eq(gradesTable.studentId, student.id),
-    eq(gradesTable.annee, annee),
-    eq(gradesTable.trimestre, trimestre),
-  ));
-
+  // ── Upsert grades (atomic delete + insert) ───────────────────────────────
   // Allow grade 0 — it is a valid score (student attempted subject and scored zero).
   // Only exclude NaN / non-numeric / out-of-range values.
   const validGrades = Object.entries(grades).filter(([, score]) =>
     typeof score === "number" && !isNaN(score) && score >= 0 && score <= 20
   );
 
-  if (validGrades.length > 0) {
-    await db.insert(gradesTable).values(
-      validGrades.map(([subject, score]) => ({
-        id: crypto.randomBytes(8).toString("hex"),
-        userId,
-        studentId: student!.id,
-        annee,
-        trimestre,
-        subject,
-        score: String(Math.max(0, Math.min(20, score))),
-      }))
-    );
-  }
+  await db.transaction(async (tx) => {
+    await tx.delete(gradesTable).where(and(
+      eq(gradesTable.userId, userId),
+      eq(gradesTable.studentId, student!.id),
+      eq(gradesTable.annee, annee),
+      eq(gradesTable.trimestre, trimestre),
+    ));
+
+    if (validGrades.length > 0) {
+      await tx.insert(gradesTable).values(
+        validGrades.map(([subject, score]) => ({
+          id: crypto.randomBytes(8).toString("hex"),
+          userId,
+          studentId: student!.id,
+          annee,
+          trimestre,
+          subject,
+          score: String(Math.max(0, Math.min(20, score))),
+        }))
+      );
+    }
+  });
 
   req.log.info(
     { studentId: student.id, studentName: student.nomPrenom, trimestre, count: validGrades.length },
@@ -237,33 +239,36 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
     savedCount++;
   }
 
-  // ── 3. Execute: insert auto-created students first ────────────────────────
-  if (autoCreated.length > 0) {
-    for (let i = 0; i < autoCreated.length; i += 200) {
-      await db.insert(studentsTable).values(autoCreated.slice(i, i + 200) as any);
+  // ── 3 & 4. Execute all writes atomically in a single transaction ────────────
+  await db.transaction(async (tx) => {
+    // Insert auto-created students first
+    if (autoCreated.length > 0) {
+      for (let i = 0; i < autoCreated.length; i += 200) {
+        await tx.insert(studentsTable).values(autoCreated.slice(i, i + 200) as any);
+      }
     }
-  }
 
-  // ── 4. Execute: delete stale grades, bulk-insert new ones ─────────────────
-  for (const { studentId, trimestre } of toDelete) {
-    await db.delete(gradesTable).where(and(
-      eq(gradesTable.userId, userId),
-      eq(gradesTable.studentId, studentId),
-      eq(gradesTable.annee, annee),
-      eq(gradesTable.trimestre, trimestre),
-    ));
-  }
+    // Delete stale grades, bulk-insert new ones
+    for (const { studentId, trimestre } of toDelete) {
+      await tx.delete(gradesTable).where(and(
+        eq(gradesTable.userId, userId),
+        eq(gradesTable.studentId, studentId),
+        eq(gradesTable.annee, annee),
+        eq(gradesTable.trimestre, trimestre),
+      ));
+    }
 
-  const CHUNK = 500;
-  for (let i = 0; i < toInsert.length; i += CHUNK) {
-    await db.insert(gradesTable).values(toInsert.slice(i, i + CHUNK));
-  }
+    const CHUNK = 500;
+    for (let i = 0; i < toInsert.length; i += CHUNK) {
+      await tx.insert(gradesTable).values(toInsert.slice(i, i + CHUNK));
+    }
 
-  for (const { studentId, raqm } of raqmUpdates) {
-    await db.update(studentsTable).set({ raqm }).where(
-      and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId))
-    );
-  }
+    for (const { studentId, raqm } of raqmUpdates) {
+      await tx.update(studentsTable).set({ raqm }).where(
+        and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId))
+      );
+    }
+  });
 
   req.log.info(
     { saved: savedCount, gradeRows: toInsert.length, notFound: errors.length, autoCreated: autoCreated.length },

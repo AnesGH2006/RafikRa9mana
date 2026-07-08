@@ -46,11 +46,13 @@ router.patch("/admin/users/:id", async (req: Request, res: Response): Promise<vo
   res.json({ success: true, user: { id: updated.id, email: updated.email, subscriptionStatus: updated.subscriptionStatus, role: updated.role } });
 });
 
-// POST /api/admin/activate — activate user by email using secret token (for manual payment approval)
+// POST /api/admin/activate — activate user by email (requires admin session + optional ADMIN_SECRET token)
 router.post("/admin/activate", async (req: Request, res: Response): Promise<void> => {
+  if (!isAdmin(req)) { res.status(403).json({ error: "Forbidden" }); return; }
   const { email, token, months } = req.body as { email?: string; token?: string; months?: number };
   const adminSecret = process.env.ADMIN_SECRET;
-  if (!adminSecret || token !== adminSecret) { res.status(403).json({ error: "Invalid token" }); return; }
+  // If ADMIN_SECRET is configured, require it as an extra confirmation layer
+  if (adminSecret && token !== adminSecret) { res.status(403).json({ error: "Invalid token" }); return; }
   if (!email) { res.status(400).json({ error: "Email required" }); return; }
 
   const expiresAt = months
