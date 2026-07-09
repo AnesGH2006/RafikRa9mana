@@ -21,7 +21,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5000,
+    port: 20053,
     host: "0.0.0.0",
     allowedHosts: true,
     proxy: {
