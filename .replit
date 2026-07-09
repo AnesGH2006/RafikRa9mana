@@ -20,11 +20,11 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "artifacts/school-video: Promo Video"
+args = "artifacts/api-server: API Server"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Start application"
+args = "artifacts/school-analyzer: web"
 
 [[workflows.workflow]]
 name = "artifacts/school-video: Promo Video"
@@ -33,7 +33,7 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pnpm --dir artifacts/school-video run dev"
-waitForPort = 5000
+waitForPort = 5010
 
 [workflows.workflow.metadata]
 outputType = "webview"
@@ -50,6 +50,42 @@ task = "shell.exec"
 args = "pnpm run dev"
 waitForPort = 5000
 
+[[workflows.workflow]]
+name = "artifacts/school-video: web"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter school-video run dev"
+waitForPort = 5010
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow]]
+name = "artifacts/school-analyzer: web"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm -w run dev:client"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow]]
+name = "artifacts/api-server: API Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm -w run dev:server"
+waitForPort = 8080
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [agent]
 stack = "FULLSTACK_JS"
 expertMode = true
@@ -64,7 +100,7 @@ externalPort = 80
 
 [[ports]]
 localPort = 8080
-externalPort = 80
+externalPort = 8080
 
 [[ports]]
 localPort = 20053
