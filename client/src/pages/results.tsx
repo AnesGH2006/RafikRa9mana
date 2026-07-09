@@ -446,18 +446,30 @@ function TabSubjects({ results }: { results: StudentResult[] }) {
 // ─── TAB 3: Groups ────────────────────────────────────────────────────────────
 function TabGroups({ results }: { results: StudentResult[] }) {
   const withAvg = results.filter(r => r.annualAvg !== null);
+  // Group by niveau+classe composite to avoid merging same-named classes across levels
   const grouped = withAvg.reduce<Record<string, StudentResult[]>>((acc, r) => {
-    const c = r.student.classe || "غير محدد";
+    const c = `${r.student.niveau}__${r.student.classe || "غير محدد"}`;
     if (!acc[c]) acc[c] = [];
     acc[c].push(r);
     return acc;
   }, {});
 
-  const stats = Object.entries(grouped).map(([classe, rs]) => {
-    const pass = rs.filter(r => r.passed === true).length;
-    const avgs = rs.map(r => r.annualAvg).filter((a): a is number => a != null);
-    const avg  = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : 0;
-    return { classe, total: rs.length, pass, fail: rs.length - pass, passRate: rs.length > 0 ? (pass / rs.length) * 100 : 0, avg: +avg.toFixed(2) };
+  const stats = Object.entries(grouped).map(([key, rs]) => {
+    const [niv, classe] = key.split("__") as [string, string];
+    const pass  = rs.filter(r => r.passed === true).length;
+    const avgs  = rs.map(r => r.annualAvg).filter((a): a is number => a != null);
+    const avg   = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : 0;
+    const boys  = rs.filter(r => r.student.sexe === "M");
+    const girls = rs.filter(r => r.student.sexe === "F");
+    const boyPass  = boys.filter(r => r.passed === true).length;
+    const girlPass = girls.filter(r => r.passed === true).length;
+    const label = `${LEVEL_LABELS[niv as Niveau] ?? niv} — ${classe}`;
+    return {
+      classe, niv, label, total: rs.length, pass, fail: rs.length - pass,
+      passRate: rs.length > 0 ? (pass / rs.length) * 100 : 0,
+      avg: +avg.toFixed(2),
+      boys: boys.length, girls: girls.length, boyPass, girlPass,
+    };
   }).sort((a, b) => b.passRate - a.passRate);
 
   const best  = stats[0];
@@ -477,7 +489,7 @@ function TabGroups({ results }: { results: StudentResult[] }) {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">أفضل قسم</p>
-                      <p className="font-bold text-lg">{best.classe}</p>
+                      <p className="font-bold text-lg">{best.label}</p>
                       <p className="text-emerald-600 font-semibold text-sm">{best.passRate.toFixed(1)}% نجاح — معدل {best.avg}/20</p>
                     </div>
                   </CardContent>
@@ -493,7 +505,7 @@ function TabGroups({ results }: { results: StudentResult[] }) {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">أضعف قسم</p>
-                      <p className="font-bold text-lg">{worst.classe}</p>
+                      <p className="font-bold text-lg">{worst.label}</p>
                       <p className="text-red-500 font-semibold text-sm">{worst.passRate.toFixed(1)}% نجاح — معدل {worst.avg}/20</p>
                     </div>
                   </CardContent>
@@ -509,7 +521,7 @@ function TabGroups({ results }: { results: StudentResult[] }) {
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={stats} margin={{ left: -10 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
-                    <XAxis dataKey="classe" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="classe" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} interval={0} />
                     <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
                     <Tooltip content={<MiniTooltip />} cursor={{ fill: "transparent" }} />
                     <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
@@ -528,17 +540,21 @@ function TabGroups({ results }: { results: StudentResult[] }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
-                      {["الرتبة","القسم","الإجمالي","ناجح","راسب","المعدل","نسبة النجاح"].map((h, i) => (
-                        <th key={i} className="pb-2 text-center text-xs text-muted-foreground font-semibold first:text-right">{h}</th>
+                      {["الرتبة","القسم","الإجمالي","♂ ذكور","ناجح ♂","♀ إناث","ناجح ♀","ناجح","راسب","المعدل","نسبة النجاح"].map((h, i) => (
+                        <th key={i} className="pb-2 text-center text-xs text-muted-foreground font-semibold first:text-right whitespace-nowrap px-2">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {stats.map((g, i) => (
-                      <tr key={g.classe} className={`border-b ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                      <tr key={`${g.niv}__${g.classe}`} className={`border-b ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
                         <td className="py-2 font-bold text-muted-foreground">{i + 1}</td>
-                        <td className="py-2 text-center font-semibold">{g.classe}</td>
+                        <td className="py-2 text-center font-semibold whitespace-nowrap">{g.label}</td>
                         <td className="py-2 text-center">{g.total}</td>
+                        <td className="py-2 text-center text-blue-500 font-semibold">{g.boys}</td>
+                        <td className="py-2 text-center text-blue-400 text-xs">{g.boyPass}</td>
+                        <td className="py-2 text-center text-pink-500 font-semibold">{g.girls}</td>
+                        <td className="py-2 text-center text-pink-400 text-xs">{g.girlPass}</td>
                         <td className="py-2 text-center text-emerald-600 font-semibold">{g.pass}</td>
                         <td className="py-2 text-center text-red-500 font-semibold">{g.fail}</td>
                         <td className="py-2 text-center font-mono font-bold">{g.avg}</td>
@@ -862,8 +878,26 @@ function TabGender({ results }: { results: StudentResult[] }) {
     { name: "إناث", rate: +girlRate.toFixed(1), avg: +girlAvg.toFixed(2), total: girls.length, pass: girlPass, fill: FEMALE_COLOR },
   ];
 
+  // Per-class gender breakdown — key by niveau+classe so identically named classes in different levels are separate
+  const classKeys = [...new Set(withAvg.map(r => `${r.student.niveau}__${r.student.classe}`))].sort();
+  const perClassGender = classKeys.map(key => {
+    const [niv, cls] = key.split("__") as [string, string];
+    const rs = withAvg.filter(r => r.student.niveau === niv && r.student.classe === cls);
+    const b  = rs.filter(r => r.student.sexe === "M");
+    const g  = rs.filter(r => r.student.sexe === "F");
+    const bPass = b.filter(r => r.passed === true).length;
+    const gPass = g.filter(r => r.passed === true).length;
+    const bRate = b.length > 0 ? (bPass / b.length) * 100 : null;
+    const gRate = g.length > 0 ? (gPass / g.length) * 100 : null;
+    const bAvg  = b.length > 0 ? b.reduce((s, r) => s + (r.annualAvg ?? 0), 0) / b.length : null;
+    const gAvg  = g.length > 0 ? g.reduce((s, r) => s + (r.annualAvg ?? 0), 0) / g.length : null;
+    const label = `${LEVEL_LABELS[niv as Niveau] ?? niv} — ${cls}`;
+    return { cls, niv, label, total: rs.length, boys: b.length, girls: g.length, bPass, gPass, bRate, gRate, bAvg, gAvg };
+  });
+
   return (
     <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-5">
+      {/* Overview cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {barData.map((d, i) => (
           <motion.div key={i} variants={cardAnim}>
@@ -906,6 +940,7 @@ function TabGender({ results }: { results: StudentResult[] }) {
         ))}
       </div>
 
+      {/* Comparison chart */}
       <motion.div variants={cardAnim}>
         <Card className="rounded-2xl border bg-card shadow-sm">
           <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">مقارنة الجنسين</CardTitle></CardHeader>
@@ -933,6 +968,93 @@ function TabGender({ results }: { results: StudentResult[] }) {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Per-class gender breakdown */}
+      {perClassGender.length > 0 && (
+        <motion.div variants={cardAnim}>
+          <Card className="rounded-2xl border bg-card shadow-sm">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-xs font-bold text-muted-foreground">تحليل الجنس حسب القسم</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/60">
+                    <tr>
+                      {["القسم","المجموع",
+                        "♂ ذكور","ناجح ♂","نسبة ♂","معدل ♂",
+                        "♀ إناث","ناجح ♀","نسبة ♀","معدل ♀",
+                        "الأفضل"].map((h, i) => (
+                        <th key={i} className="px-3 py-2.5 text-xs text-muted-foreground font-semibold text-center whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {perClassGender.map((c, i) => {
+                      const winner = c.bRate !== null && c.gRate !== null
+                        ? c.bRate > c.gRate ? <span className="text-blue-500 font-bold">♂</span>
+                          : c.gRate > c.bRate ? <span className="text-pink-500 font-bold">♀</span>
+                          : <span className="text-muted-foreground">—</span>
+                        : <span className="text-muted-foreground">—</span>;
+                      return (
+                        <tr key={c.cls} className={`border-t ${i % 2 === 0 ? "" : "bg-muted/15"}`}>
+                          <td className="px-3 py-2 text-center font-bold">{c.cls}</td>
+                          <td className="px-3 py-2 text-center text-muted-foreground">{c.total}</td>
+                          <td className="px-3 py-2 text-center text-blue-500 font-semibold">{c.boys}</td>
+                          <td className="px-3 py-2 text-center text-emerald-600">{c.bPass}</td>
+                          <td className="px-3 py-2 text-center font-mono text-xs">
+                            {c.bRate !== null ? <span className={c.bRate >= 50 ? "text-emerald-600 font-bold" : "text-red-500 font-bold"}>{c.bRate.toFixed(1)}%</span> : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-center font-mono text-xs text-blue-500">
+                            {c.bAvg !== null ? c.bAvg.toFixed(2) : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-center text-pink-500 font-semibold">{c.girls}</td>
+                          <td className="px-3 py-2 text-center text-emerald-600">{c.gPass}</td>
+                          <td className="px-3 py-2 text-center font-mono text-xs">
+                            {c.gRate !== null ? <span className={c.gRate >= 50 ? "text-emerald-600 font-bold" : "text-red-500 font-bold"}>{c.gRate.toFixed(1)}%</span> : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-center font-mono text-xs text-pink-500">
+                            {c.gAvg !== null ? c.gAvg.toFixed(2) : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-center">{winner}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Per-class gender chart */}
+      {perClassGender.length > 1 && (
+        <motion.div variants={cardAnim}>
+          <Card className="rounded-2xl border bg-card shadow-sm">
+            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">نسبة نجاح الذكور والإناث حسب القسم</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={Math.max(180, perClassGender.length * 36)}>
+                <BarChart
+                  data={perClassGender.map(c => ({
+                    name: c.cls,
+                    "ذكور %":  c.bRate !== null ? +c.bRate.toFixed(1) : 0,
+                    "إناث %": c.gRate !== null ? +c.gRate.toFixed(1) : 0,
+                  }))}
+                  layout="vertical" margin={{ right: 20, left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} horizontal={false} />
+                  <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={55} />
+                  <Tooltip content={<MiniTooltip />} cursor={{ fill: "transparent" }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="ذكور %" fill={MALE_COLOR}   radius={[0, 6, 6, 0]} />
+                  <Bar dataKey="إناث %" fill={FEMALE_COLOR} radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
     </motion.div>
   );
 }
@@ -1439,26 +1561,108 @@ function parseHTMLExcel(text: string): ParsedStudent[] {
   return allStudents;
 }
 
-function printResults(results: StudentResult[], niveauLabel: string, classeLabel: string, t: (k: string) => string) {
+function printResults(results: StudentResult[], niveauLabel: string, _classeLabel: string, _t: (k: string) => string) {
   const win = window.open("", "_blank");
   if (!win) return;
-  const rowsHtml = results.map((r, i) => {
-    const passClass = r.passed === true ? "pass" : r.passed === false ? "fail" : "";
-    const passLabel = r.passed === null ? "—" : r.passed ? "ناجح" : "راسب";
-    return `<tr><td>${r.rank ?? i + 1}</td><td class="name">${r.student.nomPrenom}</td><td>${avg2(r.t1Avg)}</td><td>${avg2(r.t2Avg)}</td><td>${avg2(r.t3Avg)}</td><td class="bold">${avg2(r.annualAvg)}</td><td class="${passClass}">${passLabel}</td></tr>`;
-  }).join("");
   const dateStr = new Date().toLocaleDateString("ar-DZ", { year: "numeric", month: "long", day: "numeric" });
+
+  // Group results by niveau+classe so every class gets its own table
+  const classMap = new Map<string, StudentResult[]>();
+  for (const r of results) {
+    const key = `${r.student.niveau}__${r.student.classe}`;
+    if (!classMap.has(key)) classMap.set(key, []);
+    classMap.get(key)!.push(r);
+  }
+  // Sort groups: by niveau then classe
+  const groups = [...classMap.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+  const classBlocksHtml = groups.map(([, rs], gi) => {
+    const sample = rs[0]!.student;
+    const niv = LEVEL_LABELS[sample.niveau as Niveau] ?? sample.niveau;
+    const cls = sample.classe;
+    const passed = rs.filter(r => r.passed === true).length;
+    const failed = rs.filter(r => r.passed === false).length;
+    const boys  = rs.filter(r => r.student.sexe === "M").length;
+    const girls = rs.filter(r => r.student.sexe === "F").length;
+    const avgs  = rs.map(r => r.annualAvg).filter((v): v is number => v != null);
+    const classAvg = avgs.length ? (avgs.reduce((a, b) => a + b, 0) / avgs.length).toFixed(2) : "—";
+
+    const rowsHtml = [...rs]
+      .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+      .map((r, i) => {
+        const passClass = r.passed === true ? "pass" : r.passed === false ? "fail" : "";
+        const passLabel = r.passed === null ? "—" : r.passed ? "ناجح" : "راسب";
+        const sexLabel  = r.student.sexe === "M" ? "ذ" : r.student.sexe === "F" ? "أ" : "—";
+        return `<tr><td>${r.rank ?? i + 1}</td><td class="name">${r.student.nomPrenom}</td><td>${sexLabel}</td><td>${avg2(r.t1Avg)}</td><td>${avg2(r.t2Avg)}</td><td>${avg2(r.t3Avg)}</td><td class="bold">${avg2(r.annualAvg)}</td><td class="${passClass}">${passLabel}</td></tr>`;
+      }).join("");
+
+    return `
+<div class="class-block${gi > 0 ? " page-break" : ""}">
+  <div class="class-header">
+    <span class="class-title">قسم ${cls} — ${niv}</span>
+    <span class="class-meta">المجموع: ${rs.length} | ذكور: ${boys} | إناث: ${girls} | ناجح: ${passed} | راسب: ${failed} | معدل القسم: ${classAvg}/20</span>
+  </div>
+  <table>
+    <thead><tr><th>الرتبة</th><th>اللقب والاسم</th><th>ج</th><th>معدل ف1</th><th>معدل ف2</th><th>معدل ف3</th><th>المعدل السنوي</th><th>النتيجة</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <div class="stamp">
+    <div class="box"><div>توقيع الأستاذ (ة)</div><div class="line"></div></div>
+    <div class="box"><div>ختم وتوقيع الإدارة</div><div class="line"></div></div>
+  </div>
+</div>`;
+  }).join("\n");
+
+  const passTotal  = results.filter(r => r.passed === true).length;
+  const failTotal  = results.filter(r => r.passed === false).length;
+  const boysTotal  = results.filter(r => r.student.sexe === "M").length;
+  const girlsTotal = results.filter(r => r.student.sexe === "F").length;
+
   win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/><title>نتائج التلاميذ</title>
-<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;direction:rtl;color:#1a1a1a;padding:24px}.header{text-align:center;margin-bottom:20px;border-bottom:2px solid #1a1a1a;padding-bottom:12px}.header h1{font-size:20px;font-weight:700;margin-bottom:4px}.header .sub{font-size:13px;color:#555}.meta{display:flex;justify-content:space-between;font-size:13px;margin:16px 0;color:#333}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #999;padding:6px 8px;text-align:center}th{background:#e8e8e8;font-weight:700}td.name{text-align:right;font-weight:600}td.bold{font-weight:700}td.pass{color:#0a7a3d;font-weight:700}td.fail{color:#c0392b;font-weight:700}tr:nth-child(even){background:#f7f7f7}.stamp{margin-top:60px;display:flex;justify-content:space-between}.stamp .box{text-align:center}.stamp .line{margin-top:50px;border-top:1px solid #999;width:160px}@media print{body{padding:0}@page{size:A4 landscape;margin:12mm}}</style>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;direction:rtl;color:#1a1a1a;padding:20px}
+.main-header{text-align:center;margin-bottom:16px;border-bottom:3px solid #1a1a1a;padding-bottom:12px}
+.main-header h1{font-size:22px;font-weight:700;margin-bottom:4px}
+.main-header .sub{font-size:13px;color:#555}
+.summary{display:flex;gap:24px;justify-content:center;font-size:12px;margin:10px 0 18px;color:#333;flex-wrap:wrap}
+.summary span{background:#f3f4f6;padding:4px 10px;border-radius:6px;font-weight:600}
+.class-block{margin-bottom:32px}
+.page-break{page-break-before:always;padding-top:16px}
+.class-header{background:#1a1a1a;color:#fff;padding:7px 12px;border-radius:6px 6px 0 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.class-title{font-size:14px;font-weight:700}
+.class-meta{font-size:11px;opacity:.85}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{border:1px solid #ccc;padding:5px 7px;text-align:center}
+th{background:#e8e8e8;font-weight:700}
+td.name{text-align:right;font-weight:600}
+td.bold{font-weight:700}
+td.pass{color:#0a7a3d;font-weight:700}
+td.fail{color:#c0392b;font-weight:700}
+tr:nth-child(even){background:#f9f9f9}
+.stamp{margin-top:28px;display:flex;justify-content:space-between;margin-bottom:8px}
+.stamp .box{text-align:center;font-size:12px}
+.stamp .line{margin-top:40px;border-top:1px solid #999;width:150px}
+@media print{body{padding:0}@page{size:A4 landscape;margin:10mm}.page-break{page-break-before:always}}
+</style>
 </head><body>
-<div class="header"><h1>نتائج التلاميذ</h1><div class="sub">${niveauLabel}${classeLabel ? " — قسم " + classeLabel : ""}</div></div>
-<div class="meta"><span>عدد التلاميذ: ${results.length}</span><span>تاريخ الطباعة: ${dateStr}</span></div>
-<table><thead><tr><th>الرتبة</th><th>اللقب والاسم</th><th>معدل ف1</th><th>معدل ف2</th><th>معدل ف3</th><th>المعدل السنوي</th><th>النتيجة</th></tr></thead><tbody>${rowsHtml}</tbody></table>
-<div class="stamp"><div class="box"><div>توقيع الأستاذ (ة)</div><div class="line"></div></div><div class="box"><div>ختم وتوقيع الإدارة</div><div class="line"></div></div></div>
+<div class="main-header">
+  <h1>نتائج التلاميذ</h1>
+  <div class="sub">${niveauLabel}</div>
+</div>
+<div class="summary">
+  <span>الإجمالي: ${results.length} تلميذ</span>
+  <span>ذكور: ${boysTotal}</span>
+  <span>إناث: ${girlsTotal}</span>
+  <span style="color:#0a7a3d">ناجح: ${passTotal}</span>
+  <span style="color:#c0392b">راسب: ${failTotal}</span>
+  <span>تاريخ الطباعة: ${dateStr}</span>
+</div>
+${classBlocksHtml}
 </body></html>`);
   win.document.close();
   win.focus();
-  setTimeout(() => { win.print(); }, 300);
+  setTimeout(() => { win.print(); }, 400);
 }
 
 // ─── Import Modal ─────────────────────────────────────────────────────────────
@@ -1498,10 +1702,13 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
       setError(errs.length > 0 ? `خطأ في قراءة: ${errs.join("، ")}` : "لم يتم العثور على بيانات");
       setStatus("error"); return;
     }
-    // Deduplicate by name — keep last occurrence (latest file wins)
-    const byName = new Map<string, ParsedStudent>();
-    for (const s of all) byName.set(s.nomPrenom.trim(), s);
-    const deduped = [...byName.values()];
+    // Deduplicate by (name + niveau + classe) — same name can appear in different classes
+    const byKey = new Map<string, ParsedStudent>();
+    for (const s of all) {
+      const key = `${s.nomPrenom.trim()}||${s.niveau ?? ""}||${s.classe ?? ""}`;
+      byKey.set(key, s);
+    }
+    const deduped = [...byKey.values()];
     setStudents(deduped);
     setFileCount(arr.length);
     // Pre-fill override dropdowns from auto-extracted values (first student that has them)
@@ -1854,8 +2061,9 @@ export default function Results() {
   const niveauLabel = filters.niveau ? LEVEL_LABELS[filters.niveau as Niveau] : "جميع المستويات";
 
   const handlePrint = () => {
-    if (displayed.length === 0) return;
-    printResults(displayed, niveauLabel, filters.classe, t);
+    // Always print ALL loaded results (all classes), organised per class
+    if (results.length === 0) return;
+    printResults(results, niveauLabel, filters.classe, t);
   };
 
   return (
@@ -1868,7 +2076,7 @@ export default function Results() {
           {t("results.title")}
         </motion.h1>
         <motion.div className="flex items-center gap-2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-          <Button variant="outline" className="gap-2" onClick={handlePrint} disabled={displayed.length === 0}>
+          <Button variant="outline" className="gap-2" onClick={handlePrint} disabled={results.length === 0}>
             <Printer className="w-4 h-4" /> طباعة
           </Button>
           <Button variant="outline"
