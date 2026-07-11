@@ -58,6 +58,7 @@ const ANALYTICS_TABS = [
   { id: "subjects",   label: "تحليل المواد",       icon: Target       },
   { id: "groups",     label: "مقارنة الأفواج",     icon: Users        },
   { id: "trend",      label: "تطور الفصول",        icon: TrendingUp   },
+  { id: "progress",   label: "تحسن وتراجع",        icon: TrendingDown },
   { id: "passed",     label: "الناجحون",           icon: CheckCircle2 },
   { id: "failed",     label: "الراسبون",           icon: XCircle      },
   { id: "gender",     label: "تحليل الجنس",        icon: ArrowUpDown  },
@@ -686,6 +687,224 @@ function TabTrend({ results }: { results: StudentResult[] }) {
           </Card>
         </motion.div>
       )}
+    </motion.div>
+  );
+}
+
+// ─── TAB 5: Progress (improvement / regression) ───────────────────────────────
+function TabProgress({ results }: { results: StudentResult[] }) {
+  // Need at least 2 trimester averages per student
+  const withMulti = results.filter(r =>
+    [r.t1Avg, r.t2Avg, r.t3Avg].filter(v => v != null).length >= 2
+  );
+
+  // Per-student trend: delta = last available tri avg − first available tri avg
+  const studentTrends = withMulti.map(r => {
+    const vals = ([r.t1Avg, r.t2Avg, r.t3Avg] as (number | null)[])
+      .map((v, i) => v != null ? { tri: i + 1, v } : null)
+      .filter((x): x is { tri: number; v: number } => x !== null);
+    const delta = +(vals[vals.length - 1]!.v - vals[0]!.v).toFixed(2);
+    const trend: "up" | "stable" | "down" =
+      delta > 0.5 ? "up" : delta < -0.5 ? "down" : "stable";
+    return { ...r, delta, trend };
+  });
+
+  const improved = studentTrends.filter(s => s.trend === "up");
+  const stable   = studentTrends.filter(s => s.trend === "stable");
+  const declined = studentTrends.filter(s => s.trend === "down");
+  const total    = studentTrends.length;
+  const pct = (n: number) => total ? Math.round((n / total) * 100) : 0;
+
+  const trendPie = [
+    { name: "تحسّن", value: improved.length, fill: "#16a34a" },
+    { name: "مستقر",  value: stable.length,   fill: "#f59e0b" },
+    { name: "تراجع",  value: declined.length,  fill: "#ef4444" },
+  ].filter(d => d.value > 0);
+
+  // Per-subject trend: class average per trimester
+  const niveau = withMulti[0]?.student.niveau as Niveau | undefined;
+  const subjects = niveau ? getSubjectsWithCorrectCoefs(niveau) : [];
+  const subjectTrends = subjects.map(s => {
+    const byTri: Record<1 | 2 | 3, number[]> = { 1: [], 2: [], 3: [] };
+    withMulti.forEach(r => {
+      for (const t of [1, 2, 3] as const) {
+        const v = (r.scores as any)?.[t]?.[s.key];
+        if (typeof v === "number" && v >= 0) byTri[t].push(v);
+      }
+    });
+    const avg = (arr: number[]) =>
+      arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2) : null;
+    const t1 = avg(byTri[1]); const t2 = avg(byTri[2]); const t3 = avg(byTri[3]);
+    const vals = [t1, t2, t3].filter((v): v is number => v != null);
+    const delta = vals.length >= 2 ? +(vals[vals.length - 1]! - vals[0]!).toFixed(2) : null;
+    return { ...s, t1, t2, t3, delta };
+  }).filter(s => [s.t1, s.t2, s.t3].some(v => v != null));
+
+  if (total === 0) return (
+    <div className="flex flex-col items-center py-16 gap-3 text-muted-foreground">
+      <TrendingUp className="w-10 h-10 opacity-20" />
+      <p className="text-sm">لا توجد بيانات كافية — يلزم وجود فصلين على الأقل لكل تلميذ</p>
+    </div>
+  );
+
+  return (
+    <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-5">
+
+      {/* KPI cards */}
+      <motion.div variants={cardAnim} className="grid grid-cols-3 gap-3">
+        {[
+          { label: "تحسّن", count: improved.length, color: "emerald", Icon: TrendingUp,   dir: "↑" },
+          { label: "مستقر",  count: stable.length,   color: "amber",   Icon: ArrowUpDown, dir: "→" },
+          { label: "تراجع",  count: declined.length,  color: "red",     Icon: TrendingDown, dir: "↓" },
+        ].map(({ label, count, color, Icon, dir }) => (
+          <Card key={label} className="rounded-2xl border bg-card shadow-sm">
+            <CardContent className="pt-4 pb-3 text-center">
+              <Icon className={`w-5 h-5 mx-auto mb-1 text-${color}-500`} />
+              <p className={`text-2xl font-bold text-${color}-600`}>{pct(count)}%</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{label} {dir} · {count} تلميذ</p>
+            </CardContent>
+          </Card>
+        ))}
+      </motion.div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Donut */}
+        <motion.div variants={cardAnim}>
+          <Card className="rounded-2xl border bg-card shadow-sm">
+            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">توزيع اتجاه التلاميذ</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={trendPie} cx="50%" cy="50%" innerRadius={52} outerRadius={78}
+                    paddingAngle={3} dataKey="value" label={({ name, value }) => `${name} (${value})`}
+                    labelLine={false} fontSize={10}>
+                    {trendPie.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                  </Pie>
+                  <Tooltip content={<MiniTooltip />} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Top/worst 3 */}
+        <motion.div variants={cardAnim}>
+          <Card className="rounded-2xl border bg-card shadow-sm h-full">
+            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">أعلى تحسن / أكبر تراجع</CardTitle></CardHeader>
+            <CardContent className="space-y-1.5">
+              <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1">أعلى 3 تحسناً</p>
+              {[...improved].sort((a, b) => b.delta - a.delta).slice(0, 3).map((r, i) => (
+                <div key={i} className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium truncate">{r.student.nomPrenom}</span>
+                  <span className="text-xs font-bold text-emerald-600 shrink-0">+{r.delta.toFixed(2)}</span>
+                </div>
+              ))}
+              {improved.length === 0 && <p className="text-xs text-muted-foreground">—</p>}
+              <div className="border-t my-2" />
+              <p className="text-[10px] font-bold text-red-500 uppercase tracking-wide mb-1">أكبر 3 تراجعاً</p>
+              {[...declined].sort((a, b) => a.delta - b.delta).slice(0, 3).map((r, i) => (
+                <div key={i} className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium truncate">{r.student.nomPrenom}</span>
+                  <span className="text-xs font-bold text-red-500 shrink-0">{r.delta.toFixed(2)}</span>
+                </div>
+              ))}
+              {declined.length === 0 && <p className="text-xs text-muted-foreground">—</p>}
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      {/* Subject trend table */}
+      {subjectTrends.length > 0 && (
+        <motion.div variants={cardAnim}>
+          <Card className="rounded-2xl border bg-card shadow-sm">
+            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">تطور أداء المواد عبر الفصول</CardTitle></CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      {["المادة","ف1","ف2","ف3","التغير الكلي","الاتجاه"].map((h, i) => (
+                        <th key={i} className={`pb-2 text-xs text-muted-foreground font-semibold ${i === 0 ? "text-right pr-2" : "text-center"}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subjectTrends.map((s, i) => {
+                      const up = s.delta != null && s.delta > 0.3;
+                      const dn = s.delta != null && s.delta < -0.3;
+                      return (
+                        <tr key={i} className={`border-b ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                          <td className="py-2 pr-2 font-medium">{s.arLabel}</td>
+                          {[s.t1, s.t2, s.t3].map((v, ti) => (
+                            <td key={ti} className={`py-2 text-center font-mono text-xs ${v == null ? "text-muted-foreground" : v >= 10 ? "text-emerald-600" : "text-red-500"}`}>
+                              {v != null ? v.toFixed(2) : "—"}
+                            </td>
+                          ))}
+                          <td className={`py-2 text-center font-mono font-bold text-xs ${up ? "text-emerald-600" : dn ? "text-red-500" : "text-muted-foreground"}`}>
+                            {s.delta != null ? (s.delta >= 0 ? "+" : "") + s.delta.toFixed(2) : "—"}
+                          </td>
+                          <td className="py-2 text-center">
+                            {s.delta == null ? <span className="text-muted-foreground text-xs">—</span>
+                              : up ? <span className="inline-flex items-center gap-0.5 text-emerald-600 text-[10px] font-bold"><TrendingUp className="w-3 h-3" />تحسن</span>
+                              : dn ? <span className="inline-flex items-center gap-0.5 text-red-500 text-[10px] font-bold"><TrendingDown className="w-3 h-3" />تراجع</span>
+                              : <span className="text-amber-600 text-[10px] font-semibold">مستقر</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Per-student detail table sorted by delta */}
+      <motion.div variants={cardAnim}>
+        <Card className="rounded-2xl border bg-card shadow-sm">
+          <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">تفاصيل تطور كل تلميذ (مرتّب حسب التحسن)</CardTitle></CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto max-h-72 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/60 sticky top-0 z-10">
+                  <tr>
+                    {["الاسم","ف1","ف2","ف3","التغير","الاتجاه"].map((h, i) => (
+                      <th key={i} className={`py-2 text-muted-foreground font-semibold ${i === 0 ? "text-right pr-2" : "text-center"}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...studentTrends].sort((a, b) => b.delta - a.delta).map((r, i) => (
+                    <tr key={i} className={`border-b ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
+                      <td className="py-1.5 pr-2 font-medium">{r.student.nomPrenom}</td>
+                      {[r.t1Avg, r.t2Avg, r.t3Avg].map((a, ti) => (
+                        <td key={ti} className={`py-1.5 text-center font-mono ${a == null ? "text-muted-foreground" : a >= 10 ? "text-emerald-600" : "text-red-500"}`}>
+                          {a != null ? a.toFixed(2) : "—"}
+                        </td>
+                      ))}
+                      <td className={`py-1.5 text-center font-mono font-bold ${r.trend === "up" ? "text-emerald-600" : r.trend === "down" ? "text-red-500" : "text-amber-600"}`}>
+                        {r.delta >= 0 ? "+" : ""}{r.delta.toFixed(2)}
+                      </td>
+                      <td className="py-1.5 text-center">
+                        <span className={`px-1.5 py-0.5 rounded-full font-bold text-[10px] ${
+                          r.trend === "up"   ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" :
+                          r.trend === "down" ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" :
+                                              "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                        }`}>
+                          {r.trend === "up" ? "تحسّن ↑" : r.trend === "down" ? "تراجع ↓" : "مستقر →"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
     </motion.div>
   );
 }
@@ -1336,6 +1555,7 @@ function ResultsAnalyticsDashboard({ results }: { results: StudentResult[] }) {
               {activeTab === "subjects"   && <TabSubjects   results={results} />}
               {activeTab === "groups"     && <TabGroups     results={results} />}
               {activeTab === "trend"      && <TabTrend      results={results} />}
+              {activeTab === "progress"   && <TabProgress   results={results} />}
               {activeTab === "passed"     && <TabPassed     results={results} />}
               {activeTab === "failed"     && <TabFailed     results={results} />}
               {activeTab === "gender"     && <TabGender     results={results} />}

@@ -119,7 +119,11 @@ router.get("/dev-login", async (req: Request, res: Response) => {
   };
   const sid = await createSession(sessionData);
   setSessionCookie(res, sid);
-  res.redirect("/");
+  // Always redirect to the frontend origin so direct API-port access still lands on the app
+  const frontendUrl = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}/`
+    : "/";
+  res.redirect(frontendUrl);
 });
 
 router.get("/auth/user", (req: Request, res: Response) => {
