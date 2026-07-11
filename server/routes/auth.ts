@@ -24,15 +24,27 @@ const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 const router: IRouter = Router();
 
 function getOrigin(req: Request): string {
-  // Prefer the canonical Replit dev domain (injected by the platform, not spoofable via headers)
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  }
-  // Explicit override for non-Replit deployments (e.g. custom domain, production URL)
+  // Explicit override for non-Replit deployments (e.g. custom domain)
   if (process.env.APP_BASE_URL) {
     return process.env.APP_BASE_URL.replace(/\/$/, "");
   }
-  // Fallback: trust forwarded headers (only safe behind a controlled proxy)
+  // REPLIT_DOMAINS is a comma-separated allowlist injected by the platform in BOTH
+  // development (*.replit.dev) and production (*.replit.app / custom domains) — unlike
+  // REPLIT_DEV_DOMAIN, which is dev-only and left the OIDC redirect_uri broken in prod
+  // (falling through to proxy headers that reflect the internal artifact host, not the
+  // public domain, and got rejected by Replit's OIDC server as invalid_redirect_uri).
+  const replitDomains = process.env.REPLIT_DOMAINS?.split(",").map(d => d.trim()).filter(Boolean);
+  if (replitDomains?.length) {
+    const forwardedHost = (req.headers["x-forwarded-host"] as string | undefined) || req.headers.host;
+    const hostName = forwardedHost?.split(":")[0];
+    // If the request's Host matches one of our known domains, echo it back (handles
+    // multiple production domains); otherwise fall back to the first known domain.
+    if (hostName && replitDomains.includes(hostName)) {
+      return `https://${forwardedHost}`;
+    }
+    return `https://${replitDomains[0]}`;
+  }
+  // Last resort: trust forwarded headers (only safe behind a controlled proxy)
   const proto = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
   return `${proto}://${host}`;
