@@ -147,6 +147,15 @@ export const UpsertAbsenceBody = zod.object({
   unjustifiedHours: zod.number().int().min(0),
 });
 
+export const AssistantChatBody = zod.object({
+  messages: zod.array(zod.object({
+    role: zod.enum(["user", "assistant"]),
+    content: zod.string().min(1).max(4000),
+  })).min(1).max(30),
+});
+
+export const AssistantChatResponse = zod.object({ reply: zod.string() });
+
 // Legacy (kept for compat)
 export const UploadGradesResponse = zod.object({
   students: zod.array(zod.object({

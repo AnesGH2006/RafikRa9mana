@@ -10,7 +10,7 @@ import {
   ChevronDown, FileSpreadsheet, BarChart3, UserX, List, CheckSquare,
   User, BarChart2, CalendarOff, UserCheck, RefreshCw, AlertCircle,
   TrendingUp, Star, CreditCard, Upload, FileText,
-  CircleArrowRight, CircleDot, Trophy, FileBarChart,
+  CircleArrowRight, CircleDot, Trophy, FileBarChart, Bot,
 } from "lucide-react";
 import { QuickImportDialog } from "@/components/quick-import";
 import { motion, AnimatePresence } from "framer-motion";
@@ -38,6 +38,7 @@ import AnalyticsPage from "@/pages/analytics";
 import ReportsPage from "@/pages/reports";
 import SubscriptionPage from "@/pages/subscription";
 import AdminPage from "@/pages/admin";
+import AssistantPage from "@/pages/assistant";
 import PaywallScreen from "@/pages/paywall";
 import NotFound from "@/pages/not-found";
 
@@ -110,6 +111,13 @@ const SECTIONS: SectionDef[] = [
       { href: "/preorient/second",   icon: CircleDot,    labelKey: "nav.orient_second"   },
       { href: "/preorient/final",    icon: Trophy,       labelKey: "nav.orient_final"    },
       { href: "/preorient/reports",  icon: FileBarChart, labelKey: "nav.orient_reports"  },
+    ],
+  },
+  {
+    id: "assistant", icon: Bot, labelKey: "nav.assistant_section",
+    color: "text-fuchsia-400", gradient: "from-fuchsia-500 to-pink-700",
+    items: [
+      { href: "/assistant", icon: Bot, labelKey: "nav.assistant" },
     ],
   },
   {
@@ -461,6 +469,7 @@ function AppLayout() {
               <Route path="/preorient/final"    component={PreOrientFinalPage} />
               <Route path="/preorient/reports"  component={PreOrientReportsPage} />
               <Route path="/orientation">{() => <ComingSoon title="التوجيه النهائي" />}</Route>
+              <Route path="/assistant"           component={AssistantPage} />
               <Route path="/import"              component={ImportPage} />
               <Route path="/settings"            component={SettingsPage} />
               <Route path="/account">{() => <SettingsPage />}</Route>

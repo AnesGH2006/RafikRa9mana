@@ -46,6 +46,8 @@ export const translations: TranslationMap = {
   "nav.subscription": { en: "Subscription",    ar: "الاشتراك",         fr: "Abonnement" },
   "nav.analytics_section": { en: "Analytics", ar: "الإحصائيات والتحليل", fr: "Statistiques" },
   "nav.admin": { en: "Admin Panel", ar: "لوحة الإدارة", fr: "Administration" },
+  "nav.assistant_section": { en: "AI Assistant", ar: "المساعد الذكي", fr: "Assistant IA" },
+  "nav.assistant": { en: "Problems & Solutions", ar: "المشاكل والحلول", fr: "Problèmes & solutions" },
 
   // Login
   "login.hero":     { en: "Manage your CEM school efficiently", ar: "أدر متوسطتك بكفاءة", fr: "Gérez votre CEM efficacement" },

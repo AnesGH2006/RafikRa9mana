@@ -7,6 +7,7 @@ import gradesRouter from "./grades.js";
 import bemRouter from "./bem.js";
 import adminRouter from "./admin.js";
 import absencesRouter from "./absences.js";
+import assistantRouter from "./assistant.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(gradesRouter);
 router.use(bemRouter);
 router.use(adminRouter);
 router.use(absencesRouter);
+router.use(assistantRouter);
 
 export default router;
