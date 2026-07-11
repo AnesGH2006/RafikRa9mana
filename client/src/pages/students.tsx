@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { useLanguage } from "@/contexts/language-provider";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -238,7 +238,95 @@ function StudentAnalytics({ students }: { students: Student[] }) {
         </Card>
       )}
     </div>
+
+    {/* ── Row 3: Boys/girls count per group (فوج) within each level (مستوى) ── */}
+    <GroupGenderBreakdown students={students} />
     </motion.div>
+  );
+}
+
+function GroupGenderBreakdown({ students }: { students: Student[] }) {
+  const breakdown = LEVELS.map((lvl, i) => {
+    const lvlStudents = students.filter(s => s.niveau === lvl);
+    if (lvlStudents.length === 0) return null;
+    const groupNames = [...new Set(lvlStudents.map(s => s.classe))].sort((a, b) => a.localeCompare(b, "ar"));
+    const groups = groupNames.map(name => {
+      const gs = lvlStudents.filter(s => s.classe === name);
+      return {
+        name,
+        boys: gs.filter(s => s.sexe === "M").length,
+        girls: gs.filter(s => s.sexe === "F").length,
+        total: gs.length,
+      };
+    });
+    return {
+      level: lvl,
+      label: LEVEL_LABELS[lvl],
+      color: LEVEL_COLORS[i],
+      boys: lvlStudents.filter(s => s.sexe === "M").length,
+      girls: lvlStudents.filter(s => s.sexe === "F").length,
+      total: lvlStudents.length,
+      groups,
+    };
+  }).filter((d): d is NonNullable<typeof d> => d !== null);
+
+  if (breakdown.length === 0) return null;
+
+  return (
+    <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+      <CardHeader className="pb-1 pt-3 px-4">
+        <CardTitle className="text-xs font-bold text-muted-foreground">توزيع الذكور والإناث حسب الفوج في كل مستوى</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0 pb-3">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/60">
+              <tr>
+                <th className="px-4 py-2 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">المستوى</th>
+                <th className="px-4 py-2 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">الفوج</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-sky-600 uppercase tracking-wider whitespace-nowrap">ذكور</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-pink-600 uppercase tracking-wider whitespace-nowrap">إناث</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">المجموع</th>
+              </tr>
+            </thead>
+            <tbody>
+              {breakdown.map((lvl, li) => (
+                <Fragment key={lvl.level}>
+                  {lvl.groups.map((g, gi) => (
+                    <motion.tr key={`${lvl.level}-${g.name}`}
+                      initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: Math.min((li * 4 + gi) * 0.02, 0.4), duration: 0.25 }}
+                      className={`border-t ${gi === 0 ? "border-t-2" : ""} hover:bg-muted/40 transition-colors`}
+                      style={gi === 0 ? { borderTopColor: lvl.color } : undefined}
+                    >
+                      {gi === 0 && (
+                        <td rowSpan={lvl.groups.length} className="px-4 py-2 align-top">
+                          <Badge className="font-bold" style={{ backgroundColor: `${lvl.color}20`, color: lvl.color, border: `1px solid ${lvl.color}40` }}>
+                            {lvl.label}
+                          </Badge>
+                        </td>
+                      )}
+                      <td className="px-4 py-2">
+                        <Badge variant="outline" className="font-bold">{g.name}</Badge>
+                      </td>
+                      <td className="px-4 py-2 text-center font-semibold text-sky-600">{g.boys}</td>
+                      <td className="px-4 py-2 text-center font-semibold text-pink-600">{g.girls}</td>
+                      <td className="px-4 py-2 text-center font-bold text-foreground">{g.total}</td>
+                    </motion.tr>
+                  ))}
+                  <tr key={`${lvl.level}-total`} className="border-t bg-muted/30 font-bold">
+                    <td className="px-4 py-2" colSpan={2}>إجمالي {lvl.label}</td>
+                    <td className="px-4 py-2 text-center text-sky-700">{lvl.boys}</td>
+                    <td className="px-4 py-2 text-center text-pink-700">{lvl.girls}</td>
+                    <td className="px-4 py-2 text-center">{lvl.total}</td>
+                  </tr>
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
