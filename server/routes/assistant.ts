@@ -24,15 +24,15 @@ router.post("/assistant/chat", async (req, res) => {
     return;
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!process.env.GROQ_API_KEY) {
     res.status(500).json({ error: "المساعد الذكي غير مُهيّأ بعد" });
     return;
   }
 
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const client = new OpenAI({ apiKey: process.env.GROQ_API_KEY, baseURL: "https://api.groq.com/openai/v1" });
     const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "llama-3.3-70b-versatile",
       temperature: 0.4,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },

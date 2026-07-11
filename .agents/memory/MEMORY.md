@@ -2,3 +2,4 @@
 - [Framer Motion TS Quirks](framer-motion-ts.md) — ease arrays and custom variant functions cause tsc errors; use "easeOut" string + `as any` for custom variants
 - [Reports Page Design](reports-design.md) — comprehensive reports page uses two-column layout: left panel with section toggles (10 sections), right main area; KpiCard component uses gradient bg; fetches /api/stats + /api/school + /api/absences + /api/results in parallel
 - [UI Beauty Conventions](ui-beauty.md) — bg-dot-grid utility in index.css for subtle background texture; page headers use gradient text + icon badge pattern; KPI cards use bg-gradient-to-br with white/20 radial glow overlay
+- [Free LLM via Groq](free-llm-groq.md) — no Replit-managed passthrough billing exists for text/chat LLMs; Groq's free OpenAI-compatible API is the fallback when user wants a no-cost assistant
