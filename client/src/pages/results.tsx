@@ -1418,20 +1418,29 @@ function extractNiveauClasseFromText(text: string): { niveau: string | null; cla
   let niveau: string | null = null;
   let classe: string | null = null;
 
-  // Niveau detection — order matters (longer matches first)
+  // Niveau detection — order matters (longer/more specific first)
   const digitMatch = text.match(/(\d)\s*متوسط/);
   if (digitMatch) {
     niveau = `${digitMatch[1]}AM`;
-  } else if (/رابع\s*متوسط|السنة الرابعة|4\s*ème/.test(text)) niveau = "4AM";
-  else if (/ثالث\s*متوسط|السنة الثالثة|3\s*ème/.test(text)) niveau = "3AM";
-  else if (/ثاني\s*متوسط|السنة الثانية|2\s*ème/.test(text)) niveau = "2AM";
-  else if (/أول\s*متوسط|اول\s*متوسط|الأولى|الاولى|1\s*ème/.test(text)) niveau = "1AM";
+  } else if (/رابع\s*متوسط|السنة\s*الرابعة|4\s*ème/.test(text)) niveau = "4AM";
+  else if (/ثالث\s*متوسط|السنة\s*الثالثة|3\s*ème/.test(text)) niveau = "3AM";
+  else if (/ثاني\s*متوسط|السنة\s*الثانية|2\s*ème/.test(text)) niveau = "2AM";
+  else if (/أول\s*متوسط|اول\s*متوسط|الأولى\s*متوسط|الاولى\s*متوسط|1\s*ème/.test(text)) niveau = "1AM";
+  // Filename / short codes: "4AM", "3AM", "2AM", "1AM" (case-insensitive)
+  if (!niveau) {
+    const amCode = text.match(/\b([1-4])\s*AM\b/i);
+    if (amCode) niveau = `${amCode[1]}AM`;
+  }
 
-  // Classe/foj detection
-  const classeMatch = text.match(/(?:الفوج|فوج|القسم|قسم|الشعبة)\s*[:\s]?\s*(\d+)/)
-    ?? text.match(/(\d+)\s*(?:الفوج|فوج)/)
-    ?? text.match(/[Cc]lasse\s*[:\s]?\s*(\d+)/);
-  if (classeMatch) classe = classeMatch[1]!.replace(/^0+/, "") || "1";
+  // Classe/foj detection — Arabic keywords first, then Latin, then filename patterns
+  const classeMatch =
+    text.match(/(?:الفوج|فوج|القسم|قسم|الشعبة)\s*[:\s]?\s*0*(\d+)/) ??
+    text.match(/0*(\d+)\s*(?:الفوج|فوج)/) ??
+    text.match(/[Cc]lasse\s*[:\s]?\s*0*(\d+)/) ??
+    text.match(/\b(?:foj|Foj|FOJ)\s*[_\-]?\s*0*(\d+)\b/) ??
+    // Filename patterns like "3AM2", "3AM_2", "3AM-2" (digit after AM code = classe)
+    text.match(/\b[1-4]AM[_\-\s]?0*(\d+)\b/i);
+  if (classeMatch) classe = String(parseInt(classeMatch[1]!, 10));
 
   return { niveau, classe };
 }
@@ -1482,10 +1491,17 @@ function buildColMeta(headers: string[]): ColMeta[] {
   });
 }
 
-function parseHTMLExcel(text: string): ParsedStudent[] {
+function parseHTMLExcel(text: string, filename?: string): ParsedStudent[] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, "text/html");
   const tableRows = Array.from(doc.querySelectorAll("tr"));
+
+  // Broad fallbacks: full document text and filename
+  const fullDocText = (doc.body?.textContent ?? "").replace(/\s+/g, " ");
+  const fromDoc = extractNiveauClasseFromText(fullDocText);
+  const fromFilename = filename
+    ? extractNiveauClasseFromText(filename.replace(/[_\-\.]/g, " "))
+    : { niveau: null, classe: null };
 
   // Find ALL header rows (rows containing "الرقم" cell) — handles multi-table files
   const headerIndices: number[] = [];
@@ -1507,6 +1523,10 @@ function parseHTMLExcel(text: string): ParsedStudent[] {
     const metaStart = hi === 0 ? 0 : headerIndices[hi - 1]! + 1;
     const { niveau: tableNiveau, classe: tableClasse } =
       extractNiveauClasse(tableRows.slice(metaStart, headerRowIdx));
+
+    // Fallback cascade: per-table metadata → full doc → filename
+    const resolvedNiveau = tableNiveau ?? fromDoc.niveau ?? fromFilename.niveau;
+    const resolvedClasse = tableClasse ?? fromDoc.classe ?? fromFilename.classe;
 
     const headers = Array.from(tableRows[headerRowIdx]!.querySelectorAll("td,th")).map(c =>
       (c.textContent ?? "").replace(/\s+/g, " ").trim()
@@ -1548,8 +1568,8 @@ function parseHTMLExcel(text: string): ParsedStudent[] {
         nomPrenom: cells[iName] ?? "",
         gender: genderStr,
         sexe: normalizeGenderStr(genderStr),
-        niveau: tableNiveau,
-        classe: tableClasse,
+        niveau: resolvedNiveau,
+        classe: resolvedClasse,
         grades, t1Avg: triAvgs[1], t2Avg: triAvgs[2], t3Avg: triAvgs[3],
         annualAvg,
         passed: annualAvg !== null ? annualAvg >= 10 : null,
@@ -1674,14 +1694,6 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
   const [fileCount, setFileCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
-  // Manual override for niveau+classe when auto-extraction from file fails
-  const [overrideNiveau, setOverrideNiveau] = useState<string>("");
-  const [overrideClasse, setOverrideClasse] = useState<string>("");
-
-  // Derived: how many students are missing niveau/classe from the file
-  const missingNiveauClasse = students.filter(s => !s.niveau || !s.classe).length;
-  // Whether user needs to fill override (any student missing info)
-  const needsOverride = missingNiveauClasse > 0;
 
   const handleFiles = async (files: FileList | File[]) => {
     const arr = Array.from(files).filter(f => /\.(xls|xlsx|html?|htm)$/i.test(f.name));
@@ -1692,7 +1704,7 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
     for (const file of arr) {
       try {
         const text = await file.text();
-        const parsed = parseHTMLExcel(text);
+        const parsed = parseHTMLExcel(text, file.name);
         all.push(...parsed);
       } catch (e: any) {
         errs.push(file.name);
@@ -1711,11 +1723,6 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
     const deduped = [...byKey.values()];
     setStudents(deduped);
     setFileCount(arr.length);
-    // Pre-fill override dropdowns from auto-extracted values (first student that has them)
-    const sample = deduped.find(s => s.niveau);
-    if (sample?.niveau) setOverrideNiveau(sample.niveau);
-    const sampleC = deduped.find(s => s.classe);
-    if (sampleC?.classe) setOverrideClasse(sampleC.classe);
     setStatus("preview");
   };
 
@@ -1728,9 +1735,8 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
         students: students.map(s => ({
           studentName: s.nomPrenom,
           raqm: s.raqm,
-          // Use per-student niveau/classe if available; fall back to manual override
-          niveau: s.niveau ?? (overrideNiveau || undefined),
-          classe: s.classe ?? (overrideClasse || undefined),
+          niveau: s.niveau ?? undefined,
+          classe: s.classe ?? undefined,
           sexe: s.sexe,
           annualPassed: s.passed,
           trimesters: {
@@ -1822,34 +1828,6 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
                 </div>
               </div>
 
-              {/* Niveau + classe override — shown when file is missing this info */}
-              {needsOverride && (
-                <div className="mb-3 p-3 rounded-lg border border-amber-300/60 bg-amber-50/40 dark:bg-amber-950/20 dark:border-amber-700/40">
-                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2">
-                    ⚠ لم يتم التعرف على المستوى/الفوج تلقائياً — يرجى تحديدهما يدوياً ({missingNiveauClasse} تلميذ)
-                  </p>
-                  <div className="flex gap-2">
-                    <Select value={overrideNiveau} onValueChange={setOverrideNiveau}>
-                      <SelectTrigger className="flex-1 h-8 text-xs">
-                        <SelectValue placeholder="المستوى" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {LEVELS.map(l => <SelectItem key={l} value={l}>{LEVEL_LABELS[l]}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Select value={overrideClasse} onValueChange={setOverrideClasse}>
-                      <SelectTrigger className="w-28 h-8 text-xs">
-                        <SelectValue placeholder="الفوج" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {["1","2","3","4","5","6","7","8","9","10"].map(c => (
-                          <SelectItem key={c} value={c}>فوج {c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
               <div className="rounded-lg border overflow-hidden max-h-72 overflow-y-auto text-sm">
                 <table className="w-full">
                   <thead className="bg-muted/60 sticky top-0 z-10">
@@ -1884,8 +1862,7 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
                 <Button variant="outline" onClick={() => { setStudents([]); setStatus("idle"); }}><X className="w-4 h-4 me-1" /> إلغاء</Button>
                 <Button
                   onClick={handleImport}
-                  disabled={needsOverride && (!overrideNiveau || !overrideClasse)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 disabled:opacity-50">
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
                   <Upload className="w-4 h-4" /> حفظ نتائج {students.length} تلميذ
                 </Button>
               </div>
