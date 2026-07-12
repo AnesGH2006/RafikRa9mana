@@ -46,6 +46,7 @@ export const translations: TranslationMap = {
   "nav.subscription": { en: "Subscription",    ar: "الاشتراك",         fr: "Abonnement" },
   "nav.analytics_section": { en: "Analytics", ar: "الإحصائيات والتحليل", fr: "Statistiques" },
   "nav.admin": { en: "Admin Panel", ar: "لوحة الإدارة", fr: "Administration" },
+  "nav.orient_wishes": { en: "Student Wishes", ar: "رغبات التوجيه", fr: "Vœux d'orientation" },
   "nav.assistant_section": { en: "AI Assistant", ar: "المساعد الذكي", fr: "Assistant IA" },
   "nav.assistant": { en: "Problems & Solutions", ar: "المشاكل والحلول", fr: "Problèmes & solutions" },
 

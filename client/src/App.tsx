@@ -32,6 +32,7 @@ import PreOrientFirstPage from "@/pages/preorient-first";
 import PreOrientSecondPage from "@/pages/preorient-second";
 import PreOrientFinalPage from "@/pages/preorient-final";
 import PreOrientReportsPage from "@/pages/preorient-reports";
+import OrientationWishesPage from "@/pages/orientation-wishes";
 import TransferResultsPage from "@/pages/transfer-results";
 import CouncilsPage from "@/pages/councils";
 import AnalyticsPage from "@/pages/analytics";
@@ -108,6 +109,7 @@ const SECTIONS: SectionDef[] = [
     items: [
       { href: "/preorient/tracking", icon: ClipboardList, labelKey: "nav.orient_tracking" },
       { href: "/preorient/first",    icon: CircleArrowRight, labelKey: "nav.orient_first"    },
+      { href: "/preorient/wishes",   icon: ClipboardList, labelKey: "nav.orient_wishes"   },
       { href: "/preorient/second",   icon: CircleDot,    labelKey: "nav.orient_second"   },
       { href: "/preorient/final",    icon: Trophy,       labelKey: "nav.orient_final"    },
       { href: "/preorient/reports",  icon: FileBarChart, labelKey: "nav.orient_reports"  },
@@ -465,6 +467,7 @@ function AppLayout() {
               <Route path="/admin"               component={AdminPage} />
               <Route path="/preorient/tracking" component={PreOrientTrackingPage} />
               <Route path="/preorient/first"    component={PreOrientFirstPage} />
+              <Route path="/preorient/wishes"   component={OrientationWishesPage} />
               <Route path="/preorient/second"   component={PreOrientSecondPage} />
               <Route path="/preorient/final"    component={PreOrientFinalPage} />
               <Route path="/preorient/reports"  component={PreOrientReportsPage} />

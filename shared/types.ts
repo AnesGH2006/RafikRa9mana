@@ -116,6 +116,21 @@ export interface SubjectDef {
   levels?: Niveau[];
 }
 
+export interface OrientationWish {
+  id: string;
+  annee: string;
+  nationalId: string | null;
+  lastName: string;
+  firstName: string;
+  birthDate: string | null;
+  choices: string[];
+  studentId: string | null;
+  matchedStudent: Student | null;
+  annualAvg: number | null;
+  suggestedTrack: string | null;
+  firstChoiceMatchesSuggestion: boolean | null;
+}
+
 export interface SubjectAverage {
   subject: string;
   arLabel: string;

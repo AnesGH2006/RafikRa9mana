@@ -156,6 +156,13 @@ export const AssistantChatBody = zod.object({
 
 export const AssistantChatResponse = zod.object({ reply: zod.string() });
 
+export const ImportOrientationWishesResponse = zod.object({
+  success: zod.boolean(),
+  imported: zod.number(),
+  matched: zod.number(),
+  unmatched: zod.array(zod.string()),
+});
+
 // Legacy (kept for compat)
 export const UploadGradesResponse = zod.object({
   students: zod.array(zod.object({

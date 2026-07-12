@@ -128,3 +128,19 @@ export const dailyAbsenceReportsTable = pgTable("daily_absence_reports", {
 
 export type DailyAbsenceReport = typeof dailyAbsenceReportsTable.$inferSelect;
 export type InsertDailyAbsenceReport = typeof dailyAbsenceReportsTable.$inferInsert;
+
+export const orientationWishesTable = pgTable("orientation_wishes", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
+  nationalId: varchar("national_id", { length: 40 }),
+  lastName: varchar("last_name", { length: 255 }).notNull(),
+  firstName: varchar("first_name", { length: 255 }).notNull(),
+  birthDate: varchar("birth_date", { length: 30 }),
+  choices: jsonb("choices").notNull().$type<string[]>(),
+  studentId: varchar("student_id", { length: 64 }).references(() => studentsTable.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type OrientationWish = typeof orientationWishesTable.$inferSelect;
+export type InsertOrientationWish = typeof orientationWishesTable.$inferInsert;

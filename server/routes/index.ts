@@ -8,6 +8,7 @@ import bemRouter from "./bem.js";
 import adminRouter from "./admin.js";
 import absencesRouter from "./absences.js";
 import assistantRouter from "./assistant.js";
+import orientationRouter from "./orientation.js";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(bemRouter);
 router.use(adminRouter);
 router.use(absencesRouter);
 router.use(assistantRouter);
+router.use(orientationRouter);
 
 export default router;
