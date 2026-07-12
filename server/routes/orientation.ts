@@ -5,7 +5,6 @@ import * as XLSX from "xlsx";
 import { eq, and, inArray } from "drizzle-orm";
 import { db, studentsTable, gradesTable, orientationWishesTable } from "../../shared/db.js";
 import { ImportOrientationWishesResponse } from "../../shared/schemas.js";
-import { getSubjectsForLevel, calcWeightedAvg } from "../../shared/subjects.js";
 import type { Niveau } from "../../shared/types.js";
 
 const router: IRouter = Router();
@@ -32,22 +31,12 @@ function parseChoices(cell: string): string[] {
   return parts;
 }
 
-const SCIENCE_SUBJECTS = ["maths", "svt", "physique"];
-const LITERARY_SUBJECTS = ["arabe", "francais", "histoire_geo", "anglais", "islam"];
-
-function suggestTrack(annualAvg: number | null, scores: Record<string, number>): string | null {
+function suggestTrack(annualAvg: number | null, _scores: Record<string, number>): string | null {
   if (annualAvg === null) return null;
-  if (annualAvg < 8) return "تكوين مهني";
+  if (annualAvg < 8)  return "تكوين مهني";
   if (annualAvg < 10) return "تعليم مهني";
-
-  const subs = getSubjectsForLevel("4AM");
-  const scienceAvg = calcWeightedAvg(scores, subs.filter(s => SCIENCE_SUBJECTS.includes(s.key)));
-  const literaryAvg = calcWeightedAvg(scores, subs.filter(s => LITERARY_SUBJECTS.includes(s.key)));
-
-  if (scienceAvg !== null && literaryAvg !== null && literaryAvg > scienceAvg) {
-    return "جذع مشترك آداب";
-  }
-  return "جذع مشترك علوم و تكنولوجيا";
+  if (annualAvg >= 14) return "جذع مشترك علوم";
+  return "جذع مشترك آداب وفلسفة";
 }
 
 // ── POST /api/orientation/wishes/import ────────────────────────────────────────
