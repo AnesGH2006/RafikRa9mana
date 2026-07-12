@@ -4,7 +4,8 @@ A full-stack web app for Algerian school administrators to log in, choose a subs
 
 ## Run & Operate
 
-- `pnpm -w run dev:client` — run the Vite frontend (port 20053)
+- `pnpm -w run dev:client` — run the Vite frontend (port 5000)
+- `pnpm run dev` — run both frontend and backend together (recommended)
 - `pnpm -w run dev:server` — run the Express API server (port 8080)
 - `pnpm run typecheck` — typecheck all code
 - `pnpm run db:push` — push schema changes to the database

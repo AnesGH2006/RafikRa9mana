@@ -23,7 +23,7 @@ outputType = "webview"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pnpm -w run dev:client"
-waitForPort = 20053
+waitForPort = 5000
 
 [[workflows.workflow]]
 name = "artifacts/api-server: API Server"
@@ -47,7 +47,7 @@ outputType = "webview"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pnpm run dev"
-waitForPort = 20053
+waitForPort = 5000
 
 [[workflows.workflow]]
 name = "artifacts/school-video: Promo Video"
