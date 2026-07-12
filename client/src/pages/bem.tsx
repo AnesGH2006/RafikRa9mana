@@ -7,6 +7,8 @@ import {
   FileSpreadsheet, RotateCcw, Printer, BarChart3, TrendingUp,
   Award, Users, Target, Zap, BookOpen, ArrowUpRight, ArrowDownRight,
   ChevronUp, ChevronDown, Minus, Search, Filter, Clock, ChevronRight,
+  LineChart, GraduationCap, CheckCircle2, XCircle, ArrowUpCircle,
+  Repeat, ListChecks, UsersRound, CalendarRange, type LucideIcon,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
