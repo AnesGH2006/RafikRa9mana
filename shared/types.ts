@@ -131,6 +131,12 @@ export interface OrientationWish {
   firstChoiceMatchesSuggestion: boolean | null;
 }
 
+export interface GenderStats {
+  avg: number;
+  passCount: number;
+  total: number;
+}
+
 export interface SubjectAverage {
   subject: string;
   arLabel: string;
@@ -138,5 +144,10 @@ export interface SubjectAverage {
   min: number;
   max: number;
   passCount: number;
+  failCount: number;
   total: number;
+  failRate: number;
+  boys: GenderStats;
+  girls: GenderStats;
+  improvement: number | null; // T3 avg − T1 avg
 }

@@ -384,15 +384,46 @@ router.get("/results/subjects", async (req, res): Promise<void> => {
   if (!students.length) { res.json([]); return; }
 
   const studentIds = students.map(s => s.id);
-  const gradeConds = [eq(gradesTable.userId, userId), inArray(gradesTable.studentId, studentIds)];
-  if (trimestre) gradeConds.push(eq(gradesTable.trimestre, parseInt(trimestre)));
-  const grades = await db.select().from(gradesTable).where(and(...gradeConds));
+  const studentMap = Object.fromEntries(students.map(s => [s.id, s]));
 
+  // Fetch ALL grades (all trimesters) for improvement computation
+  const allGrades = await db.select().from(gradesTable)
+    .where(and(eq(gradesTable.userId, userId), inArray(gradesTable.studentId, studentIds)));
+
+  // Filter to requested trimester for main stats (or use all if no filter)
+  const grades = trimestre
+    ? allGrades.filter(g => g.trimestre === parseInt(trimestre))
+    : allGrades;
+
+  // Main stats: bySubject scores, gender split, trimester split (for improvement)
   const bySubject: Record<string, number[]> = {};
-  for (const g of grades) {
-    bySubject[g.subject] ??= [];
-    bySubject[g.subject]!.push(parseFloat(String(g.score)));
+  const bySubjectGender: Record<string, { M: number[]; F: number[] }> = {};
+  const bySubjectTri: Record<string, Record<string, number[]>> = {}; // subject → tri → scores
+
+  for (const g of allGrades) {
+    if (g.subject === AVG_SUBJECT) continue;
+    bySubjectTri[g.subject] ??= {};
+    bySubjectTri[g.subject][String(g.trimestre)] ??= [];
+    bySubjectTri[g.subject][String(g.trimestre)]!.push(parseFloat(String(g.score)));
   }
+
+  for (const g of grades) {
+    if (g.subject === AVG_SUBJECT) continue;
+    const score = parseFloat(String(g.score));
+    bySubject[g.subject] ??= [];
+    bySubject[g.subject]!.push(score);
+    bySubjectGender[g.subject] ??= { M: [], F: [] };
+    const sex = studentMap[g.studentId]?.sexe as "M" | "F" | undefined;
+    if (sex === "M") bySubjectGender[g.subject]!.M.push(score);
+    else if (sex === "F") bySubjectGender[g.subject]!.F.push(score);
+  }
+
+  const calcStats = (scores: number[]) => {
+    const avg = scores.length > 0
+      ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
+      : 0;
+    return { avg, passCount: scores.filter(v => v >= 10).length, total: scores.length };
+  };
 
   const subs = getSubjectsForLevel((niveau as Niveau) ?? "4AM");
   const result = subs.map(s => {
@@ -400,12 +431,30 @@ router.get("/results/subjects", async (req, res): Promise<void> => {
     const avg = scores.length > 0
       ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
       : 0;
+    const passCount = scores.filter(v => v >= 10).length;
+    const failCount = scores.length - passCount;
+    const failRate = scores.length > 0 ? Math.round((failCount / scores.length) * 100) : 0;
+
+    const gd = bySubjectGender[s.key] ?? { M: [], F: [] };
+    const boys = calcStats(gd.M);
+    const girls = calcStats(gd.F);
+
+    // Improvement: T3 avg − T1 avg (uses all trimesters regardless of filter)
+    const triData = bySubjectTri[s.key] ?? {};
+    const t1Scores = triData["1"] ?? [];
+    const t3Scores = triData["3"] ?? [];
+    const t1Avg = t1Scores.length > 0 ? t1Scores.reduce((a, b) => a + b, 0) / t1Scores.length : null;
+    const t3Avg = t3Scores.length > 0 ? t3Scores.reduce((a, b) => a + b, 0) / t3Scores.length : null;
+    const improvement = (t1Avg !== null && t3Avg !== null)
+      ? Math.round((t3Avg - t1Avg) * 100) / 100
+      : null;
+
     return {
       subject: s.key, arLabel: s.arLabel, avg,
       min: scores.length ? Math.min(...scores) : 0,
       max: scores.length ? Math.max(...scores) : 0,
-      passCount: scores.filter(v => v >= 10).length,
-      total: scores.length,
+      passCount, failCount, total: scores.length,
+      failRate, boys, girls, improvement,
     };
   }).filter(s => s.total > 0);
 

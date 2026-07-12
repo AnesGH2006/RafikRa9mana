@@ -285,7 +285,9 @@ function GroupGenderBreakdown({ students }: { students: Student[] }) {
                 <th className="px-4 py-2 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">المستوى</th>
                 <th className="px-4 py-2 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">الفوج</th>
                 <th className="px-4 py-2 text-center text-xs font-semibold text-sky-600 uppercase tracking-wider whitespace-nowrap">ذكور</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-sky-400 uppercase tracking-wider whitespace-nowrap">%</th>
                 <th className="px-4 py-2 text-center text-xs font-semibold text-pink-600 uppercase tracking-wider whitespace-nowrap">إناث</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-pink-400 uppercase tracking-wider whitespace-nowrap">%</th>
                 <th className="px-4 py-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">المجموع</th>
               </tr>
             </thead>
@@ -310,14 +312,26 @@ function GroupGenderBreakdown({ students }: { students: Student[] }) {
                         <Badge variant="outline" className="font-bold">{g.name}</Badge>
                       </td>
                       <td className="px-4 py-2 text-center font-semibold text-sky-600">{g.boys}</td>
+                      <td className="px-4 py-2 text-center text-xs text-sky-500 font-medium">
+                        {g.total > 0 ? Math.round((g.boys / g.total) * 100) : 0}%
+                      </td>
                       <td className="px-4 py-2 text-center font-semibold text-pink-600">{g.girls}</td>
+                      <td className="px-4 py-2 text-center text-xs text-pink-500 font-medium">
+                        {g.total > 0 ? Math.round((g.girls / g.total) * 100) : 0}%
+                      </td>
                       <td className="px-4 py-2 text-center font-bold text-foreground">{g.total}</td>
                     </motion.tr>
                   ))}
                   <tr key={`${lvl.level}-total`} className="border-t bg-muted/30 font-bold">
                     <td className="px-4 py-2" colSpan={2}>إجمالي {lvl.label}</td>
                     <td className="px-4 py-2 text-center text-sky-700">{lvl.boys}</td>
+                    <td className="px-4 py-2 text-center text-xs text-sky-500 font-semibold">
+                      {lvl.total > 0 ? Math.round((lvl.boys / lvl.total) * 100) : 0}%
+                    </td>
                     <td className="px-4 py-2 text-center text-pink-700">{lvl.girls}</td>
+                    <td className="px-4 py-2 text-center text-xs text-pink-500 font-semibold">
+                      {lvl.total > 0 ? Math.round((lvl.girls / lvl.total) * 100) : 0}%
+                    </td>
                     <td className="px-4 py-2 text-center">{lvl.total}</td>
                   </tr>
                 </Fragment>

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Compass, GraduationCap, Trophy } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL;
-const CURRENT_YEAR = "2024-2025";
+const CURRENT_YEAR = "2025-2026";
 
 interface ResultRow {
   student: { id: string; firstName: string; lastName: string; niveau: string; classe: string; };
@@ -19,10 +19,8 @@ function avgColor(v: number) {
   return "text-orange-600 dark:text-orange-400";
 }
 function orientTrack(avg: number) {
-  if (avg >= 16) return { label: "علوم تجريبية", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" };
-  if (avg >= 14) return { label: "رياضيات", color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" };
-  if (avg >= 12) return { label: "آداب وفلسفة", color: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300" };
-  return { label: "تسيير واقتصاد", color: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" };
+  if (avg >= 14) return { label: "جذع مشترك علوم", color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" };
+  return { label: "جذع مشترك آداب وفلسفة", color: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300" };
 }
 
 export default function OrientationResultsPage() {

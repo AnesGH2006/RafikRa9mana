@@ -3,7 +3,7 @@ import { useLanguage } from "@/contexts/language-provider";
 import { motion, AnimatePresence } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, TrendingUp, TrendingDown, Award, Printer } from "lucide-react";
+import { BarChart3, TrendingUp, TrendingDown, Award, Printer, Users, AlertTriangle } from "lucide-react";
 import type { SubjectAverage } from "@shared/types";
 import type { Niveau } from "@shared/types";
 import {
@@ -81,6 +81,19 @@ export default function SubjectsPage() {
     ? Math.round((data.reduce((s, d) => s + (d.total > 0 ? d.passCount / d.total : 0), 0) / data.length) * 100)
     : null;
 
+  const overallFailRate = data.length > 0
+    ? Math.round((data.reduce((s, d) => s + (d.total > 0 ? d.failCount / d.total : 0), 0) / data.length) * 100)
+    : null;
+
+  // Most improved and most regressed subjects
+  const withImprovement = data.filter(d => d.improvement !== null);
+  const mostImproved = withImprovement.length > 0
+    ? withImprovement.reduce((a, b) => (b.improvement! > a.improvement! ? b : a))
+    : null;
+  const mostRegressed = withImprovement.length > 0
+    ? withImprovement.reduce((a, b) => (b.improvement! < a.improvement! ? b : a))
+    : null;
+
   // Chart data
   const barData = sorted.map(s => ({
     name: s.arLabel,
@@ -93,6 +106,16 @@ export default function SubjectsPage() {
     value: Math.round(s.avg * 10) / 10,
     fullMark: 20,
   }));
+
+  // Gender comparison chart data
+  const genderBarData = sorted.map(s => ({
+    name: s.arLabel.slice(0, 8),
+    ذكور: s.boys.total > 0 ? Math.round(s.boys.avg * 100) / 100 : 0,
+    إناث: s.girls.total > 0 ? Math.round(s.girls.avg * 100) / 100 : 0,
+  }));
+
+  // Failure rate sorted
+  const failSorted = [...data].sort((a, b) => b.failRate - a.failRate);
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
@@ -239,39 +262,246 @@ export default function SubjectsPage() {
             <p>{t("subjects.noData")}</p>
           </motion.div>
         ) : (
-          <motion.div key="bars" className="space-y-2">
-            {sorted.map((s, i) => (
-              <motion.div key={s.subject}
-                initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05, duration: 0.35 }}
-                whileHover={{ x: 3 }}
-                className="flex items-center gap-4 bg-card rounded-xl border p-3.5 hover:shadow-md transition-shadow"
-              >
-                <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0 text-xs font-bold text-muted-foreground">
-                  {i + 1}
-                </div>
-                <div className="w-32 shrink-0">
-                  <p className="font-semibold text-sm">{s.arLabel}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {s.passCount}/{s.total} ناجح
-                  </p>
-                </div>
-                <div className="flex-1 relative h-5 rounded-full bg-muted overflow-hidden">
-                  <motion.div
-                    className={`h-full rounded-full bg-gradient-to-r ${barFill(s.avg)}`}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${(s.avg / 20) * 100}%` }}
-                    transition={{ delay: i * 0.05 + 0.2, duration: 0.9, ease: "easeOut" as any }}
-                  />
-                </div>
-                <div className="w-14 text-end shrink-0">
-                  <span className={`font-bold text-base ${s.avg >= 10 ? "text-emerald-600" : "text-red-500"}`}>
-                    {s.avg.toFixed(2)}
-                  </span>
-                  <p className="text-[10px] text-muted-foreground">/20</p>
-                </div>
+          <motion.div key="bars" className="space-y-6">
+
+            {/* ── Subject list ── */}
+            <div className="space-y-2">
+              {sorted.map((s, i) => (
+                <motion.div key={s.subject}
+                  initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05, duration: 0.35 }}
+                  whileHover={{ x: 3 }}
+                  className="flex items-center gap-4 bg-card rounded-xl border p-3.5 hover:shadow-md transition-shadow"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0 text-xs font-bold text-muted-foreground">
+                    {i + 1}
+                  </div>
+                  <div className="w-32 shrink-0">
+                    <p className="font-semibold text-sm">{s.arLabel}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {s.passCount}/{s.total} ناجح · {s.failRate}% رسوب
+                    </p>
+                  </div>
+                  <div className="flex-1 relative h-5 rounded-full bg-muted overflow-hidden">
+                    <motion.div
+                      className={`h-full rounded-full bg-gradient-to-r ${barFill(s.avg)}`}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(s.avg / 20) * 100}%` }}
+                      transition={{ delay: i * 0.05 + 0.2, duration: 0.9, ease: "easeOut" as any }}
+                    />
+                  </div>
+                  <div className="flex items-end gap-2 shrink-0">
+                    <div className="text-end">
+                      <span className={`font-bold text-base ${s.avg >= 10 ? "text-emerald-600" : "text-red-500"}`}>
+                        {s.avg.toFixed(2)}
+                      </span>
+                      <p className="text-[10px] text-muted-foreground">/20</p>
+                    </div>
+                    {s.improvement !== null && (
+                      <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-md ${
+                        s.improvement > 0
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                          : s.improvement < 0
+                            ? "bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400"
+                            : "bg-muted text-muted-foreground"
+                      }`}>
+                        {s.improvement > 0 ? "▲" : s.improvement < 0 ? "▼" : "─"}
+                        {Math.abs(s.improvement).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* ── Gender comparison ── */}
+            {data.some(d => d.boys.total > 0 && d.girls.total > 0) && (
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <Users className="w-4 h-4 text-violet-500" />
+                      مقارنة معدل المواد حسب الجنس
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-4">
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={genderBarData} barSize={14} margin={{ top: 5, bottom: 40, left: -10, right: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
+                        <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-35} textAnchor="end" interval={0} />
+                        <YAxis tick={{ fontSize: 10 }} domain={[0, 20]} />
+                        <Tooltip content={<MiniTooltip />} />
+                        <Bar dataKey="ذكور" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="إناث" fill="#ec4899" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+
+                    {/* Gender detail table */}
+                    <div className="mt-4 overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="px-3 py-2 text-start font-semibold text-muted-foreground">المادة</th>
+                            <th className="px-3 py-2 text-center font-semibold text-sky-600">معدل ذكور</th>
+                            <th className="px-3 py-2 text-center font-semibold text-sky-500">نجاح ذكور</th>
+                            <th className="px-3 py-2 text-center font-semibold text-pink-600">معدل إناث</th>
+                            <th className="px-3 py-2 text-center font-semibold text-pink-500">نجاح إناث</th>
+                            <th className="px-3 py-2 text-center font-semibold text-muted-foreground">الأفضل</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sorted.map((s, i) => {
+                            const boysOk = s.boys.total > 0;
+                            const girlsOk = s.girls.total > 0;
+                            const better = !boysOk || !girlsOk ? null : s.boys.avg > s.girls.avg ? "M" : s.girls.avg > s.boys.avg ? "F" : "=";
+                            return (
+                              <motion.tr key={s.subject}
+                                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                transition={{ delay: i * 0.03 }}
+                                className="border-b hover:bg-muted/30 transition-colors">
+                                <td className="px-3 py-2 font-semibold">{s.arLabel}</td>
+                                <td className="px-3 py-2 text-center font-bold text-sky-600">
+                                  {boysOk ? s.boys.avg.toFixed(2) : "—"}
+                                </td>
+                                <td className="px-3 py-2 text-center text-sky-500">
+                                  {boysOk ? `${Math.round((s.boys.passCount / s.boys.total) * 100)}%` : "—"}
+                                </td>
+                                <td className="px-3 py-2 text-center font-bold text-pink-600">
+                                  {girlsOk ? s.girls.avg.toFixed(2) : "—"}
+                                </td>
+                                <td className="px-3 py-2 text-center text-pink-500">
+                                  {girlsOk ? `${Math.round((s.girls.passCount / s.girls.total) * 100)}%` : "—"}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {better === "M" ? <span className="text-sky-600 font-bold">ذكور ↑</span>
+                                    : better === "F" ? <span className="text-pink-600 font-bold">إناث ↑</span>
+                                    : better === "=" ? <span className="text-muted-foreground">تساوٍ</span>
+                                    : "—"}
+                                </td>
+                              </motion.tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
               </motion.div>
-            ))}
+            )}
+
+            {/* ── Failure rate analysis ── */}
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+              <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-500" />
+                    نسب الرسوب حسب المادة
+                    {overallFailRate !== null && (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        — متوسط الرسوب الإجمالي: <span className="font-bold text-red-500">{overallFailRate}%</span>
+                      </span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {failSorted.map((s, i) => (
+                    <div key={s.subject} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold">{s.arLabel}</span>
+                        <span className="flex gap-3">
+                          <span className="text-muted-foreground">{s.total} تلميذ</span>
+                          <span className={`font-bold ${s.failRate >= 50 ? "text-red-600" : s.failRate >= 30 ? "text-amber-600" : "text-emerald-600"}`}>
+                            رسوب {s.failRate}%
+                          </span>
+                        </span>
+                      </div>
+                      <div className="h-2.5 rounded-full bg-muted overflow-hidden flex">
+                        <motion.div className="h-full bg-emerald-500 rounded-s-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(s.passCount / s.total) * 100}%` }}
+                          transition={{ duration: 0.8, delay: i * 0.05 }} />
+                        <motion.div className="h-full bg-red-400"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(s.failCount / s.total) * 100}%` }}
+                          transition={{ duration: 0.8, delay: i * 0.05 + 0.05 }} />
+                      </div>
+                      <div className="flex gap-3 text-[10px] text-muted-foreground">
+                        <span className="text-emerald-600">{s.passCount} ناجح</span>
+                        <span className="text-red-500">{s.failCount} راسب</span>
+                        <span>/ {s.total}</span>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* ── Improvement analysis (T1 → T3) ── */}
+            {withImprovement.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+                <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-emerald-500" />
+                      نسبة التحسن من الفصل 1 إلى الفصل 3
+                    </CardTitle>
+                    {(mostImproved || mostRegressed) && (
+                      <div className="flex gap-4 text-xs mt-1">
+                        {mostImproved && mostImproved.improvement! > 0 && (
+                          <span className="text-emerald-600 font-semibold">
+                            ▲ الأكثر تحسناً: {mostImproved.arLabel} (+{mostImproved.improvement!.toFixed(2)})
+                          </span>
+                        )}
+                        {mostRegressed && mostRegressed.improvement! < 0 && (
+                          <span className="text-red-500 font-semibold">
+                            ▼ الأكثر تراجعاً: {mostRegressed.arLabel} ({mostRegressed.improvement!.toFixed(2)})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {[...withImprovement].sort((a, b) => b.improvement! - a.improvement!).map((s, i) => {
+                      const imp = s.improvement!;
+                      const absImp = Math.abs(imp);
+                      const maxAbs = Math.max(...withImprovement.map(d => Math.abs(d.improvement!)), 1);
+                      return (
+                        <motion.div key={s.subject}
+                          initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.04 }}
+                          className="flex items-center gap-3 text-xs">
+                          <span className="w-28 font-semibold shrink-0 text-end">{s.arLabel}</span>
+                          <div className="flex-1 flex items-center gap-1">
+                            {imp < 0 && (
+                              <motion.div
+                                className="h-4 rounded-r-full bg-red-400"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${(absImp / maxAbs) * 50}%` }}
+                                transition={{ duration: 0.7, delay: i * 0.04 }}
+                                style={{ marginRight: "50%", transformOrigin: "right" }}
+                              />
+                            )}
+                            <div className="w-px h-5 bg-border shrink-0" style={{ marginLeft: imp >= 0 ? "50%" : undefined, marginRight: imp < 0 ? 0 : undefined }} />
+                            {imp >= 0 && (
+                              <motion.div
+                                className="h-4 rounded-l-full bg-emerald-400"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${(absImp / maxAbs) * 50}%` }}
+                                transition={{ duration: 0.7, delay: i * 0.04 }}
+                              />
+                            )}
+                          </div>
+                          <span className={`w-14 text-end font-bold shrink-0 ${imp > 0 ? "text-emerald-600" : imp < 0 ? "text-red-500" : "text-muted-foreground"}`}>
+                            {imp > 0 ? "+" : ""}{imp.toFixed(2)}
+                          </span>
+                        </motion.div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+
           </motion.div>
         )}
       </AnimatePresence>
