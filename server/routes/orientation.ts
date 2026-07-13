@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { eq, and, inArray } from "drizzle-orm";
 import { db, studentsTable, gradesTable, orientationWishesTable } from "../../shared/db.js";
 import { ImportOrientationWishesResponse } from "../../shared/schemas.js";
+import { getSubjectsForLevel, calcWeightedAvg } from "../../shared/subjects.js";
 import type { Niveau } from "../../shared/types.js";
 
 const router: IRouter = Router();

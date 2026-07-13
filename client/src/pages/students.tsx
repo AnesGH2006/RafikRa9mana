@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLanguage } from "@/contexts/language-provider";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -254,8 +254,8 @@ function GroupGenderBreakdown({ students }: { students: Student[] }) {
       const gs = lvlStudents.filter(s => s.classe === name);
       return {
         name,
-        boys: gs.filter(s => s.sexe === "M").length,
-        girls: gs.filter(s => s.sexe === "F").length,
+        ذكور: gs.filter(s => s.sexe === "M").length,
+        إناث: gs.filter(s => s.sexe === "F").length,
         total: gs.length,
       };
     });
@@ -273,74 +273,45 @@ function GroupGenderBreakdown({ students }: { students: Student[] }) {
   if (breakdown.length === 0) return null;
 
   return (
-    <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20">
-      <CardHeader className="pb-1 pt-3 px-4">
-        <CardTitle className="text-xs font-bold text-muted-foreground">توزيع الذكور والإناث حسب الفوج في كل مستوى</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0 pb-3">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/60">
-              <tr>
-                <th className="px-4 py-2 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">المستوى</th>
-                <th className="px-4 py-2 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">الفوج</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-sky-600 uppercase tracking-wider whitespace-nowrap">ذكور</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-sky-400 uppercase tracking-wider whitespace-nowrap">%</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-pink-600 uppercase tracking-wider whitespace-nowrap">إناث</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-pink-400 uppercase tracking-wider whitespace-nowrap">%</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">المجموع</th>
-              </tr>
-            </thead>
-            <tbody>
-              {breakdown.map((lvl, li) => (
-                <Fragment key={lvl.level}>
-                  {lvl.groups.map((g, gi) => (
-                    <motion.tr key={`${lvl.level}-${g.name}`}
-                      initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: Math.min((li * 4 + gi) * 0.02, 0.4), duration: 0.25 }}
-                      className={`border-t ${gi === 0 ? "border-t-2" : ""} hover:bg-muted/40 transition-colors`}
-                      style={gi === 0 ? { borderTopColor: lvl.color } : undefined}
-                    >
-                      {gi === 0 && (
-                        <td rowSpan={lvl.groups.length} className="px-4 py-2 align-top">
-                          <Badge className="font-bold" style={{ backgroundColor: `${lvl.color}20`, color: lvl.color, border: `1px solid ${lvl.color}40` }}>
-                            {lvl.label}
-                          </Badge>
-                        </td>
-                      )}
-                      <td className="px-4 py-2">
-                        <Badge variant="outline" className="font-bold">{g.name}</Badge>
-                      </td>
-                      <td className="px-4 py-2 text-center font-semibold text-sky-600">{g.boys}</td>
-                      <td className="px-4 py-2 text-center text-xs text-sky-500 font-medium">
-                        {g.total > 0 ? Math.round((g.boys / g.total) * 100) : 0}%
-                      </td>
-                      <td className="px-4 py-2 text-center font-semibold text-pink-600">{g.girls}</td>
-                      <td className="px-4 py-2 text-center text-xs text-pink-500 font-medium">
-                        {g.total > 0 ? Math.round((g.girls / g.total) * 100) : 0}%
-                      </td>
-                      <td className="px-4 py-2 text-center font-bold text-foreground">{g.total}</td>
-                    </motion.tr>
-                  ))}
-                  <tr key={`${lvl.level}-total`} className="border-t bg-muted/30 font-bold">
-                    <td className="px-4 py-2" colSpan={2}>إجمالي {lvl.label}</td>
-                    <td className="px-4 py-2 text-center text-sky-700">{lvl.boys}</td>
-                    <td className="px-4 py-2 text-center text-xs text-sky-500 font-semibold">
-                      {lvl.total > 0 ? Math.round((lvl.boys / lvl.total) * 100) : 0}%
-                    </td>
-                    <td className="px-4 py-2 text-center text-pink-700">{lvl.girls}</td>
-                    <td className="px-4 py-2 text-center text-xs text-pink-500 font-semibold">
-                      {lvl.total > 0 ? Math.round((lvl.girls / lvl.total) * 100) : 0}%
-                    </td>
-                    <td className="px-4 py-2 text-center">{lvl.total}</td>
-                  </tr>
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+        توزيع الذكور والإناث حسب الفوج في كل مستوى
+      </h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {breakdown.map((lvl, li) => (
+          <motion.div key={lvl.level}
+            initial={{ opacity: 0, y: 14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ delay: li * 0.08, duration: 0.4 }}>
+            <Card className="border-0 shadow-md bg-gradient-to-br from-card to-muted/20 overflow-hidden">
+              <CardHeader className="pb-1 pt-3 px-4 flex flex-row items-center gap-2">
+                <span className="inline-block w-3 h-3 rounded-full" style={{ background: lvl.color }} />
+                <CardTitle className="text-xs font-bold" style={{ color: lvl.color }}>{lvl.label}</CardTitle>
+                <span className="text-xs text-muted-foreground mr-auto">
+                  <span className="text-sky-500 font-semibold">{lvl.boys}♂</span>
+                  {" · "}
+                  <span className="text-pink-500 font-semibold">{lvl.girls}♀</span>
+                  {" · "}
+                  <span className="font-semibold">{lvl.total} إجمالي</span>
+                </span>
+              </CardHeader>
+              <CardContent className="pb-3 px-2">
+                <ResponsiveContainer width="100%" height={Math.max(100, lvl.groups.length * 38 + 40)}>
+                  <BarChart data={lvl.groups} layout="vertical" barSize={12} margin={{ left: 10, right: 20, top: 4, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.08} horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={60} />
+                    <Tooltip content={<MiniTooltip />} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+                    <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
+                    <Bar dataKey="ذكور" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="إناث" fill="#ec4899" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
+    </div>
   );
 }
 

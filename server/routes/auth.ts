@@ -101,13 +101,10 @@ async function upsertUser(claims: Record<string, unknown>) {
   return user;
 }
 
-// GET /api/dev-login — instant test login (only when ALLOW_DEV_LOGIN=true AND not in production)
+// GET /api/dev-login — instant test login (only when ALLOW_DEV_LOGIN=true)
 router.get("/dev-login", async (req: Request, res: Response) => {
-  const isProduction = process.env.NODE_ENV === "production";
-  const devLoginAllowed = process.env.ALLOW_DEV_LOGIN === "true";
-  if (isProduction || !devLoginAllowed) {
-    // Return 404 in production so the endpoint doesn't reveal itself
-    res.status(404).json({ error: "Not found" });
+  if (process.env.ALLOW_DEV_LOGIN !== "true") {
+    res.status(403).json({ error: "Dev login is disabled" });
     return;
   }
   const testUser = {

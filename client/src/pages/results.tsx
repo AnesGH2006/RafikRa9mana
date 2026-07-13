@@ -705,7 +705,7 @@ function TabProgress({ results }: { results: StudentResult[] }) {
       .filter((x): x is { tri: number; v: number } => x !== null);
     const delta = +(vals[vals.length - 1]!.v - vals[0]!.v).toFixed(2);
     const trend: "up" | "stable" | "down" =
-      delta > 0.5 ? "up" : delta < -0.5 ? "down" : "stable";
+      delta >= 0.01 ? "up" : delta <= -0.01 ? "down" : "stable";
     return { ...r, delta, trend };
   });
 
@@ -832,8 +832,8 @@ function TabProgress({ results }: { results: StudentResult[] }) {
                   </thead>
                   <tbody>
                     {subjectTrends.map((s, i) => {
-                      const up = s.delta != null && s.delta > 0.3;
-                      const dn = s.delta != null && s.delta < -0.3;
+                      const up = s.delta != null && s.delta >= 0.01;
+                      const dn = s.delta != null && s.delta <= -0.01;
                       return (
                         <tr key={i} className={`border-b ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
                           <td className="py-2 pr-2 font-medium">{s.arLabel}</td>

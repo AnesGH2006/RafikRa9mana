@@ -104,3 +104,6 @@ channel = "stable-25_05"
 
 [userenv.development]
 ALLOW_DEV_LOGIN = "true"
+
+[userenv.production]
+ALLOW_DEV_LOGIN = "true"
