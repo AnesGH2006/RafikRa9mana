@@ -9,8 +9,9 @@ import {
   FileText, Printer, Users, UserCheck, UserX, Award, TrendingUp,
   BarChart3, School, Calendar, GraduationCap, Activity,
   CalendarOff, Target, AlertTriangle, Trophy, Repeat2,
-  UserPlus, Settings2, BookOpen,
+  UserPlus, Settings2, BookOpen, ClipboardList,
 } from "lucide-react";
+import { ClassLevelReport } from "@/components/class-level-report";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, RadialBarChart, RadialBar,
@@ -28,16 +29,17 @@ const GENDER_COLORS = ["#3b82f6", "#ec4899"];
 
 // ─── Section configuration ──────────────────────────────────────────────────
 const ALL_SECTIONS = [
-  { id: "school",      label: "معلومات المؤسسة",        icon: School,       color: "from-blue-500 to-cyan-600" },
-  { id: "students",    label: "إحصائيات التلاميذ",      icon: Users,        color: "from-violet-500 to-purple-600" },
-  { id: "results",     label: "النتائج الإجمالية",      icon: Award,        color: "from-emerald-500 to-teal-600" },
-  { id: "progress",    label: "شريط التقدم",            icon: TrendingUp,   color: "from-sky-500 to-blue-600" },
-  { id: "charts",      label: "الرسوم البيانية",        icon: BarChart3,    color: "from-fuchsia-500 to-pink-600" },
-  { id: "levels",      label: "تفصيل حسب المستوى",      icon: GraduationCap,color: "from-orange-500 to-amber-600" },
-  { id: "success_lvl", label: "نسبة النجاح بالمستوى",  icon: Target,       color: "from-lime-500 to-green-600" },
-  { id: "top",         label: "أفضل التلاميذ",          icon: Trophy,       color: "from-yellow-500 to-orange-500" },
-  { id: "dist",        label: "توزيع المعدلات",         icon: Activity,     color: "from-rose-500 to-red-600" },
-  { id: "absences",    label: "الغيابات",               icon: CalendarOff,  color: "from-amber-500 to-orange-600" },
+  { id: "school",      label: "معلومات المؤسسة",        icon: School,         color: "from-blue-500 to-cyan-600" },
+  { id: "students",    label: "إحصائيات التلاميذ",      icon: Users,          color: "from-violet-500 to-purple-600" },
+  { id: "results",     label: "النتائج الإجمالية",      icon: Award,          color: "from-emerald-500 to-teal-600" },
+  { id: "progress",    label: "شريط التقدم",            icon: TrendingUp,     color: "from-sky-500 to-blue-600" },
+  { id: "charts",      label: "الرسوم البيانية",        icon: BarChart3,      color: "from-fuchsia-500 to-pink-600" },
+  { id: "levels",      label: "تفصيل حسب المستوى",      icon: GraduationCap,  color: "from-orange-500 to-amber-600" },
+  { id: "success_lvl", label: "نسبة النجاح بالمستوى",  icon: Target,         color: "from-lime-500 to-green-600" },
+  { id: "top",         label: "أفضل التلاميذ",          icon: Trophy,         color: "from-yellow-500 to-orange-500" },
+  { id: "dist",        label: "توزيع المعدلات",         icon: Activity,       color: "from-rose-500 to-red-600" },
+  { id: "absences",    label: "الغيابات",               icon: CalendarOff,    color: "from-amber-500 to-orange-600" },
+  { id: "classreport", label: "تقرير القسم / المستوى",  icon: ClipboardList,  color: "from-indigo-500 to-violet-600" },
 ] as const;
 
 type SectionId = typeof ALL_SECTIONS[number]["id"];
@@ -696,6 +698,20 @@ export default function ReportsPage() {
                       </CardContent>
                     </Card>
                   )}
+                </motion.section>
+              )}
+
+              {/* ── Class / Level PDF Report ── */}
+              {has("classreport") && (
+                <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }} className="no-print">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-md">
+                      <ClipboardList className="w-4.5 h-4.5 text-white" />
+                    </div>
+                    <h2 className="text-base font-bold text-foreground">تقرير القسم / المستوى — PDF</h2>
+                    <div className="flex-1 h-px bg-gradient-to-r from-border to-transparent" />
+                  </div>
+                  <ClassLevelReport annee={year} school={school} allResults={results} />
                 </motion.section>
               )}
 
