@@ -553,8 +553,132 @@ export function ClassLevelReport({ annee, school, allResults }: Props) {
   );
 }
 
-// ─── Fix: filtered needs to be in scope for buildPrintHTML ───────────────────
-// Re-export a patched version of buildPrintHTML that accepts filtered directly
+// ─── SVG chart helpers (used inside buildPrintHTML) ───────────────────────────
+
+/** Vertical bar chart. values 0..maxVal. */
+function svgVBars(
+  items: { label: string; value: number | null; color: string; unit?: string }[],
+  opts: { W?: number; H?: number; maxVal?: number; unit?: string } = {},
+): string {
+  const { W = 420, H = 160, unit = "" } = opts;
+  const maxVal = opts.maxVal ?? Math.max(...items.map(it => it.value ?? 0), 1);
+  const pL = 34, pR = 12, pT = 26, pB = 44;
+  const cW = W - pL - pR, cH = H - pT - pB;
+  const slot = cW / items.length;
+  const bw = Math.min(44, slot * 0.55);
+
+  const ticks = maxVal <= 20 ? [0, 5, 10, 15, 20].filter(v => v <= maxVal)
+    : [0, 25, 50, 75, 100].filter(v => v <= maxVal);
+
+  const grid = ticks.map(v => {
+    const y = pT + cH - (v / maxVal) * cH;
+    return `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W - pR}" y2="${y.toFixed(1)}" stroke="#e5e7eb" stroke-width="1"/>
+            <text x="${pL - 4}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#9ca3af" font-size="9">${v}${unit}</text>`;
+  }).join("");
+
+  const bars = items.map((it, i) => {
+    const val = it.value ?? 0;
+    const bh = Math.max((val / maxVal) * cH, 1);
+    const x = pL + slot * i + slot / 2 - bw / 2;
+    const y = pT + cH - bh;
+    const lbl = it.label.length > 7 ? it.label.slice(0, 6) + "…" : it.label;
+    const u = it.unit ?? unit;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw}" height="${bh.toFixed(1)}" fill="${it.color}" rx="4" opacity="0.9"/>
+            <text x="${(x + bw / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" fill="${it.color}" font-size="10" font-weight="700">${val}${u}</text>
+            <text x="${(x + bw / 2).toFixed(1)}" y="${(pT + cH + 14).toFixed(1)}" text-anchor="middle" fill="#374151" font-size="9">${lbl}</text>`;
+  }).join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:block">
+    ${grid}
+    <line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + cH}" stroke="#d1d5db" stroke-width="1.5"/>
+    <line x1="${pL}" y1="${pT + cH}" x2="${W - pR}" y2="${pT + cH}" stroke="#d1d5db" stroke-width="1.5"/>
+    ${bars}
+  </svg>`;
+}
+
+/** Horizontal bar chart. */
+function svgHBars(
+  items: { label: string; value: number; color: string }[],
+  opts: { W?: number; barH?: number; maxVal?: number; unit?: string } = {},
+): string {
+  const { W = 460, barH = 20, unit = "" } = opts;
+  const maxVal = opts.maxVal ?? Math.max(...items.map(it => it.value), 1);
+  const pL = 110, pR = 48, pT = 6, gap = 6;
+  const rowH = barH + gap;
+  const H = pT * 2 + rowH * items.length;
+  const cW = W - pL - pR;
+
+  const rows = items.map((it, i) => {
+    const bw = Math.max((it.value / maxVal) * cW, 2);
+    const y = pT + i * rowH;
+    const lbl = it.label.length > 14 ? it.label.slice(0, 14) + "…" : it.label;
+    return `<rect x="${pL}" y="${y}" width="${bw.toFixed(1)}" height="${barH}" fill="${it.color}" rx="3" opacity="0.88"/>
+            <text x="${(pL + bw + 5).toFixed(1)}" y="${(y + barH / 2 + 4).toFixed(1)}" fill="${it.color}" font-size="10" font-weight="700">${it.value}${unit}</text>
+            <text x="${pL - 6}" y="${(y + barH / 2 + 4).toFixed(1)}" text-anchor="end" fill="#374151" font-size="10">${lbl}</text>`;
+  }).join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:block">
+    ${rows}
+  </svg>`;
+}
+
+/** Grouped vertical bar chart — multiple series per category. */
+function svgGroupedVBars(
+  groups: { label: string; values: (number | null)[] }[],
+  seriesColors: string[],
+  seriesLabels: string[],
+  opts: { W?: number; H?: number; maxVal?: number; unit?: string } = {},
+): string {
+  const { W = 500, H = 210, unit = "" } = opts;
+  const maxVal = opts.maxVal ?? Math.max(...groups.flatMap(g => g.values.map(v => v ?? 0)), 1);
+  const pL = 34, pR = 16, pT = 34, pB = 50;
+  const cW = W - pL - pR, cH = H - pT - pB;
+  const n = seriesColors.length;
+  const slot = cW / groups.length;
+  const bw = Math.min(16, slot / (n + 1));
+
+  // legend
+  const legend = seriesLabels.map((lbl, i) =>
+    `<rect x="${pL + i * 85}" y="6" width="11" height="11" fill="${seriesColors[i]}" rx="2"/>
+     <text x="${pL + i * 85 + 15}" y="15" fill="#374151" font-size="10">${lbl}</text>`
+  ).join("");
+
+  const ticks = [0, 5, 10, 15, 20].filter(v => v <= maxVal);
+  const grid = ticks.map(v => {
+    const y = pT + cH - (v / maxVal) * cH;
+    return `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W - pR}" y2="${y.toFixed(1)}" stroke="#e5e7eb" stroke-width="1"/>
+            <text x="${pL - 4}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#9ca3af" font-size="9">${v}</text>`;
+  }).join("");
+
+  const bars = groups.map((g, gi) => {
+    const cx = pL + slot * gi + slot / 2;
+    const startX = cx - (n * bw + (n - 1) * 2) / 2;
+    const lbl = g.label.length > 9 ? g.label.slice(0, 8) + "…" : g.label;
+    const rects = g.values.map((v, si) => {
+      const val = v ?? 0;
+      const bh = Math.max((val / maxVal) * cH, 1);
+      const x = startX + si * (bw + 2);
+      const y = pT + cH - bh;
+      const valTxt = val > 0
+        ? `<text x="${(x + bw / 2).toFixed(1)}" y="${(y - 2).toFixed(1)}" text-anchor="middle" fill="${seriesColors[si]}" font-size="8" font-weight="700">${val.toFixed(1)}</text>`
+        : "";
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw}" height="${bh.toFixed(1)}" fill="${seriesColors[si]}" rx="2" opacity="0.85"/>
+              ${valTxt}`;
+    }).join("");
+    return `${rects}
+      <text x="${cx.toFixed(1)}" y="${(pT + cH + 15).toFixed(1)}" text-anchor="middle" fill="#374151" font-size="9">${lbl}</text>`;
+  }).join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="display:block">
+    ${legend}
+    ${grid}
+    <line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + cH}" stroke="#d1d5db" stroke-width="1.5"/>
+    <line x1="${pL}" y1="${pT + cH}" x2="${W - pR}" y2="${pT + cH}" stroke="#d1d5db" stroke-width="1.5"/>
+    ${bars}
+  </svg>`;
+}
+
+// ─── Print HTML generator ─────────────────────────────────────────────────────
 function buildPrintHTML(
   title: string,
   annee: string,
@@ -569,6 +693,10 @@ function buildPrintHTML(
   } = data;
 
   const arrowUp = "▲"; const arrowDown = "▼"; const arrowFlat = "─";
+  const numAvg = (arr: (number | null)[]) => {
+    const v = arr.filter((x): x is number => x != null);
+    return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100 : null;
+  };
 
   const trendArrow = (d: number | null, thr = 0.25) => {
     const t = trendLabel(d, thr);
@@ -588,13 +716,66 @@ function buildPrintHTML(
        <div style="font-size:22px;font-weight:900;color:${color}">${val}</div>
      </div>`;
 
-  const successCard = (lbl: string, rate: number | null, cnt: number, den: number, color: string) =>
-    `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px;text-align:center;flex:1">
-       <div style="font-size:24px;font-weight:900;color:${color}">${rate != null ? rate + "%" : "—"}</div>
-       <div style="font-size:12px;font-weight:700;color:#374151;margin-top:4px">${lbl}</div>
-       <div style="font-size:11px;color:#6b7280;margin-top:2px">${cnt} من ${den} تلميذ</div>
-     </div>`;
+  // ── Chart 1: Success rate bar chart ─────────────────────────────────────────
+  const failRate = withAvg.length ? Math.round((failed.length / withAvg.length) * 100) : null;
+  const successChart = svgVBars([
+    { label: "إجمالي",  value: successRate, color: "#6366f1", unit: "%" },
+    { label: "ذكور",    value: boysRate,    color: "#3b82f6", unit: "%" },
+    { label: "إناث",   value: girlsRate,   color: "#ec4899", unit: "%" },
+    { label: "الرسوب", value: failRate,    color: "#ef4444", unit: "%" },
+  ], { W: 320, H: 160, maxVal: 100, unit: "%" });
 
+  // ── Chart 2: Class trimester progression bar chart ───────────────────────────
+  const classT1 = numAvg(progressRows.map(r => r.t1Avg));
+  const classT2 = numAvg(progressRows.map(r => r.t2Avg));
+  const classT3 = numAvg(progressRows.map(r => r.t3Avg));
+  const triColor = (v: number | null, prev: number | null) => {
+    if (v == null || prev == null) return "#6366f1";
+    return v >= prev ? "#059669" : "#ef4444";
+  };
+  const progressionChart = svgVBars([
+    { label: "الفصل 1", value: classT1, color: "#6366f1" },
+    { label: "الفصل 2", value: classT2, color: triColor(classT2, classT1) },
+    { label: "الفصل 3", value: classT3, color: triColor(classT3, classT2) },
+  ], { W: 280, H: 160, maxVal: 20 });
+
+  // ── Chart 3: Score distribution histogram ────────────────────────────────────
+  const BINS = [
+    { label: "0 – 5",  min: 0,  max: 5,    color: "#b91c1c" },
+    { label: "5 – 8",  min: 5,  max: 8,    color: "#ef4444" },
+    { label: "8 – 10", min: 8,  max: 10,   color: "#f59e0b" },
+    { label: "10 – 12",min: 10, max: 12,   color: "#10b981" },
+    { label: "12 – 15",min: 12, max: 15,   color: "#059669" },
+    { label: "15 – 20",min: 15, max: 20.1, color: "#065f46" },
+  ];
+  const distItems = BINS.map(b => ({
+    label: b.label,
+    value: progressRows.filter(r => r.annualAvg != null && r.annualAvg >= b.min && r.annualAvg < b.max).length,
+    color: b.color,
+  }));
+  const distChart = svgVBars(distItems, { W: 420, H: 160 });
+
+  // ── Chart 4: Subject grouped bar chart (T1/T2/T3 class avg) ──────────────────
+  const subjGroups = enrichedSubjects.map(s => ({
+    label: s.arLabel ?? s.subject,
+    values: [s.t1ClassAvg, s.t2ClassAvg, s.t3ClassAvg],
+  }));
+  const subjectAvgChart = subjGroups.length > 0
+    ? svgGroupedVBars(subjGroups, ["#6366f1", "#10b981", "#f59e0b"], ["ف1", "ف2", "ف3"],
+        { W: Math.max(500, subjGroups.length * 55 + 60), H: 210, maxVal: 20 })
+    : "";
+
+  // ── Chart 5: Subject fail rate horizontal bars ────────────────────────────────
+  const failRateItems = enrichedSubjects.map(s => ({
+    label: s.arLabel ?? s.subject,
+    value: s.failRate,
+    color: s.failRate > 60 ? "#b91c1c" : s.failRate > 40 ? "#ef4444" : s.failRate > 20 ? "#f59e0b" : "#10b981",
+  }));
+  const failRateChart = failRateItems.length > 0
+    ? svgHBars(failRateItems, { W: 480, maxVal: 100, unit: "%" })
+    : "";
+
+  // ── Tables ────────────────────────────────────────────────────────────────────
   const failingTable = failingRows.length === 0
     ? `<p style="color:#059669;font-weight:700;padding:12px 0">🎉 لا يوجد تلاميذ راسبون</p>`
     : `<table style="width:100%;border-collapse:collapse;font-size:11px">
@@ -668,6 +849,7 @@ function buildPrintHTML(
         }).join("")}</tbody>
       </table>`;
 
+  // ── Full HTML ─────────────────────────────────────────────────────────────────
   return `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
@@ -676,15 +858,23 @@ function buildPrintHTML(
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Arial', 'Tahoma', sans-serif; direction: rtl; font-size: 12px;
-           color: #111827; background: #fff; padding: 20px 24px; }
+           color: #111827; background: #fff; padding: 20px 24px; max-width: 960px; margin: 0 auto; }
     h2 { font-size: 13px; font-weight: 700; color: #4f46e5;
          border-bottom: 2px solid #e0e7ff; padding-bottom: 5px; margin-bottom: 12px; }
-    .section { margin-bottom: 24px; }
+    .section { margin-bottom: 26px; }
+    .chart-caption { font-size: 10px; color: #6b7280; margin-top: 5px; text-align: center; }
     .page-break { page-break-before: always; padding-top: 16px; }
-    @media print { body { padding: 8px 12px; } .section { margin-bottom: 14px; } }
+    .chart-row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+    .chart-row svg { flex-shrink: 0; }
+    @media print {
+      body { padding: 8px 12px; }
+      .section { margin-bottom: 16px; }
+    }
   </style>
 </head>
 <body>
+
+  <!-- Header -->
   <div style="display:flex;justify-content:space-between;align-items:flex-start;
               border-bottom:3px solid #4f46e5;padding-bottom:12px;margin-bottom:20px">
     <div>
@@ -698,54 +888,120 @@ function buildPrintHTML(
     </div>
   </div>
 
+  <!-- KPI Bar -->
   <div class="section">
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       ${kpiBox("مجموع التلاميذ", boys.length + girls.length, "#ede9fe", "#6d28d9")}
-      ${kpiBox("ذكور", boys.length, "#dbeafe", "#1d4ed8")}
-      ${kpiBox("إناث", girls.length, "#fce7f3", "#be185d")}
+      ${kpiBox("ذكور",   boys.length,    "#dbeafe", "#1d4ed8")}
+      ${kpiBox("إناث",  girls.length,   "#fce7f3", "#be185d")}
       ${kpiBox("الناجحون", passed.length, "#d1fae5", "#065f46")}
       ${kpiBox("الراسبون", failed.length, "#fee2e2", "#b91c1c")}
       ${successRate != null ? kpiBox("نسبة النجاح", successRate + "%", "#fef9c3", "#92400e") : ""}
     </div>
   </div>
 
+  <!-- Section 1: Success rates -->
   <div class="section">
     <h2>📊 نسبة النجاح التفصيلية</h2>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      ${successCard("إجمالي", successRate, passed.length, withAvg.length, "#4f46e5")}
-      ${successCard("ذكور",  boysRate,  boysPassed.length,  boysWithAvg.length,  "#1d4ed8")}
-      ${successCard("إناث", girlsRate, girlsPassed.length, girlsWithAvg.length, "#be185d")}
-      <div style="border:1px solid #fee2e2;border-radius:10px;padding:12px;text-align:center;flex:1;background:#fff5f5">
-        <div style="font-size:24px;font-weight:900;color:#b91c1c">${failed.length}</div>
-        <div style="font-size:12px;font-weight:700;color:#374151;margin-top:4px">الراسبون</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px">${pct(failed.length, withAvg.length)} من المجموع</div>
+    <div class="chart-row">
+      <div>
+        ${successChart}
+        <p class="chart-caption">مقارنة نسب النجاح (إجمالي — ذكور — إناث — نسبة الرسوب)</p>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr>
+            ${th("الفئة")}${th("ناجح", true)}${th("المجموع", true)}${th("النسبة", true)}
+          </tr></thead>
+          <tbody>
+            <tr><td style="padding:5px 8px;border:1px solid #e5e7eb;font-weight:700">إجمالي</td>
+              ${td(passed.length, true)}${td(withAvg.length, true)}
+              ${td(`<span style="font-weight:900;color:#6366f1">${successRate ?? "—"}%</span>`, true)}
+            </tr>
+            <tr style="background:#f9fafb"><td style="padding:5px 8px;border:1px solid #e5e7eb;font-weight:700">ذكور</td>
+              ${td(boysPassed.length, true)}${td(boysWithAvg.length, true)}
+              ${td(`<span style="font-weight:900;color:#3b82f6">${boysRate ?? "—"}%</span>`, true)}
+            </tr>
+            <tr><td style="padding:5px 8px;border:1px solid #e5e7eb;font-weight:700">إناث</td>
+              ${td(girlsPassed.length, true)}${td(girlsWithAvg.length, true)}
+              ${td(`<span style="font-weight:900;color:#ec4899">${girlsRate ?? "—"}%</span>`, true)}
+            </tr>
+            <tr style="background:#fff5f5"><td style="padding:5px 8px;border:1px solid #e5e7eb;font-weight:700;color:#b91c1c">الراسبون</td>
+              ${td(`<span style="color:#b91c1c;font-weight:700">${failed.length}</span>`, true)}${td(withAvg.length, true)}
+              ${td(`<span style="font-weight:900;color:#ef4444">${failRate ?? "—"}%</span>`, true)}
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 
+  <!-- Section 2: Failing students -->
   <div class="section">
     <h2>⚠️ الراسبون وكم باقي لهم للمعدل 10</h2>
     <p style="font-size:10px;color:#6b7280;margin-bottom:8px">مرتبون من الأقرب للنجاح إلى الأبعد</p>
     ${failingTable}
   </div>
 
+  <!-- Section 3: Trimester progress per student + class avg chart -->
   <div class="section page-break">
     <h2>📈 تحسنات وتراجعات المعدل الفصلي لكل تلميذ</h2>
+    <div class="chart-row" style="margin-bottom:14px">
+      <div>
+        ${progressionChart}
+        <p class="chart-caption">معدل القسم الإجمالي لكل فصل</p>
+      </div>
+      <div style="flex:1;min-width:180px;align-self:center">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr>${th("الفصل")}${th("معدل القسم", true)}${th("التغير", true)}</tr></thead>
+          <tbody>
+            <tr>${td("الفصل الأول")}${td(fmt(classT1), true)}${td("—", true)}</tr>
+            <tr style="background:#f9fafb">${td("الفصل الثاني")}${td(fmt(classT2), true)}${td(trendArrow(delta(classT1, classT2)), true)}</tr>
+            <tr>${td("الفصل الثالث")}${td(fmt(classT3), true)}${td(trendArrow(delta(classT2, classT3)), true)}</tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
     <p style="font-size:10px;color:#6b7280;margin-bottom:8px">م.ف = معدل الفصل | ف1→ف2/ف3 = التغير بين الفصول</p>
     ${progressTable}
   </div>
 
+  <!-- Section 4: Score distribution -->
   <div class="section">
+    <h2>📐 توزيع المعدلات السنوية</h2>
+    ${distChart}
+    <p class="chart-caption">عدد التلاميذ حسب شريحة المعدل السنوي</p>
+  </div>
+
+  <!-- Section 5: Subject analysis -->
+  <div class="section page-break">
     <h2>📚 تحسنات وتراجعات كل مادة (معدل القسم)</h2>
+    ${subjectAvgChart
+      ? `<div style="overflow-x:auto;margin-bottom:12px">
+           ${subjectAvgChart}
+           <p class="chart-caption">معدل القسم في كل مادة لكل فصل (أعمدة: أزرق=ف1 — أخضر=ف2 — أصفر=ف3)</p>
+         </div>`
+      : ""}
     <p style="font-size:10px;color:#6b7280;margin-bottom:8px">م.ف1/2/3 = معدل القسم في المادة | التطور = الفرق بين ف1 و ف3</p>
     ${subjectTable}
   </div>
 
+  <!-- Section 6: Subject fail rate -->
+  ${failRateChart
+    ? `<div class="section">
+         <h2>🔴 نسبة الرسوب في كل مادة</h2>
+         ${failRateChart}
+         <p class="chart-caption">نسبة التلاميذ الراسبين في كل مادة (أخضر &lt;20% — أصفر &lt;40% — أحمر &gt;60%)</p>
+       </div>`
+    : ""}
+
+  <!-- Footer -->
   <div style="border-top:1px solid #e5e7eb;padding-top:8px;margin-top:20px;
               display:flex;justify-content:space-between;font-size:10px;color:#9ca3af">
     <span>CEM Manager — مدير المتوسطة</span>
     <span>${title} | ${annee}</span>
   </div>
+
 </body>
 </html>`;
 }
