@@ -2234,7 +2234,7 @@ export default function Results() {
   const [selected, setSelected] = useState<StudentResult | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [annee, setAnnee] = useState(DEFAULT_YEAR);
-  const [filters, setFilters] = useState({ niveau: "", classe: "", q: "" });
+  const [filters, setFilters] = useState({ niveau: "", classe: "", sexe: "", q: "" });
   const [listKey, setListKey] = useState(0);
 
   const fetchResults = useCallback(async () => {
@@ -2243,6 +2243,7 @@ export default function Results() {
       const p = new URLSearchParams({ annee });
       if (filters.niveau) p.set("niveau", filters.niveau);
       if (filters.classe) p.set("classe", filters.classe);
+      if (filters.sexe)   p.set("sexe",   filters.sexe);
       const res = await fetch(`${BASE}api/results?${p}`, { credentials: "include" });
       if (res.ok) { setResults(await res.json()); setListKey(k => k + 1); }
     } finally { setLoading(false); }
@@ -2313,6 +2314,17 @@ export default function Results() {
           <SelectContent>
             <SelectItem value="__all__">{t("students.allClasses")}</SelectItem>
             {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filters.sexe || "__all__"}
+          onValueChange={v => setFilters(p => ({ ...p, sexe: v === "__all__" ? "" : v }))}>
+          <SelectTrigger className="w-28">
+            <SelectValue placeholder="الجنس" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">كل الجنسين</SelectItem>
+            <SelectItem value="M">ذكور</SelectItem>
+            <SelectItem value="F">إناث</SelectItem>
           </SelectContent>
         </Select>
       </motion.div>

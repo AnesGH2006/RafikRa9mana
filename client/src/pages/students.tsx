@@ -505,6 +505,17 @@ export default function Students() {
             </SelectContent>
           </Select>
         ))}
+        {classes.length > 1 && (
+          <Select value={filters.classe || "__all__"} onValueChange={v => setFilter("classe", v)}>
+            <SelectTrigger className="w-28 transition-shadow focus:shadow-md">
+              <SelectValue placeholder="القسم" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">كل الأقسام</SelectItem>
+              {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
         <AnimatePresence>
           {(activeFilters > 0 || filters.q) && (
             <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>

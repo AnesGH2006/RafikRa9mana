@@ -53,16 +53,17 @@ export default function SubjectsPage() {
   const { t } = useLanguage();
   const [data, setData] = useState<SubjectAverage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ niveau: "", classe: "", trimestre: "" });
+  const [filters, setFilters] = useState({ niveau: "", classe: "", trimestre: "", sexe: "" });
   const [chartType, setChartType] = useState<"bar" | "radar">("bar");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const p = new URLSearchParams();
-      if (filters.niveau)   p.set("niveau", filters.niveau);
-      if (filters.classe)   p.set("classe", filters.classe);
+      if (filters.niveau)    p.set("niveau",    filters.niveau);
+      if (filters.classe)    p.set("classe",    filters.classe);
       if (filters.trimestre) p.set("trimestre", filters.trimestre);
+      if (filters.sexe)      p.set("sexe",      filters.sexe);
       const res = await fetch(`${BASE}api/results/subjects?${p}`, { credentials: "include" });
       if (res.ok) setData(await res.json());
     } finally { setLoading(false); }
@@ -156,7 +157,7 @@ export default function SubjectsPage() {
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
-        <Select value={filters.niveau || "__all__"} onValueChange={v => setFilters(p => ({ ...p, niveau: v === "__all__" ? "" : v }))}>
+        <Select value={filters.niveau || "__all__"} onValueChange={v => setFilters(p => ({ ...p, niveau: v === "__all__" ? "" : v, classe: "" }))}>
           <SelectTrigger className="w-36 font-semibold text-xs h-9"><SelectValue placeholder={t("students.filterLevel")} /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">{t("students.allLevels")}</SelectItem>
@@ -170,6 +171,14 @@ export default function SubjectsPage() {
             <SelectItem value="1">الفصل 1</SelectItem>
             <SelectItem value="2">الفصل 2</SelectItem>
             <SelectItem value="3">الفصل 3</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filters.sexe || "__all__"} onValueChange={v => setFilters(p => ({ ...p, sexe: v === "__all__" ? "" : v }))}>
+          <SelectTrigger className="w-28 text-xs h-9"><SelectValue placeholder="كل الجنسين" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">كل الجنسين</SelectItem>
+            <SelectItem value="M">ذكور</SelectItem>
+            <SelectItem value="F">إناث</SelectItem>
           </SelectContent>
         </Select>
       </div>

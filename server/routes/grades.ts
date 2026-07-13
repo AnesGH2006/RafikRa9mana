@@ -281,12 +281,13 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
 router.get("/results", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
-  const { annee, niveau, classe } = req.query as Record<string, string>;
+  const { annee, niveau, classe, sexe } = req.query as Record<string, string>;
 
   const studentConds = [eq(studentsTable.userId, userId)];
   if (annee) studentConds.push(eq(studentsTable.annee, annee));
   if (niveau) studentConds.push(eq(studentsTable.niveau, niveau as Niveau));
   if (classe) studentConds.push(eq(studentsTable.classe, classe));
+  if (sexe === "M" || sexe === "F") studentConds.push(eq(studentsTable.sexe, sexe));
 
   const students = await db.select().from(studentsTable)
     .where(and(...studentConds))
@@ -374,12 +375,13 @@ router.get("/results", async (req, res): Promise<void> => {
 router.get("/results/subjects", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
-  const { annee, niveau, classe, trimestre } = req.query as Record<string, string>;
+  const { annee, niveau, classe, trimestre, sexe } = req.query as Record<string, string>;
 
   const studentConds = [eq(studentsTable.userId, userId)];
   if (annee) studentConds.push(eq(studentsTable.annee, annee));
   if (niveau) studentConds.push(eq(studentsTable.niveau, niveau as Niveau));
   if (classe) studentConds.push(eq(studentsTable.classe, classe));
+  if (sexe === "M" || sexe === "F") studentConds.push(eq(studentsTable.sexe, sexe));
   const students = await db.select().from(studentsTable).where(and(...studentConds));
   if (!students.length) { res.json([]); return; }
 
