@@ -193,6 +193,17 @@ export default function ReportsPage() {
 
   const today = new Date().toLocaleDateString("ar-DZ", { year: "numeric", month: "long", day: "numeric" });
 
+  // Per-level/class gender breakdown from results (for horizontal bar charts)
+  const classByLevel: Record<string, { classe: string; ذكور: number; إناث: number }[]> = {};
+  for (const r of results) {
+    const { niveau, classe, sexe } = r.student;
+    classByLevel[niveau] ??= [];
+    const row = classByLevel[niveau]!.find(c => c.classe === classe);
+    if (row) { if (sexe === "M") row["ذكور"]++; else row["إناث"]++; }
+    else classByLevel[niveau]!.push({ classe, "ذكور": sexe === "M" ? 1 : 0, "إناث": sexe === "F" ? 1 : 0 });
+  }
+  for (const arr of Object.values(classByLevel)) arr.sort((a, b) => a.classe.localeCompare(b.classe));
+
   return (
     <div className="flex min-h-full bg-background">
       {/* ── Section selector panel ── */}
@@ -498,78 +509,68 @@ export default function ReportsPage() {
                 </motion.section>
               )}
 
-              {/* ── Per-level breakdown table ── */}
+              {/* ── Per-level breakdown — horizontal bar charts ── */}
               {has("levels") && stats.byLevel.length > 0 && (
                 <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="print-section">
                   <SectionHeader icon={GraduationCap} title="تفصيل حسب المستوى" color="from-orange-500 to-amber-600" />
-                  <Card className="border-0 bg-card/80 shadow-md overflow-hidden">
-                    <CardContent className="p-0">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-muted/60 border-b text-muted-foreground text-xs">
-                            <th className="p-3 text-right font-semibold">المستوى</th>
-                            <th className="p-3 text-center font-semibold">المجموع</th>
-                            <th className="p-3 text-center font-semibold text-blue-500">ذكور</th>
-                            <th className="p-3 text-center font-semibold text-pink-500">إناث</th>
-                            <th className="p-3 text-center font-semibold text-orange-500">معيدون</th>
-                            <th className="p-3 text-center font-semibold text-emerald-600">ناجح</th>
-                            <th className="p-3 text-center font-semibold text-amber-500">مستدرك</th>
-                            <th className="p-3 text-center font-semibold text-red-500">راسب</th>
-                            <th className="p-3 text-center font-semibold">نسبة النجاح</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {stats.byLevel.map((l, i) => {
-                            const withRes = l.admis + l.nonAdmis;
-                            const rate = withRes > 0 ? Math.round((l.admis / withRes) * 100) : null;
-                            return (
-                              <tr key={l.niveau} className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${i % 2 !== 0 ? "bg-muted/15" : ""}`}>
-                                <td className="p-3 font-semibold">
-                                  <span className="flex items-center gap-2">
-                                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: LEVEL_COLORS[i % LEVEL_COLORS.length] }} />
-                                    {LEVEL_LABELS[l.niveau] || l.niveau}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-center font-bold">{l.total}</td>
-                                <td className="p-3 text-center text-blue-600 font-semibold">{l.boys}</td>
-                                <td className="p-3 text-center text-pink-600 font-semibold">{l.girls}</td>
-                                <td className="p-3 text-center text-orange-500 font-semibold">{l.redoublant || "—"}</td>
-                                <td className="p-3 text-center text-emerald-600 font-semibold">{l.admis || "—"}</td>
-                                <td className="p-3 text-center text-amber-500 font-semibold">{(l.mustarrak ?? 0) || "—"}</td>
-                                <td className="p-3 text-center text-red-500 font-semibold">{l.nonAdmis || "—"}</td>
-                                <td className="p-3 text-center">
-                                  {rate !== null ? (
-                                    <Badge variant="outline" className={`font-bold text-xs ${rate >= 50 ? "border-emerald-400 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30" : "border-red-400 text-red-500 bg-red-50 dark:bg-red-950/30"}`}>
-                                      {rate}%
-                                    </Badge>
-                                  ) : "—"}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot>
-                          <tr className="border-t-2 font-bold text-sm bg-muted/40">
-                            <td className="p-3">الإجمالي</td>
-                            <td className="p-3 text-center">{stats.total}</td>
-                            <td className="p-3 text-center text-blue-600">{stats.boys}</td>
-                            <td className="p-3 text-center text-pink-600">{stats.girls}</td>
-                            <td className="p-3 text-center text-orange-500">{stats.redoublant}</td>
-                            <td className="p-3 text-center text-emerald-600">{stats.admis}</td>
-                            <td className="p-3 text-center text-amber-500">{stats.mustarrak ?? 0}</td>
-                            <td className="p-3 text-center text-red-500">{stats.nonAdmis}</td>
-                            <td className="p-3 text-center">
-                              {successRate !== null && (
-                                <Badge className={`font-bold ${successRate >= 50 ? "bg-emerald-500" : "bg-red-500"} text-white`}>
-                                  {successRate}%
-                                </Badge>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {stats.byLevel.map((lvl, li) => {
+                      const dotColor = LEVEL_COLORS[li % LEVEL_COLORS.length];
+                      const rows = (classByLevel[lvl.niveau] || []).map(c => ({
+                        name: c.classe,
+                        ذكور: c["ذكور"],
+                        إناث: c["إناث"],
+                      }));
+                      const withRes = lvl.admis + lvl.nonAdmis;
+                      const rate = withRes > 0 ? Math.round((lvl.admis / withRes) * 100) : null;
+                      return (
+                        <Card key={lvl.niveau} className="border-0 bg-card/80 shadow-md">
+                          <CardHeader className="pb-1 pt-4 px-5">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+                                <span className="font-black text-sm">{LEVEL_LABELS[lvl.niveau] || lvl.niveau}</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs font-semibold">
+                                <span className="text-muted-foreground">إجمالي <span className="text-foreground font-bold">{lvl.total}</span></span>
+                                <span className="text-blue-500">♂{lvl.boys}</span>
+                                <span className="text-pink-500">♀{lvl.girls}</span>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="px-5 pb-3 pt-1">
+                            {rows.length > 0 ? (
+                              <ResponsiveContainer width="100%" height={rows.length * 46 + 36}>
+                                <BarChart data={rows} layout="vertical" barSize={13} barGap={2}
+                                  margin={{ top: 4, right: 44, left: 8, bottom: 8 }}>
+                                  <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.07} />
+                                  <XAxis type="number" tick={{ fontSize: 10 }} domain={[0, "auto"]} />
+                                  <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fontWeight: 600 }} width={24} />
+                                  <Tooltip content={<MiniTooltip />} />
+                                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                                  <Bar dataKey="ذكور" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                                  <Bar dataKey="إناث" fill="#ec4899" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            ) : (
+                              <p className="text-xs text-muted-foreground text-center py-6">لا توجد بيانات قسم</p>
+                            )}
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 pt-2 border-t text-[10px] text-muted-foreground">
+                              {lvl.admis > 0 && <span>ناجح: <span className="text-emerald-600 font-bold">{lvl.admis}</span></span>}
+                              {lvl.nonAdmis > 0 && <span>راسب: <span className="text-red-500 font-bold">{lvl.nonAdmis}</span></span>}
+                              {(lvl.mustarrak ?? 0) > 0 && <span>مستدرك: <span className="text-amber-500 font-bold">{lvl.mustarrak}</span></span>}
+                              {lvl.redoublant > 0 && <span>معيد: <span className="text-orange-500 font-bold">{lvl.redoublant}</span></span>}
+                              {rate !== null && (
+                                <span className="font-bold" style={{ color: dotColor }}>
+                                  نسبة النجاح: {rate}%
+                                </span>
                               )}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </CardContent>
-                  </Card>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
                 </motion.section>
               )}
 
