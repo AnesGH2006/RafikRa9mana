@@ -15,9 +15,10 @@ const pageVariants = {
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const SUGGESTIONS = [
-  "تلميذ متأخر دراسياً ومعدله ضعيف، ما الحل؟",
-  "كيف أعالج مشكلة الغياب المتكرر عند تلميذ؟",
-  "تلميذ يواجه صعوبة في مادة الرياضيات، ما الإجراءات المناسبة؟",
+  "كم عدد الراسبين في مؤسستي؟ وما أسوأ قسم؟",
+  "من هم التلاميذ الأكثر غياباً؟",
+  "من هم الراسبون الأقرب للنجاح ويمكن إنقاذهم؟",
+  "تلميذ يواجه صعوبة في الرياضيات، ما الإجراءات المناسبة؟",
 ];
 
 export default function AssistantPage() {
@@ -71,7 +72,7 @@ export default function AssistantPage() {
         </span>
         <div>
           <h1 className="text-2xl font-bold text-foreground">المساعد الذكي</h1>
-          <p className="text-xs text-muted-foreground">مختص فقط في مشاكل التلاميذ وحلولها التربوية</p>
+          <p className="text-xs text-muted-foreground">يطّلع على بيانات مؤسستك ويجيب عن أسئلتك التربوية والإحصائية</p>
         </div>
       </motion.div>
 
