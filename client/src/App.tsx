@@ -614,7 +614,21 @@ export default function App() {
       <LanguageProvider defaultLang="ar">
         <AuthGate />
         <Toaster />
+        <PwaInstallPromptLazy />
       </LanguageProvider>
     </ThemeProvider>
+  );
+}
+
+// Lazy-load so it never blocks the main bundle
+import { lazy, Suspense } from "react";
+const _PwaPrompt = lazy(() =>
+  import("@/components/pwa-install-prompt").then(m => ({ default: m.PwaInstallPrompt }))
+);
+function PwaInstallPromptLazy() {
+  return (
+    <Suspense fallback={null}>
+      <_PwaPrompt />
+    </Suspense>
   );
 }

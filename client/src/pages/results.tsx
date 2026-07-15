@@ -136,6 +136,38 @@ function TabGeneral({ results }: { results: StudentResult[] }) {
   const top  = [...withAvg].sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
   const best = top[0];
 
+  // ── Grade categories
+  const GRADE_CATS = [
+    { label: "ممتاز",    min: 18,  max: 20.1, color: "#f59e0b" },
+    { label: "جيد جداً", min: 16,  max: 18,   color: "#10b981" },
+    { label: "جيد",      min: 14,  max: 16,   color: "#3b82f6" },
+    { label: "مقبول",    min: 10,  max: 14,   color: "#8b5cf6" },
+    { label: "راسب",     min: 0,   max: 10,   color: "#ef4444" },
+  ];
+  const catData = GRADE_CATS.map(c => ({
+    name:  c.label,
+    value: withAvg.filter(r => (r.annualAvg ?? -1) >= c.min && (r.annualAvg ?? -1) < c.max).length,
+    fill:  c.color,
+  })).filter(d => d.value > 0);
+
+  // ── Statistical metrics
+  const sortedByAvg = [...withAvg].sort((a, b) => (a.annualAvg ?? 0) - (b.annualAvg ?? 0));
+  const median = sortedByAvg.length === 0 ? 0 :
+    sortedByAvg.length % 2 === 0
+      ? ((sortedByAvg[sortedByAvg.length / 2 - 1].annualAvg ?? 0) + (sortedByAvg[sortedByAvg.length / 2].annualAvg ?? 0)) / 2
+      : (sortedByAvg[Math.floor(sortedByAvg.length / 2)].annualAvg ?? 0);
+  const variance = withAvg.length > 0
+    ? withAvg.reduce((s, r) => s + ((r.annualAvg ?? 0) - classAvg) ** 2, 0) / withAvg.length
+    : 0;
+  const stdDev  = Math.sqrt(variance);
+  const below5  = withAvg.filter(r => (r.annualAvg ?? 20) < 5).length;
+  const above15 = withAvg.filter(r => (r.annualAvg ?? 0) >= 15).length;
+
+  // ── T1 → T3 scatter data
+  const scatterData = withAvg
+    .filter(r => r.t1Avg != null && r.t3Avg != null)
+    .map(r => ({ x: +(r.t1Avg!).toFixed(2), y: +(r.t3Avg!).toFixed(2), name: r.student.nomPrenom }));
+
   const BUCKETS = [
     { label: "0–5",   min: 0,  max: 5    },
     { label: "5–7",   min: 5,  max: 7    },
@@ -246,6 +278,60 @@ function TabGeneral({ results }: { results: StudentResult[] }) {
         </Card>
       </motion.div>
 
+      {/* Grade categories breakdown */}
+      {catData.length > 0 && (
+        <motion.div variants={cardAnim}>
+          <Card className="rounded-2xl border bg-card shadow-sm">
+            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">توزيع التقديرات</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <ResponsiveContainer width="100%" height={180}>
+                  <PieChart>
+                    <Pie data={catData} cx="50%" cy="50%" innerRadius={46} outerRadius={72}
+                      paddingAngle={2} dataKey="value">
+                      {catData.map((c, i) => <Cell key={i} fill={c.fill} />)}
+                    </Pie>
+                    <Tooltip content={<MiniTooltip />} />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-2.5">
+                  {GRADE_CATS.map(c => {
+                    const count = withAvg.filter(r => (r.annualAvg ?? -1) >= c.min && (r.annualAvg ?? -1) < c.max).length;
+                    const pct = withAvg.length > 0 ? (count / withAvg.length) * 100 : 0;
+                    return (
+                      <div key={c.label} className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} />
+                        <span className="text-xs font-semibold w-14 shrink-0">{c.label}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                          <motion.div className="h-full rounded-full"
+                            style={{ background: c.color }}
+                            initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+                            transition={{ duration: 0.7 }} />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground font-mono w-16 text-left shrink-0">
+                          {count} ({pct.toFixed(0)}%)
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Statistical insight row */}
+      {withAvg.length > 1 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KPICard label="الوسيط"             value={median.toFixed(2)}    sub="/20" icon={BarChart3}   gradient="from-sky-500 to-cyan-600"    />
+          <KPICard label="الانحراف المعياري" value={stdDev.toFixed(2)}    sub="σ"   icon={TrendingUp}  gradient="from-slate-500 to-slate-700" />
+          <KPICard label="دون 5"              value={<CountUp to={below5} />}        icon={XCircle}    gradient="from-rose-600 to-red-700"    />
+          <KPICard label="15 فأكثر"           value={<CountUp to={above15} />}       icon={Star}       gradient="from-amber-500 to-yellow-600" />
+        </div>
+      )}
+
       {/* Spotlight top 3 + worst */}
       <motion.div variants={cardAnim}>
         <Card className="rounded-2xl border bg-card shadow-sm">
@@ -285,6 +371,47 @@ function TabGeneral({ results }: { results: StudentResult[] }) {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* T1 → T3 trajectory scatter */}
+      {scatterData.length >= 4 && (
+        <motion.div variants={cardAnim}>
+          <Card className="rounded-2xl border bg-card shadow-sm">
+            <CardHeader className="pb-1">
+              <CardTitle className="text-xs font-bold text-muted-foreground">مسار التلاميذ: الفصل 1 مقابل الفصل 3</CardTitle>
+              <p className="text-[10px] text-muted-foreground mt-0.5">كل نقطة = تلميذ — الخطان الأصفران عند 10 — المنطقة العلوية اليمنى: نجح في الفصلين</p>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={220}>
+                <ScatterChart margin={{ left: -10, right: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.07} />
+                  <XAxis type="number" dataKey="x" name="ف1" domain={[0, 20]}
+                    tick={{ fontSize: 9 }} axisLine={false} tickLine={false}
+                    label={{ value: "ف1", position: "insideBottomRight", offset: -2, fontSize: 10 }} />
+                  <YAxis type="number" dataKey="y" name="ف3" domain={[0, 20]}
+                    tick={{ fontSize: 9 }} axisLine={false} tickLine={false}
+                    label={{ value: "ف3", angle: -90, position: "insideLeft", fontSize: 10 }} />
+                  <ReferenceLine x={10} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1.2} />
+                  <ReferenceLine y={10} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1.2} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0]?.payload as { x: number; y: number; name: string };
+                      return (
+                        <div className="bg-background/95 border rounded-xl shadow-xl p-2.5 text-xs">
+                          <p className="font-bold mb-1">{d.name}</p>
+                          <p className="text-muted-foreground">ف1: <span className={`font-bold ${d.x >= 10 ? "text-emerald-600" : "text-red-500"}`}>{d.x}</span></p>
+                          <p className="text-muted-foreground">ف3: <span className={`font-bold ${d.y >= 10 ? "text-emerald-600" : "text-red-500"}`}>{d.y}</span></p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Scatter data={scatterData} fill={PRIMARY} opacity={0.6} />
+                </ScatterChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
     </motion.div>
   );
 }
@@ -528,6 +655,31 @@ function TabGroups({ results }: { results: StudentResult[] }) {
                     <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
                     <Bar dataKey="pass" name="ناجح" radius={[4, 4, 0, 0]} fill={PASS_COLOR} stackId="a" />
                     <Bar dataKey="fail" name="راسب" radius={[4, 4, 0, 0]} fill={FAIL_COLOR}  stackId="a" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Average per class */}
+          <motion.div variants={cardAnim}>
+            <Card className="rounded-2xl border bg-card shadow-sm">
+              <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">متوسط المعدل حسب القسم</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={[...stats].sort((a, b) => b.avg - a.avg)} margin={{ left: -10 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                    <XAxis dataKey="classe" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} interval={0} />
+                    <YAxis domain={[0, 20]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                    <ReferenceLine y={10} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1.5}
+                      label={{ value: "10", position: "insideTopRight", fontSize: 9, fill: "#f59e0b" }} />
+                    <Tooltip content={<MiniTooltip />} cursor={{ fill: "transparent" }} />
+                    <Bar dataKey="avg" name="المعدل /20" radius={[6, 6, 0, 0]}>
+                      {[...stats].sort((a, b) => b.avg - a.avg).map((g, i) => (
+                        <Cell key={i} fill={g.avg >= 10 ? PASS_COLOR : FAIL_COLOR}
+                          opacity={Math.max(0.55, 1 - i * 0.05)} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -1044,6 +1196,46 @@ function TabFailed({ results }: { results: StudentResult[] }) {
           </Card>
         </motion.div>
       </div>
+
+      {/* Gap distribution chart */}
+      {failed.length > 0 && (() => {
+        const GAP_BUCKETS = [
+          { label: "0–2",  min: 0,  max: 2   },
+          { label: "2–4",  min: 2,  max: 4   },
+          { label: "4–6",  min: 4,  max: 6   },
+          { label: "6–8",  min: 6,  max: 8   },
+          { label: "8–10", min: 8,  max: 10  },
+          { label: ">10",  min: 10, max: 100 },
+        ];
+        const gapData = GAP_BUCKETS.map((b, bi) => ({
+          label: b.label,
+          عدد: failed.filter(r => r.needed != null && r.needed >= b.min && r.needed < b.max).length,
+          fill: `rgba(239,68,68,${1 - bi * 0.12})`,
+        })).filter(d => d.عدد > 0);
+        if (gapData.length === 0) return null;
+        return (
+          <motion.div variants={cardAnim}>
+            <Card className="rounded-2xl border bg-card shadow-sm">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-xs font-bold text-muted-foreground">توزيع الفجوة عن النجاح (النقاط الناقصة)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={gapData} barSize={32} margin={{ left: -15 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip content={<MiniTooltip />} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+                    <Bar dataKey="عدد" name="عدد الراسبين" radius={[6, 6, 0, 0]}>
+                      {gapData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </motion.div>
+        );
+      })()}
 
       <motion.div variants={cardAnim}>
         <Card className="rounded-2xl border bg-card shadow-sm">

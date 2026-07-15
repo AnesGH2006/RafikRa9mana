@@ -293,59 +293,141 @@ html[dir="ltr"] body {
   }
 }
 @media print {
+  /* ── Preserve colors and backgrounds ──────────────────── */
   * {
     overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   html, body {
     height: auto !important;
     overflow: visible !important;
+    background: #fff !important;
+    font-size: 11pt !important;
   }
 
   @page {
-    size: A4;
-    margin: 1.5cm;
+    size: A4 portrait;
+    margin: 1.2cm 1.4cm 1.2cm 1.4cm;
   }
 
-  /* Hide sidebar, header, controls when printing */
+  /* ── Hide UI chrome ────────────────────────────────────── */
   aside,
   header,
+  nav,
   .no-print,
   [data-testid="button-header-import"],
-  [data-testid="button-mobile-import"] {
+  [data-testid="button-mobile-import"],
+  [role="tablist"],
+  [data-radix-scroll-area-scrollbar] {
     display: none !important;
   }
 
-  /* Print area fills the page */
+  /* ── Print area ────────────────────────────────────────── */
   .print-area {
     display: block !important;
   }
 
-  /* Ensure cards look good in print */
+  /* ── Page breaks ────────────────────────────────────────── */
   .print-section {
     break-inside: avoid;
     page-break-inside: avoid;
+    margin-bottom: 14px;
   }
 
-  /* Hide buttons + selects in print mode */
+  .print-break-before {
+    break-before: page;
+    page-break-before: always;
+    padding-top: 8px;
+  }
+
+  /* ── Hide interactive controls ─────────────────────────── */
   button:not(.print-show),
   select:not(.print-show),
+  input:not(.print-show),
   .print-hide {
     display: none !important;
   }
 
-  /* Remove shadows for print */
-  .shadow-lg, .shadow-md, .shadow-sm, .shadow-xl {
-    box-shadow: none !important;
+  /* ── Subtle shadows instead of none ───────────────────── */
+  .shadow-lg, .shadow-md, .shadow-sm, .shadow-xl, .shadow-2xl {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10) !important;
   }
 
-  /* Force dark text on white for print */
-  .text-white {
-    color: #000 !important;
-  }
-
-  /* Show print-only elements */
+  /* ── Show print-only elements ──────────────────────────── */
   .print-only {
-    display: block !important;
+    display: flex !important;
+  }
+
+  /* ── Card borders ────────────────────────────────────────── */
+  .rounded-2xl, .rounded-xl {
+    border-radius: 8px !important;
+    border: 1px solid #e5e7eb !important;
+  }
+
+  /* ── Tables ──────────────────────────────────────────────── */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    font-size: 10pt !important;
+  }
+
+  thead tr {
+    background: #f3f4f6 !important;
+  }
+
+  th {
+    background: #f3f4f6 !important;
+    font-weight: 700 !important;
+    padding: 5px 8px !important;
+    border: 1px solid #d1d5db !important;
+    text-align: center !important;
+    font-size: 9pt !important;
+  }
+
+  td {
+    padding: 4px 8px !important;
+    border: 1px solid #e5e7eb !important;
+    font-size: 9.5pt !important;
+  }
+
+  tr:nth-child(even) td {
+    background: #f9fafb !important;
+  }
+
+  /* ── Gradient KPI cards — keep colors ─────────────────── */
+  [class*="bg-gradient"] {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ── Charts keep their fill/stroke colors ─────────────── */
+  svg, svg * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ── Grid layout for 2-col in print ──────────────────── */
+  .grid {
+    display: grid !important;
+  }
+
+  /* ── Typography clean-up ────────────────────────────────── */
+  h1 { font-size: 18pt !important; }
+  h2 { font-size: 14pt !important; }
+  h3 { font-size: 12pt !important; }
+
+  /* ── Recharts responsive container fix ─────────────────── */
+  .recharts-responsive-container {
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* ── Force overflow visible on all containers ───────────── */
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-hidden {
+    overflow: visible !important;
   }
 }
