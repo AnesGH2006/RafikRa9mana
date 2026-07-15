@@ -913,7 +913,7 @@ function TabProgress({ results }: { results: StudentResult[] }) {
 function TabPassed({ results }: { results: StudentResult[] }) {
   const [q, setQ] = useState("");
   const [filterGrade, setFilterGrade] = useState("all");
-  const passed = results.filter(r => r.passed === true && r.annualAvg !== null)
+  const passed = results.filter(r => r.annualAvg !== null && r.annualAvg >= 10)
     .sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
   const GRADES = ["all", "ممتاز", "جيد جداً", "جيد", "مقبول"];
   const filtered = passed.filter(r => {
@@ -994,7 +994,7 @@ ${filtered.map((r, i) => `<tr><td>${i + 1}</td><td class="name">${r.student.nomP
 // ─── TAB 6: Failed ────────────────────────────────────────────────────────────
 function TabFailed({ results }: { results: StudentResult[] }) {
   const failed = results
-    .filter(r => r.passed === false && r.annualAvg !== null)
+    .filter(r => r.annualAvg !== null && r.annualAvg < 10)
     .map(r => ({ ...r, needed: r.annualAvg != null ? Math.max(0, 10 - r.annualAvg) : null }))
     .sort((a, b) => (a.needed ?? 999) - (b.needed ?? 999));
 
