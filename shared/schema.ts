@@ -144,3 +144,37 @@ export const orientationWishesTable = pgTable("orientation_wishes", {
 
 export type OrientationWish = typeof orientationWishesTable.$inferSelect;
 export type InsertOrientationWish = typeof orientationWishesTable.$inferInsert;
+
+// ─── Desktop Agent ─────────────────────────────────────────────────────────────
+export const agentActionEnum = pgEnum("agent_action", [
+  "upload_excel", "print_report", "open_folder", "open_file",
+  "open_app", "backup_reports", "sync_data", "monitor_folder",
+  "connect", "disconnect",
+]);
+
+export const agentTokensTable = pgTable("agent_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 128 }).notNull().unique(),
+  deviceName: varchar("device_name", { length: 255 }),
+  allowedFolders: jsonb("allowed_folders").$type<string[]>().default([]),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+});
+
+export type AgentToken = typeof agentTokensTable.$inferSelect;
+export type InsertAgentToken = typeof agentTokensTable.$inferInsert;
+
+export const agentLogsTable = pgTable("agent_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentTokenId: varchar("agent_token_id").notNull().references(() => agentTokensTable.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  action: agentActionEnum("action").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("success"),
+  details: jsonb("details"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AgentLog = typeof agentLogsTable.$inferSelect;
+export type InsertAgentLog = typeof agentLogsTable.$inferInsert;

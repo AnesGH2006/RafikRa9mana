@@ -1,0 +1,40 @@
+{
+  "name": "school-manager-agent",
+  "version": "1.0.0",
+  "description": "School Management Desktop Agent — secure Windows desktop client",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build:win": "electron-builder --win"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.schoolmanager.agent",
+    "productName": "School Manager Agent",
+    "copyright": "School Management System",
+    "directories": {
+      "output": "dist"
+    },
+    "files": ["src/**/*", "assets/**/*"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "installerHeaderIcon": "assets/icon.ico"
+    }
+  }
+}

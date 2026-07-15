@@ -9,6 +9,7 @@ import adminRouter from "./admin.js";
 import absencesRouter from "./absences.js";
 import assistantRouter from "./assistant.js";
 import orientationRouter from "./orientation.js";
+import agentRouter from "./agent.js";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(adminRouter);
 router.use(absencesRouter);
 router.use(assistantRouter);
 router.use(orientationRouter);
+router.use(agentRouter);
 
 export default router;
