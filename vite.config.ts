@@ -20,6 +20,8 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         skipWaiting: true,
         clientsClaim: true,
+        // Never let the SW intercept /api/* navigations — they must reach Express
+        navigateFallbackDenylist: [/^\/api\//],
       },
       devOptions: { enabled: false },
     }),
