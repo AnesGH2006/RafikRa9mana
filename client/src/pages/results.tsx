@@ -1473,26 +1473,139 @@ function TabGender({ results }: { results: StudentResult[] }) {
 
 // ─── TAB 8: Repeaters ────────────────────────────────────────────────────────
 function TabRepeaters({ results }: { results: StudentResult[] }) {
-  // Repeaters identified by rank = 0 or student property — fallback: show note
   const withAvg = results.filter(r => r.annualAvg !== null);
-  // If backend sends a "statut" field on student, use it; otherwise unavailable
   const repeaters = withAvg.filter(r => (r.student as any).statut === "redoublant");
   const newcomers = withAvg.filter(r => (r.student as any).statut !== "redoublant");
+  const hasStatutData = repeaters.length > 0;
 
-  if (repeaters.length === 0) {
+  // ── Fallback: analyse failed students (المتوقع إعادتهم) ────────────────────
+  if (!hasStatutData) {
+    const failed = withAvg.filter(r => r.passed === false)
+      .sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+
+    // Group failed by class for chart
+    const classKeys = [...new Set(failed.map(r => `${r.student.niveau}__${r.student.classe}`))].sort();
+    const perClassData = classKeys.map(key => {
+      const [niv, cls] = key.split("__") as [string, string];
+      const rs = failed.filter(r => r.student.niveau === niv && r.student.classe === cls);
+      const allInClass = withAvg.filter(r => r.student.niveau === niv && r.student.classe === cls);
+      return {
+        name: `${cls}`,
+        label: `${LEVEL_LABELS[niv as Niveau] ?? niv} — ${cls}`,
+        failCount: rs.length,
+        total: allInClass.length,
+        rate: allInClass.length > 0 ? +(rs.length / allInClass.length * 100).toFixed(1) : 0,
+      };
+    });
+
+    const totalFailed = failed.length;
+    const avgDeficit = failed.length > 0
+      ? failed.reduce((s, r) => s + (10 - (r.annualAvg ?? 0)), 0) / failed.length
+      : 0;
+
     return (
-      <motion.div variants={cardAnim} initial="initial" animate="animate">
-        <Card className="rounded-2xl border bg-card shadow-sm">
-          <CardContent className="py-14 text-center space-y-2">
-            <Star className="w-10 h-10 mx-auto opacity-20" />
-            <p className="font-semibold">لم يتم اكتشاف بيانات المعيدين</p>
-            <p className="text-xs text-muted-foreground">تأكد من وجود حقل statut = "redoublant" في بيانات التلاميذ</p>
-          </CardContent>
-        </Card>
+      <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-5">
+        {/* Info banner */}
+        <motion.div variants={cardAnim}>
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <Star className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+              لم يتم رصد تلاميذ بوضعية <strong>معيد</strong> في البيانات الحالية. يعرض هذا التحليل التلاميذ <strong>الراسبين المتوقع إعادتهم</strong> بناءً على المعدل السنوي.
+            </p>
+          </div>
+        </motion.div>
+
+        {/* KPI cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            { label: "متوقع إعادتهم", value: totalFailed, sub: `من ${withAvg.length} تلميذ`, color: "text-red-500", bg: "bg-red-500/10" },
+            { label: "نسبة الرسوب", value: `${withAvg.length > 0 ? (totalFailed / withAvg.length * 100).toFixed(1) : 0}%`, sub: "من إجمالي التلاميذ", color: "text-amber-600", bg: "bg-amber-500/10" },
+            { label: "متوسط النقص للنجاح", value: `${avgDeficit.toFixed(2)}`, sub: "نقطة للوصول إلى 10/20", color: "text-blue-500", bg: "bg-blue-500/10" },
+          ].map((d, i) => (
+            <motion.div key={i} variants={cardAnim}>
+              <Card className="rounded-2xl border bg-card shadow-sm">
+                <CardContent className="p-5 text-center">
+                  <div className={`w-10 h-10 rounded-xl ${d.bg} flex items-center justify-center mx-auto mb-3`}>
+                    <Star className={`w-5 h-5 ${d.color}`} />
+                  </div>
+                  <p className={`text-3xl font-extrabold ${d.color}`}>{d.value}</p>
+                  <p className="text-xs font-semibold mt-1">{d.label}</p>
+                  <p className="text-xs text-muted-foreground">{d.sub}</p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Failed per class chart */}
+        {perClassData.length > 0 && (
+          <motion.div variants={cardAnim}>
+            <Card className="rounded-2xl border bg-card shadow-sm">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-xs font-bold text-muted-foreground">عدد الراسبين المتوقع إعادتهم حسب القسم</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={Math.max(200, perClassData.length * 36)}>
+                  <BarChart data={perClassData} margin={{ left: -10, right: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip content={<MiniTooltip />} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+                    <Bar dataKey="failCount" name="الراسبون" radius={[5, 5, 0, 0]} fill="#ef4444" barSize={24} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Failed students table */}
+        {failed.length > 0 && (
+          <motion.div variants={cardAnim}>
+            <Card className="rounded-2xl border bg-card shadow-sm">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-xs font-bold text-muted-foreground">
+                  قائمة التلاميذ المتوقع إعادتهم — مرتبة من الأقرب للنجاح
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/60">
+                      <tr>
+                        {["#", "الاسم واللقب", "المستوى", "القسم", "ف1", "ف2", "ف3", "المعدل السنوي", "النقص"].map((h, i) => (
+                          <th key={i} className="px-3 py-2.5 text-xs text-muted-foreground font-semibold text-center whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {failed.map((r, i) => (
+                        <tr key={r.student.id} className={`border-t ${i % 2 === 0 ? "" : "bg-muted/15"}`}>
+                          <td className="px-3 py-2 text-center text-muted-foreground font-mono text-xs">{i + 1}</td>
+                          <td className="px-3 py-2 font-medium">{r.student.nomPrenom}</td>
+                          <td className="px-3 py-2 text-center"><Badge variant="secondary" className="text-xs">{LEVEL_LABELS[r.student.niveau as Niveau]}</Badge></td>
+                          <td className="px-3 py-2 text-center"><Badge variant="outline">{r.student.classe}</Badge></td>
+                          {[r.t1Avg, r.t2Avg, r.t3Avg].map((a, ti) => (
+                            <td key={ti} className={`px-3 py-2 text-center font-mono text-xs ${a == null ? "text-muted-foreground" : a >= 10 ? "text-emerald-600" : "text-red-500"}`}>{avg2(a)}</td>
+                          ))}
+                          <td className="px-3 py-2 text-center font-mono font-bold text-red-500">{avg2(r.annualAvg)}</td>
+                          <td className="px-3 py-2 text-center font-mono text-amber-600 font-bold text-xs">
+                            +{r.annualAvg != null ? (10 - r.annualAvg).toFixed(2) : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
       </motion.div>
     );
   }
 
+  // ── With statut data: compare repeaters vs newcomers ──────────────────────
   const repPass  = repeaters.filter(r => r.passed).length;
   const newPass  = newcomers.filter(r => r.passed).length;
   const repRate  = repeaters.length > 0 ? (repPass / repeaters.length) * 100 : 0;
@@ -1525,7 +1638,7 @@ function TabRepeaters({ results }: { results: StudentResult[] }) {
               <BarChart data={cmpData} margin={{ left: -10 }}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<MiniTooltip />} cursor={{ fill: "transparent" }} />
                 <Bar dataKey="rate" name="نسبة النجاح %" radius={[8, 8, 0, 0]}>
                   {cmpData.map((d, i) => <Cell key={i} fill={d.fill} />)}
