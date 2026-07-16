@@ -246,18 +246,18 @@ export default function AgentSetupPage() {
             <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
               <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-300 leading-relaxed">
-                الوكيل تطبيق Electron لـ Windows. يلزم بناؤه محلياً أو الحصول على المثبّت من مسؤول النظام.
+                الوكيل تطبيق Electron لـ Windows. يلزم بناؤه من <strong className="text-amber-200">جهاز Windows حقيقي</strong> — لا يمكن بناؤه على Linux أو Replit (سيظهر خطأ <code className="text-amber-100">ERR_ELECTRON_BUILDER_CANNOT_EXECUTE</code> إن حاولت ذلك).
               </p>
             </div>
 
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground">خطوات البناء (للمطورين)</p>
+              <p className="text-xs font-semibold text-muted-foreground">خطوات البناء (من جهاز Windows)</p>
               <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 font-mono text-xs text-slate-300 space-y-1 text-left" dir="ltr">
-                <p className="text-slate-500"># in the agent/ folder</p>
+                <p className="text-slate-500"># Run these commands on a Windows machine</p>
                 <p>cd agent</p>
                 <p>npm install</p>
                 <p>npm run build:win</p>
-                <p className="text-slate-500"># installer → agent/dist/</p>
+                <p className="text-slate-500"># installer (.exe) → agent/dist/</p>
               </div>
             </div>
 

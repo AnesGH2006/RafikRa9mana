@@ -473,13 +473,13 @@ function TabSubjects({ results }: { results: StudentResult[] }) {
           <Card className="rounded-2xl border bg-card shadow-sm">
             <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">متوسط النقاط حسب المادة</CardTitle></CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={Math.max(200, subjectStats.length * 34)}>
-                <BarChart data={[...subjectStats].sort((a, b) => (b.avg ?? 0) - (a.avg ?? 0))} layout="vertical" margin={{ right: 20, left: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} horizontal={false} />
-                  <XAxis type="number" domain={[0, 20]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="arLabel" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={110} />
-                  <Tooltip content={<MiniTooltip />} cursor={{ fill: "transparent" }} />
-                  <Bar dataKey="avg" name="المتوسط" radius={[0, 6, 6, 0]} fill={PRIMARY} />
+              <ResponsiveContainer width="100%" height={Math.max(220, subjectStats.length * 28)}>
+                <BarChart data={[...subjectStats].sort((a, b) => (b.avg ?? 0) - (a.avg ?? 0))} margin={{ left: -10, right: 5, bottom: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                  <XAxis dataKey="arLabel" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} angle={-40} textAnchor="end" interval={0} />
+                  <YAxis type="number" domain={[0, 20]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<MiniTooltip />} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+                  <Bar dataKey="avg" name="المتوسط" radius={[4, 4, 0, 0]} fill={PRIMARY} barSize={22} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -490,13 +490,13 @@ function TabSubjects({ results }: { results: StudentResult[] }) {
           <Card className="rounded-2xl border bg-card shadow-sm">
             <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">نسبة النجاح حسب المادة</CardTitle></CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={Math.max(200, subjectStats.length * 34)}>
-                <BarChart data={[...subjectStats].sort((a, b) => b.passRate - a.passRate)} layout="vertical" margin={{ right: 20, left: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="arLabel" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={110} />
-                  <Tooltip content={<MiniTooltip />} cursor={{ fill: "transparent" }} />
-                  <Bar dataKey="passRate" name="نسبة النجاح %" radius={[0, 6, 6, 0]} fill={PASS_COLOR} />
+              <ResponsiveContainer width="100%" height={Math.max(220, subjectStats.length * 28)}>
+                <BarChart data={[...subjectStats].sort((a, b) => b.passRate - a.passRate)} margin={{ left: -10, right: 5, bottom: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                  <XAxis dataKey="arLabel" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} angle={-40} textAnchor="end" interval={0} />
+                  <YAxis type="number" domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<MiniTooltip />} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+                  <Bar dataKey="passRate" name="نسبة النجاح %" radius={[4, 4, 0, 0]} fill={PASS_COLOR} barSize={22} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -1445,21 +1445,22 @@ function TabGender({ results }: { results: StudentResult[] }) {
           <Card className="rounded-2xl border bg-card shadow-sm">
             <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">نسبة نجاح الذكور والإناث حسب القسم</CardTitle></CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={Math.max(180, perClassGender.length * 36)}>
+              <ResponsiveContainer width="100%" height={240}>
                 <BarChart
                   data={perClassGender.map(c => ({
                     name: c.cls,
                     "ذكور %":  c.bRate !== null ? +c.bRate.toFixed(1) : 0,
                     "إناث %": c.gRate !== null ? +c.gRate.toFixed(1) : 0,
                   }))}
-                  layout="vertical" margin={{ right: 20, left: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={55} />
-                  <Tooltip content={<MiniTooltip />} cursor={{ fill: "transparent" }} />
+                  margin={{ left: -10, right: 5 }}
+                  barGap={4}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis type="number" domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<MiniTooltip />} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
                   <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="ذكور %" fill={MALE_COLOR}   radius={[0, 6, 6, 0]} />
-                  <Bar dataKey="إناث %" fill={FEMALE_COLOR} radius={[0, 6, 6, 0]} />
+                  <Bar dataKey="ذكور %" fill={MALE_COLOR}   radius={[5, 5, 0, 0]} barSize={18} />
+                  <Bar dataKey="إناث %" fill={FEMALE_COLOR} radius={[5, 5, 0, 0]} barSize={18} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -1707,10 +1708,15 @@ function TabTop({ results }: { results: StudentResult[] }) {
 // ════════════════════════════════════════════════════════════════════════════════
 // ANALYTICS DASHBOARD (wrapper with tab bar)
 // ════════════════════════════════════════════════════════════════════════════════
-function ResultsAnalyticsDashboard({ results }: { results: StudentResult[] }) {
+function ResultsAnalyticsDashboard({ results, onTabChange }: { results: StudentResult[]; onTabChange?: (tab: AnalyticsTabId) => void }) {
   const [activeTab, setActiveTab] = useState<AnalyticsTabId>("general");
   const withAvg = results.filter(r => r.annualAvg !== null);
   if (withAvg.length === 0) return null;
+
+  const handleTabChange = (tab: AnalyticsTabId) => {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  };
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -1723,7 +1729,7 @@ function ResultsAnalyticsDashboard({ results }: { results: StudentResult[] }) {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
             return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              <button key={tab.id} onClick={() => handleTabChange(tab.id)}
                 className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-all shrink-0 ${
                   active
                     ? "border-blue-600 text-blue-600 bg-blue-50/50 dark:bg-blue-950/20"
@@ -2428,6 +2434,7 @@ export default function Results() {
   const [annee, setAnnee] = useState(DEFAULT_YEAR);
   const [filters, setFilters] = useState({ niveau: "", classe: "", sexe: "", q: "" });
   const [listKey, setListKey] = useState(0);
+  const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTabId>("general");
 
   const fetchResults = useCallback(async () => {
     setLoading(true);
@@ -2523,10 +2530,11 @@ export default function Results() {
 
       {/* ── ANALYTICS DASHBOARD (new) ── */}
       {!loading && results.length > 0 && (
-        <ResultsAnalyticsDashboard results={results} />
+        <ResultsAnalyticsDashboard results={results} onTabChange={setAnalyticsTab} />
       )}
 
-      {/* ── Existing Table ── */}
+      {/* ── Existing Table — only shown on الناجحون / الراسبون tabs (or when no data yet) ── */}
+      {(loading || results.length === 0 || analyticsTab === "passed" || analyticsTab === "failed") && (
       <AnimatePresence mode="wait">
         {loading ? (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
@@ -2596,6 +2604,8 @@ export default function Results() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      )}
 
       {selected    && <GradeModal result={selected} annee={annee} onClose={() => setSelected(null)} onSaved={fetchResults} />}
       {showImport  && <ImportModal annee={annee} onClose={() => setShowImport(false)} onDone={fetchResults} />}
