@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLanguage } from "@/contexts/language-provider";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,13 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Bot, Download, Key, Trash2, Copy, Check, Monitor, Wifi,
   FolderSync, Shield, RefreshCw, Plus, CheckCircle2, Circle,
-  Smartphone,
+  Terminal, ExternalLink, AlertTriangle,
 } from "lucide-react";
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -106,34 +102,10 @@ export default function AgentSetupPage() {
   const [revoking, setRevoking] = useState<string | null>(null);
   const [loadingTokens, setLoadingTokens] = useState(true);
 
-  // PWA install state
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [pwaInstalled, setPwaInstalled] = useState(false);
-  const [installing, setInstalling] = useState(false);
-
-  useEffect(() => {
-    // Check if already running as installed PWA
-    if (window.matchMedia("(display-mode: standalone)").matches) {
-      setPwaInstalled(true);
-    }
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
-    window.addEventListener("appinstalled", () => setPwaInstalled(true));
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
-
-  const handlePwaInstall = async () => {
-    if (!deferredPrompt) return;
-    setInstalling(true);
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") setPwaInstalled(true);
-    setDeferredPrompt(null);
-    setInstalling(false);
-  };
+  const serverUrl =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : "https://your-school.replit.app";
 
   const fetchTokens = useCallback(async () => {
     setLoadingTokens(true);
@@ -259,70 +231,50 @@ export default function AgentSetupPage() {
         </Card>
       </motion.div>
 
-      {/* PWA Install card */}
+      {/* Download section */}
       <motion.div custom={1} variants={cardVariants} initial="initial" animate="animate">
-        <Card className="border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 via-blue-500/5 to-transparent overflow-hidden">
-          <CardContent className="pt-6 pb-6">
-            <div className="flex flex-col sm:flex-row items-center gap-5">
-              {/* Icon */}
-              <motion.div
-                className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/30"
-                animate={{ rotate: [0, -6, 6, 0] }}
-                transition={{ duration: 3, repeat: Infinity, repeatDelay: 4 }}
-              >
-                <Smartphone className="w-8 h-8 text-white" />
-              </motion.div>
-
-              {/* Text */}
-              <div className="flex-1 text-center sm:text-right space-y-1">
-                <p className="text-base font-bold">ثبّت التطبيق على جهازك</p>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  أضف مدير المتوسطة إلى الشاشة الرئيسية للوصول الفوري — يعمل بدون متصفح وبدون إنترنت.
-                </p>
-                <div className="flex flex-wrap justify-center sm:justify-start gap-3 pt-1 text-[11px] text-muted-foreground">
-                  {["يعمل بدون إنترنت", "أسرع وأخف", "مثل التطبيق الأصلي"].map((b, i) => (
-                    <span key={i} className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                      {b}
-                    </span>
-                  ))}
-                </div>
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center">
+                <Download className="w-4 h-4 text-white" />
               </div>
+              تثبيت الوكيل على Windows
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-300 leading-relaxed">
+                الوكيل تطبيق Electron لـ Windows. يلزم بناؤه من <strong className="text-amber-200">جهاز Windows حقيقي</strong> — لا يمكن بناؤه على Linux أو Replit (سيظهر خطأ <code className="text-amber-100">ERR_ELECTRON_BUILDER_CANNOT_EXECUTE</code> إن حاولت ذلك).
+              </p>
+            </div>
 
-              {/* Action */}
-              <div className="shrink-0">
-                {pwaInstalled ? (
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span className="text-sm font-semibold text-emerald-400">مثبَّت</span>
-                  </div>
-                ) : deferredPrompt ? (
-                  <Button
-                    onClick={handlePwaInstall}
-                    disabled={installing}
-                    className="gap-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 border-0 shadow-md shadow-blue-500/25 font-semibold"
-                  >
-                    {installing ? (
-                      <motion.div
-                        className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
-                      />
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
-                    تثبيت الآن
-                  </Button>
-                ) : (
-                  <div className="text-center space-y-1">
-                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-muted/60 border border-muted">
-                      <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">مثبَّت مسبقاً</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground/60">أو افتح من المتصفح</p>
-                  </div>
-                )}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground">خطوات البناء (من جهاز Windows)</p>
+              <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 font-mono text-xs text-slate-300 space-y-1 text-left" dir="ltr">
+                <p className="text-slate-500"># Run these commands on a Windows machine</p>
+                <p>cd agent</p>
+                <p>npm install</p>
+                <p>npm run build:win</p>
+                <p className="text-slate-500"># installer (.exe) → agent/dist/</p>
               </div>
+            </div>
+
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/40">
+              <Monitor className="w-4 h-4 text-muted-foreground shrink-0" />
+              <div className="text-xs text-muted-foreground leading-relaxed">
+                بعد التثبيت، سيظهر الوكيل في علبة النظام (System Tray).
+                اذهب إلى <strong className="text-foreground">الإعدادات</strong> وأدخل عنوان الخادم:
+                <span className="font-mono text-indigo-400 mx-1">{serverUrl}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/40">
+              <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                راجع <strong className="text-foreground">agent/README.md</strong> لمزيد من التفاصيل حول البروتوكول والأحداث.
+              </p>
             </div>
           </CardContent>
         </Card>
