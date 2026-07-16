@@ -49,6 +49,7 @@ export const translations: TranslationMap = {
   "nav.orient_wishes": { en: "Student Wishes", ar: "رغبات التوجيه", fr: "Vœux d'orientation" },
   "nav.assistant_section": { en: "AI Assistant", ar: "المساعد الذكي", fr: "Assistant IA" },
   "nav.assistant": { en: "Problems & Solutions", ar: "المشاكل والحلول", fr: "Problèmes & solutions" },
+  "nav.agent":     { en: "Desktop Agent", ar: "وكيل سطح المكتب", fr: "Agent bureau" },
 
   // Login
   "login.hero":     { en: "Manage your CEM school efficiently", ar: "أدر متوسطتك بكفاءة", fr: "Gérez votre CEM efficacement" },

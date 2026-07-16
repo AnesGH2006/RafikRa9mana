@@ -45,7 +45,7 @@ export async function listTokens(req: Request, res: Response): Promise<void> {
 export async function revokeToken(req: Request, res: Response): Promise<void> {
   const user = (req as any).user;
   if (!user) { res.status(401).json({ error: "Unauthorized" }); return; }
-  await agentService.revokeAgentToken(req.params.id);
+  await agentService.revokeAgentToken(String(req.params.id));
   res.json({ ok: true });
 }
 

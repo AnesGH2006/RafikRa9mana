@@ -40,6 +40,7 @@ import ReportsPage from "@/pages/reports";
 import SubscriptionPage from "@/pages/subscription";
 import AdminPage from "@/pages/admin";
 import AssistantPage from "@/pages/assistant";
+import AgentSetupPage from "@/pages/agent-setup";
 import PaywallScreen from "@/pages/paywall";
 import NotFound from "@/pages/not-found";
 
@@ -127,6 +128,7 @@ const SECTIONS: SectionDef[] = [
     color: "text-sky-400", gradient: "from-sky-500 to-cyan-700",
     items: [
       { href: "/import", icon: FileSpreadsheet, labelKey: "nav.import" },
+      { href: "/agent",  icon: Bot,             labelKey: "nav.agent"  },
     ],
   },
   {
@@ -488,6 +490,7 @@ function AppLayout() {
               <Route path="/orientation">{() => <ComingSoon title="التوجيه النهائي" />}</Route>
               <Route path="/assistant"           component={AssistantPage} />
               <Route path="/import"              component={ImportPage} />
+              <Route path="/agent"               component={AgentSetupPage} />
               <Route path="/settings"            component={SettingsPage} />
               <Route path="/account">{() => <SettingsPage />}</Route>
               <Route component={NotFound} />
