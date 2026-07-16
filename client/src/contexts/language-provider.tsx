@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { translations } from "../i18n";
 
 export type Language = "en" | "ar" | "fr";
@@ -28,9 +28,10 @@ export function LanguageProvider({
   defaultLang?: Language;
   storageKey?: string;
 }) {
-  const [language, setLanguage] = useState<Language>(
+  const [language, setLanguageSt] = useState<Language>(
     () => (localStorage.getItem(storageKey) as Language) || defaultLang
   );
+  const isFirst = useRef(true);
 
   const dir: "ltr" | "rtl" = language === "ar" ? "rtl" : "ltr";
 
@@ -38,6 +39,19 @@ export function LanguageProvider({
     const root = window.document.documentElement;
     root.setAttribute("dir", dir);
     root.setAttribute("lang", language);
+
+    // Skip fade on first mount
+    if (isFirst.current) { isFirst.current = false; return; }
+
+    // Smooth fade when language switches
+    root.style.transition = "opacity 0.18s ease";
+    root.style.opacity = "0";
+    const t = setTimeout(() => { root.style.opacity = "1"; }, 180);
+    return () => {
+      clearTimeout(t);
+      root.style.opacity = "1";
+      root.style.transition = "";
+    };
   }, [language, dir]);
 
   const t = (key: keyof typeof translations): string => {
@@ -49,7 +63,7 @@ export function LanguageProvider({
     language,
     setLanguage: (lang: Language) => {
       localStorage.setItem(storageKey, lang);
-      setLanguage(lang);
+      setLanguageSt(lang);
     },
     t,
     dir,

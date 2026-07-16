@@ -157,19 +157,28 @@ function NavItem({ item, loc, onClick }: { item: NavItemDef; loc: string; onClic
   return (
     <Link href={item.href} onClick={onClick}>
       <motion.div
-        className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg cursor-pointer relative group transition-colors
-          ${active ? "bg-white/14 text-white" : "text-slate-400 hover:text-slate-200 hover:bg-white/6"}`}
-        whileHover={{ x: active ? 0 : 3 }}
-        whileTap={{ scale: 0.97 }}
-        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+        className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg cursor-pointer relative group
+          ${active ? "text-white" : "text-slate-400 hover:text-slate-100"}`}
+        whileHover={{ x: active ? 0 : 4, backgroundColor: active ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.05)" }}
+        whileTap={{ scale: 0.96 }}
+        transition={{ type: "spring", stiffness: 380, damping: 28 }}
       >
         {active && (
-          <motion.div className="absolute inset-0 rounded-lg bg-white/12" layoutId="activeItem"
-            transition={{ type: "spring", stiffness: 300, damping: 30 }} />
+          <motion.div
+            className="absolute inset-0 rounded-lg bg-white/10"
+            layoutId="activeNavItem"
+            transition={{ type: "spring", stiffness: 400, damping: 35, mass: 0.8 }}
+          />
         )}
-        {active && <div className="absolute start-0 inset-y-2 w-0.5 bg-white/80 rounded-full" />}
-        <item.icon className={`w-3.5 h-3.5 shrink-0 relative z-10 ${active ? "text-white" : item.accent || ""}`} />
-        <span className="text-xs relative z-10 flex-1">{t(item.labelKey)}</span>
+        {active && (
+          <motion.div
+            className="absolute start-0 inset-y-1.5 w-[3px] bg-white rounded-full"
+            layoutId="activeNavBar"
+            transition={{ type: "spring", stiffness: 400, damping: 35, mass: 0.8 }}
+          />
+        )}
+        <item.icon className={`w-3.5 h-3.5 shrink-0 relative z-10 transition-colors duration-150 ${active ? "text-white" : item.accent || "text-slate-500 group-hover:text-slate-300"}`} />
+        <span className="text-xs relative z-10 flex-1 transition-colors duration-150">{t(item.labelKey)}</span>
         {item.badge && (
           <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold relative z-10 ${
             item.badge === "PRO"
@@ -197,15 +206,20 @@ function SidebarSection({ section, loc, onItemClick }: {
     <div className="space-y-0.5">
       <motion.button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-start hover:bg-white/5 transition-colors group"
+        className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-start group"
+        whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }}
         whileTap={{ scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 380, damping: 28 }}
       >
-        <section.icon className={`w-3.5 h-3.5 shrink-0 ${section.color}`} />
-        <span className={`text-[11px] font-bold uppercase tracking-wider flex-1 ${hasActive ? "text-white" : "text-slate-400 group-hover:text-slate-300"}`}>
+        <section.icon className={`w-3.5 h-3.5 shrink-0 transition-colors duration-150 ${hasActive ? section.color : "text-slate-500 group-hover:text-slate-400"}`} />
+        <span className={`text-[11px] font-bold uppercase tracking-wider flex-1 transition-colors duration-150 ${hasActive ? "text-white" : "text-slate-500 group-hover:text-slate-300"}`}>
           {t(section.labelKey)}
         </span>
-        <motion.div animate={{ rotate: open ? 0 : -90 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-3 h-3 text-slate-500" />
+        <motion.div
+          animate={{ rotate: open ? 0 : -90 }}
+          transition={{ type: "spring", stiffness: 300, damping: 24 }}
+        >
+          <ChevronDown className="w-3 h-3 text-slate-600" />
         </motion.div>
       </motion.button>
 
@@ -215,13 +229,13 @@ function SidebarSection({ section, loc, onItemClick }: {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
+            transition={{ type: "spring", stiffness: 320, damping: 30, mass: 0.7 }}
             className="overflow-hidden ps-3 space-y-0.5"
           >
             {section.items.map((item, i) => (
               <motion.div key={item.href}
-                initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.03 }}>
+                initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                transition={{ type: "spring", stiffness: 340, damping: 26, delay: i * 0.025 }}>
                 <NavItem item={item} loc={loc} onClick={onItemClick} />
               </motion.div>
             ))}
