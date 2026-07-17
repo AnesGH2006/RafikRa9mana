@@ -173,9 +173,12 @@ async function login() {
 
   if (!token) { errEl.textContent = 'يرجى إدخال رمز الوكيل.'; return; }
 
-  // Load server URL from settings
+  // Get server URL from login field (user must fill it in)
+  const urlInput = document.getElementById('login-url');
+  const serverUrl = (urlInput?.value || '').trim().replace(/\/$/, '');
+  if (!serverUrl) { errEl.textContent = 'يرجى إدخال عنوان الخادم (Server URL).'; return; }
+
   const settings = await api.getSettings();
-  const serverUrl = settings.serverUrl || 'https://your-school-manager.replit.app';
 
   // Quick validate against server
   try {
@@ -435,7 +438,11 @@ async function init() {
       }
     } catch { /* fall through to login screen */ }
   }
-  // Show login
+  // Show login — pre-fill server URL from saved settings
+  const savedSettings = await api.getSettings().catch(() => ({}));
+  const savedUrl = savedSettings.serverUrl || '';
+  const urlFld = document.getElementById('login-url');
+  if (urlFld && savedUrl) urlFld.value = savedUrl;
   document.getElementById('login-screen').classList.remove('hidden');
 }
 

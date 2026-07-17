@@ -231,7 +231,7 @@ export default function AgentSetupPage() {
         </Card>
       </motion.div>
 
-      {/* Download section */}
+      {/* Install prompt */}
       <motion.div custom={1} variants={cardVariants} initial="initial" animate="animate">
         <Card className="border-blue-500/30 bg-blue-500/5">
           <CardHeader className="pb-3">
@@ -243,37 +243,40 @@ export default function AgentSetupPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+
+            {/* Server URL — copy to paste in the agent */}
+            <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 space-y-2">
+              <p className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+                <Wifi className="w-3.5 h-3.5" />
+                عنوان الخادم — انسخه وألصقه في الوكيل عند تسجيل الدخول
+              </p>
+              <div className="flex items-center gap-2 rounded-lg bg-slate-900/80 border border-slate-700 px-3 py-2">
+                <code className="flex-1 text-sm font-mono text-indigo-300 break-all">{serverUrl}</code>
+                <CopyButton text={serverUrl} />
+              </div>
+            </div>
+
+            {/* Install steps */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground">خطوات التثبيت</p>
+              {[
+                { n: "1", text: "على جهاز Windows، افتح PowerShell أو cmd في مجلد المشروع." },
+                { n: "2", text: <>انتقل إلى مجلد الوكيل: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">cd agent</code></> },
+                { n: "3", text: <>ثبّت التبعيات: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">npm install</code></> },
+                { n: "4", text: <>ابنِ المثبّت: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">npm run build:win</code> &nbsp;→ سيُنشأ ملف <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">.exe</code> في <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">agent/dist/</code></> },
+                { n: "5", text: "شغّل ملف الإعداد (.exe)، ثم انقر على أيقونة علبة النظام لفتح الوكيل." },
+              ].map(({ n, text }) => (
+                <div key={n} className="flex items-start gap-3 p-2.5 rounded-lg bg-muted/30">
+                  <div className="w-5 h-5 rounded-full bg-blue-500/80 flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5">{n}</div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{text}</p>
+                </div>
+              ))}
+            </div>
+
             <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
               <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-300 leading-relaxed">
-                الوكيل تطبيق Electron لـ Windows. يلزم بناؤه من <strong className="text-amber-200">جهاز Windows حقيقي</strong> — لا يمكن بناؤه على Linux أو Replit (سيظهر خطأ <code className="text-amber-100">ERR_ELECTRON_BUILDER_CANNOT_EXECUTE</code> إن حاولت ذلك).
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground">خطوات البناء (من جهاز Windows)</p>
-              <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 font-mono text-xs text-slate-300 space-y-1 text-left" dir="ltr">
-                <p className="text-slate-500"># Run these commands on a Windows machine</p>
-                <p>cd agent</p>
-                <p>npm install</p>
-                <p>npm run build:win</p>
-                <p className="text-slate-500"># installer (.exe) → agent/dist/</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/40">
-              <Monitor className="w-4 h-4 text-muted-foreground shrink-0" />
-              <div className="text-xs text-muted-foreground leading-relaxed">
-                بعد التثبيت، سيظهر الوكيل في علبة النظام (System Tray).
-                اذهب إلى <strong className="text-foreground">الإعدادات</strong> وأدخل عنوان الخادم:
-                <span className="font-mono text-indigo-400 mx-1">{serverUrl}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/40">
-              <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
-              <p className="text-xs text-muted-foreground">
-                راجع <strong className="text-foreground">agent/README.md</strong> لمزيد من التفاصيل حول البروتوكول والأحداث.
+                يجب بناء الوكيل من <strong className="text-amber-200">جهاز Windows حقيقي</strong> — لا يعمل البناء على Linux أو Replit.
               </p>
             </div>
           </CardContent>
