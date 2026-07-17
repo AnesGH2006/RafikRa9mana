@@ -145,21 +145,43 @@ function AgentDownloadBlock({ base }: { base: string }) {
           <p className="text-[11px] text-muted-foreground">Electron · نظام 64-بت · حجم الملف ≈ 80 MB</p>
         </>
       ) : (
-        <>
-          <div className="flex items-center justify-center gap-2 text-amber-400">
-            <AlertTriangle className="w-4 h-4" />
-            <p className="text-sm font-bold">المثبّت غير متوفر بعد</p>
+        <div className="space-y-4">
+          {/* Icon + heading */}
+          <div className="flex flex-col items-center gap-2 pt-1">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+              <Monitor className="w-6 h-6 text-amber-400" />
+            </div>
+            <p className="text-sm font-bold">برنامج الوكيل المكتبي</p>
+            <p className="text-xs text-muted-foreground text-center leading-relaxed max-w-xs">
+              يُتيح مزامنة ملفات Excel من حاسوب الإدارة تلقائياً دون رفع يدوي.
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            يجب بناء الوكيل أولاً من جهاز Windows عبر:
-          </p>
-          <code className="block text-[11px] bg-slate-900/80 border border-slate-700 rounded-lg px-3 py-2 text-amber-300 font-mono">
-            cd agent &amp;&amp; npm install &amp;&amp; npm run build:win
-          </code>
-          <p className="text-[11px] text-muted-foreground">
-            بعد البناء، انسخ الملف الناتج إلى <code className="text-slate-300">agent/dist/</code> على الخادم.
-          </p>
-        </>
+
+          {/* Coming soon pill */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-400 text-xs font-semibold mx-auto">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            قريباً — سيتوفر التنزيل المباشر
+          </div>
+
+          {/* What the user should do */}
+          <div className="rounded-lg border border-slate-700/60 bg-slate-900/40 p-3 text-right space-y-2">
+            <p className="text-xs font-semibold text-slate-300">في الوقت الحالي:</p>
+            <ul className="text-xs text-muted-foreground space-y-1.5">
+              <li className="flex items-start gap-2">
+                <span className="text-blue-400 mt-0.5 shrink-0">①</span>
+                أنشئ رمز وكيل من القسم أدناه.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-blue-400 mt-0.5 shrink-0">②</span>
+                تواصل مع مشرف النظام للحصول على البرنامج وتثبيته.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-blue-400 mt-0.5 shrink-0">③</span>
+                أدخل الرمز وعنوان الخادم عند تشغيل البرنامج لأول مرة.
+              </li>
+            </ul>
+          </div>
+        </div>
       )}
     </div>
   );

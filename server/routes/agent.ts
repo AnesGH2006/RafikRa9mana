@@ -40,11 +40,15 @@ router.get("/agent/tokens", ctrl.listTokens);
 router.delete("/agent/tokens/:id", ctrl.revokeToken);
 
 // ── Agent-token-authenticated (desktop agent) — CORS open, Bearer token guards ─
-router.get("/agent/status",       agentCors, agentAuthMiddleware, ctrl.getStatus);
-router.post("/agent/upload-excel",agentCors, agentAuthMiddleware, ...ctrl.uploadExcel);
-router.post("/agent/folders",     agentCors, agentAuthMiddleware, ctrl.updateFolders);
-router.get("/agent/logs",         agentCors, agentAuthMiddleware, ctrl.getLogs);
-// Preflight for all /agent/* paths
-router.options("/agent/*",        agentCors);
+// Preflight OPTIONS for each endpoint (bare wildcard * is invalid in path-to-regexp v8)
+router.options("/agent/status",        agentCors);
+router.options("/agent/upload-excel",  agentCors);
+router.options("/agent/folders",       agentCors);
+router.options("/agent/logs",          agentCors);
+
+router.get("/agent/status",        agentCors, agentAuthMiddleware, ctrl.getStatus);
+router.post("/agent/upload-excel", agentCors, agentAuthMiddleware, ...ctrl.uploadExcel);
+router.post("/agent/folders",      agentCors, agentAuthMiddleware, ctrl.updateFolders);
+router.get("/agent/logs",          agentCors, agentAuthMiddleware, ctrl.getLogs);
 
 export default router;
