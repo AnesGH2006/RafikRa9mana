@@ -244,6 +244,25 @@ export default function AgentSetupPage() {
           </CardHeader>
           <CardContent className="space-y-4">
 
+            {/* Download button */}
+            <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-5 text-center space-y-3">
+              <p className="text-sm font-bold">المثبّت جاهز للتنزيل</p>
+              <p className="text-xs text-muted-foreground">
+                ملف تثبيت Windows جاهز — لا يحتاج Node.js أو أي أدوات مطوّر.
+              </p>
+              <a
+                href="/downloads/SchoolManagerAgent-Setup.exe"
+                download
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-sm font-semibold transition-all shadow-lg shadow-blue-600/30"
+              >
+                <Download className="w-4 h-4" />
+                تنزيل الوكيل (Windows 64-bit)
+              </a>
+              <p className="text-[11px] text-muted-foreground">
+                Electron · نظام 64-بت · حجم الملف ≈ 80 MB
+              </p>
+            </div>
+
             {/* Server URL — copy to paste in the agent */}
             <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 space-y-2">
               <p className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
@@ -256,28 +275,20 @@ export default function AgentSetupPage() {
               </div>
             </div>
 
-            {/* Install steps */}
+            {/* Simple 3-step guide */}
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground">خطوات التثبيت</p>
+              <p className="text-xs font-semibold text-muted-foreground">خطوات الإعداد</p>
               {[
-                { n: "1", text: "على جهاز Windows، افتح PowerShell أو cmd في مجلد المشروع." },
-                { n: "2", text: <>انتقل إلى مجلد الوكيل: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">cd agent</code></> },
-                { n: "3", text: <>ثبّت التبعيات: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">npm install</code></> },
-                { n: "4", text: <>ابنِ المثبّت: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">npm run build:win</code> &nbsp;→ سيُنشأ ملف <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">.exe</code> في <code className="bg-slate-800 px-1.5 py-0.5 rounded text-slate-200">agent/dist/</code></> },
-                { n: "5", text: "شغّل ملف الإعداد (.exe)، ثم انقر على أيقونة علبة النظام لفتح الوكيل." },
-              ].map(({ n, text }) => (
-                <div key={n} className="flex items-start gap-3 p-2.5 rounded-lg bg-muted/30">
-                  <div className="w-5 h-5 rounded-full bg-blue-500/80 flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5">{n}</div>
+                { n: "1", icon: Download,  text: "نزّل الملف أعلاه وشغّله — اتبع خطوات المثبّت حتى الانتهاء." },
+                { n: "2", icon: Wifi,      text: "افتح الوكيل من أيقونة علبة النظام (System Tray) وأدخل عنوان الخادم المذكور أعلاه." },
+                { n: "3", icon: Key,       text: "أنشئ رمز وكيل في القسم أدناه، انسخه والصقه في حقل الرمز بالوكيل ثم اضغط «اتصال»." },
+              ].map(({ n, icon: Icon, text }) => (
+                <div key={n} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                  <div className="w-6 h-6 rounded-full bg-blue-500/80 flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5">{n}</div>
+                  <Icon className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
                   <p className="text-xs text-muted-foreground leading-relaxed">{text}</p>
                 </div>
               ))}
-            </div>
-
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-300 leading-relaxed">
-                يجب بناء الوكيل من <strong className="text-amber-200">جهاز Windows حقيقي</strong> — لا يعمل البناء على Linux أو Replit.
-              </p>
             </div>
           </CardContent>
         </Card>
