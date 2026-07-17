@@ -78,6 +78,93 @@ const FEATURES = [
   { icon: RefreshCw,  color: "text-fuchsia-400", label: "تشغيل تلقائي عند بدء تشغيل Windows" },
 ];
 
+function AgentDownloadBlock({ base }: { base: string }) {
+  const { toast } = useToast();
+  const [checking, setChecking] = useState(false);
+  const [available, setAvailable] = useState<boolean | null>(null);
+
+  // Check installer availability once on mount
+  useEffect(() => {
+    fetch(`${base}api/agent/download`, { method: "HEAD", credentials: "include" })
+      .then(r => setAvailable(r.ok))
+      .catch(() => setAvailable(false));
+  }, [base]);
+
+  const handleDownload = async () => {
+    setChecking(true);
+    try {
+      const res = await fetch(`${base}api/agent/download`, { credentials: "include" });
+      if (res.ok) {
+        // Trigger real file download
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = "SchoolManagerAgent-Setup.exe";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast({
+          title: "المثبّت غير متوفر",
+          description: data?.message || "لم يتم بناء المثبّت بعد. يجب بناؤه من جهاز Windows.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({ title: "خطأ في الاتصال", description: "تعذّر الوصول إلى الخادم.", variant: "destructive" });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const isReady = available === true;
+
+  return (
+    <div className={`rounded-xl border p-5 text-center space-y-3 ${
+      isReady
+        ? "border-blue-500/30 bg-blue-500/5"
+        : "border-amber-500/30 bg-amber-500/5"
+    }`}>
+      {isReady ? (
+        <>
+          <p className="text-sm font-bold">المثبّت جاهز للتنزيل</p>
+          <p className="text-xs text-muted-foreground">
+            ملف تثبيت Windows جاهز — لا يحتاج Node.js أو أي أدوات مطوّر.
+          </p>
+          <button
+            onClick={handleDownload}
+            disabled={checking}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 disabled:opacity-60 text-white text-sm font-semibold transition-all shadow-lg shadow-blue-600/30"
+          >
+            <Download className="w-4 h-4" />
+            {checking ? "جارٍ التنزيل…" : "تنزيل الوكيل (Windows 64-bit)"}
+          </button>
+          <p className="text-[11px] text-muted-foreground">Electron · نظام 64-بت · حجم الملف ≈ 80 MB</p>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-center gap-2 text-amber-400">
+            <AlertTriangle className="w-4 h-4" />
+            <p className="text-sm font-bold">المثبّت غير متوفر بعد</p>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            يجب بناء الوكيل أولاً من جهاز Windows عبر:
+          </p>
+          <code className="block text-[11px] bg-slate-900/80 border border-slate-700 rounded-lg px-3 py-2 text-amber-300 font-mono">
+            cd agent &amp;&amp; npm install &amp;&amp; npm run build:win
+          </code>
+          <p className="text-[11px] text-muted-foreground">
+            بعد البناء، انسخ الملف الناتج إلى <code className="text-slate-300">agent/dist/</code> على الخادم.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -245,23 +332,7 @@ export default function AgentSetupPage() {
           <CardContent className="space-y-4">
 
             {/* Download button */}
-            <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-5 text-center space-y-3">
-              <p className="text-sm font-bold">المثبّت جاهز للتنزيل</p>
-              <p className="text-xs text-muted-foreground">
-                ملف تثبيت Windows جاهز — لا يحتاج Node.js أو أي أدوات مطوّر.
-              </p>
-              <a
-                href={`${BASE}api/agent/download`}
-                download="SchoolManagerAgent-Setup.exe"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-sm font-semibold transition-all shadow-lg shadow-blue-600/30"
-              >
-                <Download className="w-4 h-4" />
-                تنزيل الوكيل (Windows 64-bit)
-              </a>
-              <p className="text-[11px] text-muted-foreground">
-                Electron · نظام 64-بت · حجم الملف ≈ 80 MB
-              </p>
-            </div>
+            <AgentDownloadBlock base={BASE} />
 
             {/* Server URL — copy to paste in the agent */}
             <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 space-y-2">

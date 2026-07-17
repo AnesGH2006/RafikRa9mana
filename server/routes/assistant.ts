@@ -6,47 +6,25 @@ import { AssistantChatBody, AssistantChatResponse } from "../../shared/schemas.j
 
 const router: IRouter = Router();
 
-// ── Static role/rules prompt ──────────────────────────────────────────────────
-const SYSTEM_PROMPT = `أنت "المساعد الذكي" داخل تطبيق إدارة متوسطة جزائرية.
-لديك صلاحية الاطلاع الكاملة على جميع بيانات المؤسسة الحقيقية المُرفقة أدناه:
-التلاميذ — النتائج الفصلية — المعدلات السنوية — درجات كل مادة — الغيابات — الإحصاءات الشاملة.
-
-**دورك:**
-- تحليل نتائج التلاميذ تحليلاً دقيقاً (تراجع، رسوب، مواد ضعيفة، غياب مفرط، إعادة السنة).
-- الإجابة عن أي سؤال إحصائي حول المؤسسة (عدد الناجحين، أفضل/أسوأ قسم، أكثر الغائبين، المعيدون المحتملون بالسن، نسب النجاح حسب الجنس...).
-- مقارنة الأقسام والمستويات وتحليل الفوارق.
-- تحديد التلاميذ في خطر (معدل متدنٍّ + غياب + معيد محتمل).
-- تقديم توصيات تربوية وإدارية عملية ومحددة.
-- الإجابة عن أسئلة تتعلق بميزات الموقع وكيفية استخدامه.
-
-**قواعد:**
-- استند حصراً إلى البيانات المُقدَّمة، لا تخترع أرقاماً.
-- أجب بنفس لغة المستخدم (عربية / فرنسية / إنجليزية).
-- كن مختصراً وعملياً؛ قدّم قوائم وجداول نصية عند الإمكان.
-- عند ذكر تلميذ: اسمه + قسمه + معدله + ملاحظة إن وُجدت.`;
+// ── System prompt (keep short to save tokens) ─────────────────────────────────
+const SYSTEM_PROMPT = `أنت "المساعد الذكي" لتطبيق إدارة متوسطة جزائرية.
+لديك ملخص بيانات المؤسسة أدناه. استند إليه حصراً — لا تخترع أرقاماً.
+دورك: تحليل النتائج، إجابة الأسئلة الإحصائية، تحديد التلاميذ في خطر، تقديم توصيات تربوية.
+أجب بلغة المستخدم. كن مختصراً وعملياً.`;
 
 // ── Age helpers ───────────────────────────────────────────────────────────────
-const MAX_NORMAL_AGE: Record<string, number> = {
-  "1AM": 11, "2AM": 12, "3AM": 13, "4AM": 15,
-};
+const MAX_NORMAL_AGE: Record<string, number> = { "1AM": 11, "2AM": 12, "3AM": 13, "4AM": 15 };
 
-function calcAge(dateNaissance: string | null, annee: string): number | null {
-  if (!dateNaissance) return null;
-  const birth = new Date(dateNaissance);
+function calcAge(dob: string | null, annee: string): number | null {
+  if (!dob) return null;
+  const birth = new Date(dob);
   if (isNaN(birth.getTime())) return null;
-  const startYear = parseInt(annee.split("-")[0]);
-  if (isNaN(startYear)) return null;
-  const sep1 = new Date(startYear, 8, 1); // 1 September
-  return Math.floor((sep1.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+  const yr = parseInt(annee.split("-")[0]);
+  if (isNaN(yr)) return null;
+  return Math.floor((new Date(yr, 8, 1).getTime() - birth.getTime()) / (365.25 * 864e5));
 }
 
-function isAgeRepeater(dateNaissance: string | null, niveau: string, annee: string): boolean {
-  const age = calcAge(dateNaissance, annee);
-  if (age === null) return false;
-  return age > (MAX_NORMAL_AGE[niveau] ?? 99);
-}
-
-// ── Live school context builder ───────────────────────────────────────────────
+// ── Context builder — stays under ~5,000 tokens ───────────────────────────────
 async function buildSchoolContext(userId: string): Promise<string> {
   const [schoolRows, allStudents, allGrades, allAbsences] = await Promise.all([
     db.select().from(schoolInfoTable).where(eq(schoolInfoTable.userId, userId)),
@@ -55,346 +33,193 @@ async function buildSchoolContext(userId: string): Promise<string> {
     db.select().from(absencesTable).where(eq(absencesTable.userId, userId)),
   ]);
 
-  if (allStudents.length === 0) {
-    return "## بيانات المؤسسة\nلا توجد بيانات تلاميذ مضافة بعد.";
-  }
+  if (allStudents.length === 0) return "لا توجد بيانات تلاميذ بعد.";
 
   const school = schoolRows[0];
-  const schoolAnnee: string = school?.annee || "";
+  const annee  = school?.annee || "";
 
-  // ── Grade maps ────────────────────────────────────────────────────────────
-  const avgGrades     = allGrades.filter(g => g.subject === "__avg__");
-  const subjectGrades = allGrades.filter(g => g.subject !== "__avg__");
+  // ── Build lookup maps ─────────────────────────────────────────────────────
+  const triAvg = new Map<string, Map<number, number>>();  // sid → tri → avg
+  const subjAcc = new Map<string, Map<string, number[]>>(); // sid → subj → scores[]
 
-  // triAvgMap[studentId][trimestre] = avg
-  const triAvgMap = new Map<string, Map<number, number>>();
-  for (const g of avgGrades) {
-    if (!triAvgMap.has(g.studentId)) triAvgMap.set(g.studentId, new Map());
-    triAvgMap.get(g.studentId)!.set(g.trimestre, parseFloat(String(g.score)));
+  for (const g of allGrades) {
+    const score = parseFloat(String(g.score));
+    if (isNaN(score)) continue;
+    if (g.subject === "__avg__") {
+      if (!triAvg.has(g.studentId)) triAvg.set(g.studentId, new Map());
+      triAvg.get(g.studentId)!.set(g.trimestre, score);
+    } else {
+      if (!subjAcc.has(g.studentId)) subjAcc.set(g.studentId, new Map());
+      const sm = subjAcc.get(g.studentId)!;
+      if (!sm.has(g.subject)) sm.set(g.subject, []);
+      sm.get(g.subject)!.push(score);
+    }
   }
 
-  // subjectMap[studentId][subject][trimestre] = score
-  const subjectMap = new Map<string, Map<string, Map<number, number>>>();
-  for (const g of subjectGrades) {
-    if (!subjectMap.has(g.studentId)) subjectMap.set(g.studentId, new Map());
-    const sm = subjectMap.get(g.studentId)!;
-    if (!sm.has(g.subject)) sm.set(g.subject, new Map());
-    sm.get(g.subject)!.set(g.trimestre, parseFloat(String(g.score)));
-  }
-
-  // absenceMap[studentId] = totals
-  const absenceMap = new Map<string, { total: number; justified: number; unjustified: number }>();
+  const absMap = new Map<string, { tot: number; nj: number }>();
   for (const a of allAbsences) {
-    const cur = absenceMap.get(a.studentId) ?? { total: 0, justified: 0, unjustified: 0 };
-    cur.total       += a.justifiedHours + a.unjustifiedHours;
-    cur.justified   += a.justifiedHours;
-    cur.unjustified += a.unjustifiedHours;
-    absenceMap.set(a.studentId, cur);
+    const cur = absMap.get(a.studentId) ?? { tot: 0, nj: 0 };
+    cur.tot += a.justifiedHours + a.unjustifiedHours;
+    cur.nj  += a.unjustifiedHours;
+    absMap.set(a.studentId, cur);
   }
 
   // ── Enrich students ───────────────────────────────────────────────────────
-  const enriched = allStudents.map(s => {
-    const tri       = triAvgMap.get(s.id);
-    const t1        = tri?.get(1) ?? null;
-    const t2        = tri?.get(2) ?? null;
-    const t3        = tri?.get(3) ?? null;
-    const vals      = [t1, t2, t3].filter((v): v is number => v != null);
-    const annualAvg = vals.length > 0
-      ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length * 100) / 100
-      : null;
-    const abs       = absenceMap.get(s.id) ?? { total: 0, justified: 0, unjustified: 0 };
-    const subjects  = subjectMap.get(s.id) ?? new Map<string, Map<number, number>>();
-    const age       = calcAge(s.dateNaissance, schoolAnnee);
-    const ageRepeat = isAgeRepeater(s.dateNaissance, s.niveau, schoolAnnee);
+  const students = allStudents.map(s => {
+    const tri  = triAvg.get(s.id);
+    const t1 = tri?.get(1) ?? null, t2 = tri?.get(2) ?? null, t3 = tri?.get(3) ?? null;
+    const vals = [t1, t2, t3].filter((v): v is number => v !== null);
+    const avg  = vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : null;
+    const abs  = absMap.get(s.id) ?? { tot: 0, nj: 0 };
+    const age  = calcAge(s.dateNaissance, annee);
+    const ageRep = age !== null && age > (MAX_NORMAL_AGE[s.niveau] ?? 99);
 
-    // Per-subject annual average for this student
-    const subjectAvgs = new Map<string, number>();
-    for (const [subj, triMap] of subjects.entries()) {
-      const scores = [...triMap.values()];
-      if (scores.length > 0) {
-        subjectAvgs.set(subj, Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 100) / 100);
-      }
-    }
+    // per-student subject averages (for weak-subject flags)
+    const sAvgs = new Map<string, number>();
+    for (const [subj, scores] of (subjAcc.get(s.id) ?? new Map()).entries())
+      sAvgs.set(subj, +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
+    const weakSubjs = [...sAvgs.entries()].filter(([, v]) => v < 10)
+      .sort((a, b) => a[1] - b[1]).map(([subj, v]) => `${subj}:${v}`);
 
-    return { ...s, t1, t2, t3, annualAvg, absences: abs, subjects, subjectAvgs, age, ageRepeat };
+    return { ...s, avg, abs, age, ageRep, sAvgs, weakSubjs };
   });
 
-  // ── Overall stats ──────────────────────────────────────────────────────────
-  const total      = enriched.length;
-  const boys       = enriched.filter(s => s.sexe === "M").length;
-  const girls      = enriched.filter(s => s.sexe === "F").length;
-  const admis      = enriched.filter(s => s.resultat === "admis").length;
-  const nonAdmis   = enriched.filter(s => s.resultat === "non_admis").length;
-  const mustarrak  = enriched.filter(s => s.resultat === "mustarrak").length;
-  const redoublant = enriched.filter(s => s.statut === "redoublant").length;
-  const ageRepeaters = enriched.filter(s => s.ageRepeat && s.statut !== "redoublant").length;
+  // ── School & level aggregates ─────────────────────────────────────────────
+  const total  = students.length;
+  const admis  = students.filter(s => s.resultat === "admis").length;
+  const nonAdm = students.filter(s => s.resultat === "non_admis").length;
+  const mustar = students.filter(s => s.resultat === "mustarrak").length;
+  const redob  = students.filter(s => s.statut === "redoublant").length;
+  const boys   = students.filter(s => s.sexe === "M").length;
+  const girls  = students.filter(s => s.sexe === "F").length;
+  const bPass  = students.filter(s => s.sexe === "M" && s.resultat === "admis").length;
+  const gPass  = students.filter(s => s.sexe === "F" && s.resultat === "admis").length;
 
-  // Boys/girls pass rates
-  const boysPassed  = enriched.filter(s => s.sexe === "M" && s.resultat === "admis").length;
-  const girlsPassed = enriched.filter(s => s.sexe === "F" && s.resultat === "admis").length;
-
-  // ── Per-level stats ───────────────────────────────────────────────────────
-  const LEVELS = ["1AM", "2AM", "3AM", "4AM"] as const;
-  const byLevel = LEVELS.map(niv => {
-    const g = enriched.filter(s => s.niveau === niv);
-    if (g.length === 0) return null;
-    const p      = g.filter(s => s.resultat === "admis").length;
-    const nr     = g.filter(s => s.resultat === "non_admis").length;
-    const avgs   = g.map(s => s.annualAvg).filter((v): v is number => v != null);
-    const avg    = avgs.length ? Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length * 10) / 10 : null;
-    const boys_  = g.filter(s => s.sexe === "M").length;
-    const girls_ = g.filter(s => s.sexe === "F").length;
-    const bpassed = g.filter(s => s.sexe === "M" && s.resultat === "admis").length;
-    const gpassed = g.filter(s => s.sexe === "F" && s.resultat === "admis").length;
-    const redob   = g.filter(s => s.statut === "redoublant").length;
-    const ageRed  = g.filter(s => s.ageRepeat && s.statut !== "redoublant").length;
-    const topS    = [...g].filter(s => s.annualAvg != null).sort((a, b) => b.annualAvg! - a.annualAvg!)[0];
-    const botS    = [...g].filter(s => s.annualAvg != null).sort((a, b) => a.annualAvg! - b.annualAvg!)[0];
-
-    let line = `  • ${niv}: ${g.length} تلميذ (ذ ${boys_}/${bpassed}ناجح | إ ${girls_}/${gpassed}ناجحة)`;
-    line += ` | ناجح ${p}/${g.length} (${Math.round(p / g.length * 100)}%) | راسب ${nr}`;
-    if (avg != null) line += ` | متوسط المستوى: ${avg}/20`;
-    if (redob) line += ` | معيدون مؤكدون: ${redob}`;
-    if (ageRed) line += ` | محتملون بالسن: ${ageRed}`;
-    if (topS) line += `\n    أعلى معدل: ${topS.nomPrenom} (${topS.annualAvg}/20)`;
-    if (botS && botS.id !== topS?.id) line += ` | أدنى معدل: ${botS.nomPrenom} (${botS.annualAvg}/20)`;
-    return line;
+  const LEVELS = ["1AM", "2AM", "3AM", "4AM"];
+  const levelLines = LEVELS.map(niv => {
+    const g = students.filter(s => s.niveau === niv);
+    if (!g.length) return null;
+    const p  = g.filter(s => s.resultat === "admis").length;
+    const avgs = g.map(s => s.avg).filter((v): v is number => v !== null);
+    const la = avgs.length ? (avgs.reduce((a, b) => a + b, 0) / avgs.length).toFixed(1) : "—";
+    const rb = g.filter(s => s.statut === "redoublant").length;
+    const ar = g.filter(s => s.ageRep && s.statut !== "redoublant").length;
+    return `${niv}: ${g.length}تلميذ | ناجح ${p}(${Math.round(p/g.length*100)}%) | متوسط ${la}${rb ? ` | معيد ${rb}` : ""}${ar ? ` | محتمل-سن ${ar}` : ""}`;
   }).filter(Boolean);
 
-  // ── School-level subject analysis ─────────────────────────────────────────
-  const schoolSubjectTotals = new Map<string, { sum: number; count: number; below10: number }>();
-  for (const s of enriched) {
-    for (const [subj, avg] of s.subjectAvgs.entries()) {
-      const cur = schoolSubjectTotals.get(subj) ?? { sum: 0, count: 0, below10: 0 };
-      cur.sum += avg;
-      cur.count += 1;
-      if (avg < 10) cur.below10 += 1;
-      schoolSubjectTotals.set(subj, cur);
-    }
-  }
-  const schoolSubjectLines = [...schoolSubjectTotals.entries()]
-    .sort(([, a], [, b]) => (a.sum / a.count) - (b.sum / b.count))
-    .map(([subj, { sum, count, below10 }]) =>
-      `  • ${subj}: متوسط ${Math.round(sum / count * 10) / 10}/20 | راسبون في المادة: ${below10}/${count}`
-    );
-
-  // ── Per-class ─────────────────────────────────────────────────────────────
-  const classeMap = new Map<string, typeof enriched>();
-  for (const s of enriched) {
-    const key = `${s.niveau} - ${s.classe}`;
+  // ── Per-class summary (stats only, no individual roster) ──────────────────
+  const classeMap = new Map<string, typeof students>();
+  for (const s of students) {
+    const key = `${s.niveau}-${s.classe}`;
     if (!classeMap.has(key)) classeMap.set(key, []);
     classeMap.get(key)!.push(s);
   }
-  const sortedClasses = [...classeMap.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+  // School-wide subject averages
+  const schoolSubj = new Map<string, { sum: number; n: number; fail: number }>();
+  for (const s of students) {
+    for (const [subj, avg] of s.sAvgs.entries()) {
+      const c = schoolSubj.get(subj) ?? { sum: 0, n: 0, fail: 0 };
+      c.sum += avg; c.n += 1; if (avg < 10) c.fail += 1;
+      schoolSubj.set(subj, c);
+    }
+  }
+  const subjRanked = [...schoolSubj.entries()]
+    .sort(([, a], [, b]) => (a.sum / a.n) - (b.sum / b.n))
+    .map(([subj, { sum, n, fail }]) => `${subj}:${(sum/n).toFixed(1)}(${fail}راسب)`)
+    .join(" | ");
+
+  const classSummaryLines = [...classeMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([cls, g]) => {
+      const p  = g.filter(s => s.resultat === "admis").length;
+      const nr = g.filter(s => s.resultat === "non_admis").length;
+      const avgs = g.map(s => s.avg).filter((v): v is number => v !== null);
+      const ca = avgs.length ? (avgs.reduce((a, b) => a + b, 0) / avgs.length).toFixed(1) : "—";
+      const rb = g.filter(s => s.statut === "redoublant").length;
+      const ar = g.filter(s => s.ageRep && s.statut !== "redoublant").length;
+      const top = [...g].filter(s => s.avg != null).sort((a, b) => b.avg! - a.avg!)[0];
+      return `${cls}: ${g.length}طالب | ناجح ${p}(${Math.round(p/g.length*100)}%) | راسب ${nr} | متوسط ${ca}${rb ? ` | معيد ${rb}` : ""}${ar ? ` | محتمل-سن ${ar}` : ""}${top ? ` | أعلى: ${top.nomPrenom}(${top.avg})` : ""}`;
+    });
+
+  // Class ranking
+  const clsRank = [...classeMap.entries()]
+    .map(([cls, g]) => ({ cls, rate: Math.round(g.filter(s => s.resultat === "admis").length / g.length * 100) }))
+    .sort((a, b) => b.rate - a.rate)
+    .map((c, i) => `${i+1}.${c.cls}:${c.rate}%`).join(" | ");
+
+  // ── Notable student lists (compact: name|level-class|avg|flags) ────────────
+  const fmt = (s: (typeof students)[0], extras: string[] = []) => {
+    const flags = [
+      s.statut === "redoublant" ? "معيد" : s.ageRep ? `سن${s.age}` : null,
+      s.abs.tot >= 30 ? `غ${s.abs.tot}` : null,
+      ...extras,
+    ].filter(Boolean);
+    return `${s.nomPrenom}|${s.niveau}-${s.classe}|${s.avg ?? "—"}${flags.length ? "|" + flags.join(",") : ""}`;
+  };
+
+  const sorted      = [...students].filter(s => s.avg != null).sort((a, b) => b.avg! - a.avg!);
+  const top10       = sorted.slice(0, 10).map(s => fmt(s)).join(" | ");
+  const bottom10    = [...sorted].reverse().slice(0, 10).map(s => fmt(s)).join(" | ");
+  const mostAbsent  = [...students].sort((a, b) => b.abs.tot - a.abs.tot)
+    .filter(s => s.abs.tot > 0).slice(0, 15).map(s => fmt(s)).join(" | ");
+  const closestPass = students
+    .filter(s => s.resultat === "non_admis" && s.avg != null && s.avg >= 7)
+    .sort((a, b) => b.avg! - a.avg!).slice(0, 20)
+    .map(s => fmt(s, s.weakSubjs.slice(0, 2))).join(" | ");
+  const doubleDanger = students
+    .filter(s => s.resultat === "non_admis" && s.abs.tot >= 30)
+    .sort((a, b) => b.abs.tot - a.abs.tot).slice(0, 15)
+    .map(s => fmt(s)).join(" | ");
+  const ageRepList  = students
+    .filter(s => s.ageRep && s.statut !== "redoublant")
+    .map(s => fmt(s)).join(" | ");
+
+  // All failing students for detailed lookup
+  const failingAll = students
+    .filter(s => s.resultat === "non_admis")
+    .sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1))
+    .map(s => fmt(s, s.weakSubjs.slice(0, 3))).join(" | ");
 
   // ── Assemble context ──────────────────────────────────────────────────────
-  let ctx = `## بيانات المؤسسة الكاملة (حقيقية — لا تخترع أرقاماً)\n`;
-
+  let ctx = "## بيانات المؤسسة\n";
   if (school) {
-    ctx += `**المؤسسة:** ${school.nom || "غير محدد"}`;
-    if (school.commune) ctx += ` — ${school.commune}`;
-    if (school.wilaya)  ctx += `، ${school.wilaya}`;
-    ctx += `\n**السنة الدراسية:** ${school.annee || "غير محدد"}\n`;
-    if (school.directeur) ctx += `**المدير:** ${school.directeur}\n`;
-    if (school.phone)     ctx += `**الهاتف:** ${school.phone}\n`;
+    ctx += `${school.nom || ""}${school.commune ? "، " + school.commune : ""}${school.wilaya ? " — " + school.wilaya : ""} | السنة: ${annee}${school.directeur ? " | المدير: " + school.directeur : ""}\n`;
   }
 
-  ctx += `
-### إحصاءات عامة
-الإجمالي: ${total} تلميذ — ذكور: ${boys} (ناجح ${boysPassed}) | إناث: ${girls} (ناجحة ${girlsPassed})
-الناجحون: ${admis} (${total > 0 ? Math.round(admis / total * 100) : 0}%) | الراسبون: ${nonAdmis} (${total > 0 ? Math.round(nonAdmis / total * 100) : 0}%)${mustarrak ? ` | المنتقلون بقرار: ${mustarrak}` : ""}
-المعيدون المؤكدون: ${redoublant} | المعيدون المحتملون بالسن: ${ageRepeaters}
-نسبة نجاح الذكور: ${boys > 0 ? Math.round(boysPassed / boys * 100) : 0}% | نسبة نجاح الإناث: ${girls > 0 ? Math.round(girlsPassed / girls * 100) : 0}%
+  ctx += `\n### إحصاءات المؤسسة\n`;
+  ctx += `الإجمالي: ${total} | ذكور: ${boys}(ناجح ${bPass}) | إناث: ${girls}(ناجحة ${gPass})\n`;
+  ctx += `ناجح: ${admis}(${Math.round(admis/total*100)}%) | راسب: ${nonAdm}(${Math.round(nonAdm/total*100)}%)${mustar ? ` | منتقل: ${mustar}` : ""}\n`;
+  ctx += `معيدون مؤكدون: ${redob} | محتملون بالسن: ${students.filter(s => s.ageRep && s.statut !== "redoublant").length}\n`;
+  ctx += `نسبة نجاح الذكور: ${boys ? Math.round(bPass/boys*100) : 0}% | نسبة نجاح الإناث: ${girls ? Math.round(gPass/girls*100) : 0}%\n`;
 
-### حسب المستوى
-${byLevel.join("\n") || "  (لا بيانات)"}
-`;
+  ctx += `\n### حسب المستوى\n${levelLines.join("\n")}\n`;
+  if (subjRanked) ctx += `\n### مواد المؤسسة (ضعيف→قوي)\n${subjRanked}\n`;
 
-  if (schoolSubjectLines.length > 0) {
-    ctx += `\n### متوسطات المواد على مستوى المؤسسة (مرتبة من الأضعف)\n${schoolSubjectLines.join("\n")}\n`;
-  }
+  ctx += `\n### الأقسام (إحصاء)\n${classSummaryLines.join("\n")}\n`;
+  ctx += `\n### ترتيب الأقسام بنسبة النجاح\n${clsRank}\n`;
 
-  // ── Full per-class detail ─────────────────────────────────────────────────
-  ctx += `\n### تفصيل كل قسم\n`;
+  ctx += `\n### أفضل 10 تلاميذ\n${top10 || "—"}\n`;
+  ctx += `\n### أدنى 10 معدلات\n${bottom10 || "—"}\n`;
 
-  for (const [classLabel, students] of sortedClasses) {
-    const p       = students.filter(s => s.resultat === "admis").length;
-    const nr      = students.filter(s => s.resultat === "non_admis").length;
-    const mu      = students.filter(s => s.resultat === "mustarrak").length;
-    const rate    = Math.round(p / students.length * 100);
-    const avgs    = students.map(s => s.annualAvg).filter((v): v is number => v != null);
-    const classAvg= avgs.length ? Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length * 100) / 100 : null;
-    const boysC   = students.filter(s => s.sexe === "M").length;
-    const girlsC  = students.filter(s => s.sexe === "F").length;
-    const bpassC  = students.filter(s => s.sexe === "M" && s.resultat === "admis").length;
-    const gpassC  = students.filter(s => s.sexe === "F" && s.resultat === "admis").length;
-    const redobC  = students.filter(s => s.statut === "redoublant").length;
-    const ageRedC = students.filter(s => s.ageRepeat && s.statut !== "redoublant").length;
-    const sorted  = [...students].sort((a, b) => (b.annualAvg ?? -1) - (a.annualAvg ?? -1));
-
-    // Per-subject class averages + weakness flags
-    const classSubjTotals = new Map<string, { sum: number; count: number; below10: number }>();
-    for (const s of students) {
-      for (const [subj, avg] of s.subjectAvgs.entries()) {
-        const cur = classSubjTotals.get(subj) ?? { sum: 0, count: 0, below10: 0 };
-        cur.sum += avg; cur.count += 1;
-        if (avg < 10) cur.below10 += 1;
-        classSubjTotals.set(subj, cur);
-      }
-    }
-
-    ctx += `\n#### قسم ${classLabel}\n`;
-    ctx += `العدد: ${students.length} | ذ ${boysC} (${bpassC}ناجح) | إ ${girlsC} (${gpassC}ناجحة)\n`;
-    ctx += `النتائج: ناجح ${p}/${students.length} (${rate}%) | راسب ${nr}${mu ? ` | منتقل ${mu}` : ""}${classAvg != null ? ` | متوسط القسم: ${classAvg}/20` : ""}\n`;
-    if (redobC) ctx += `المعيدون المؤكدون: ${redobC} | المحتملون بالسن: ${ageRedC}\n`;
-    else if (ageRedC) ctx += `المحتملون بالسن: ${ageRedC}\n`;
-
-    // Subject averages for class
-    if (classSubjTotals.size > 0) {
-      const subjLine = [...classSubjTotals.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([subj, { sum, count, below10 }]) =>
-          `${subj}: ${Math.round(sum / count * 10) / 10}${below10 > 0 ? ` (${below10}راسب)` : ""}`
-        ).join(" | ");
-      ctx += `متوسطات المواد: ${subjLine}\n`;
-    }
-
-    // Student roster with full detail
-    ctx += `قائمة التلاميذ (مرتبة بالمعدل):\n`;
-    sorted.forEach((s, rank) => {
-      const sexeStr   = s.sexe === "M" ? "ذ" : "إ";
-      const triStr    = [
-        s.t1 != null ? `ف1:${s.t1}` : null,
-        s.t2 != null ? `ف2:${s.t2}` : null,
-        s.t3 != null ? `ف3:${s.t3}` : null,
-      ].filter(Boolean).join("|");
-      const resLabel  =
-        s.resultat === "admis"     ? "ناجح" :
-        s.resultat === "non_admis" ? "راسب" :
-        s.resultat === "mustarrak" ? "منتقل" : "—";
-      const absStr    = s.absences.total > 0
-        ? ` | غياب:${s.absences.total}س(م${s.absences.justified}+غم${s.absences.unjustified})`
-        : "";
-      const statutStr = s.statut === "redoublant" ? " [معيد]" : s.ageRepeat ? " [محتمل-سن]" : "";
-      const ageStr    = s.age != null ? ` عمر:${s.age}` : "";
-
-      // Subject scores for this student
-      let subjStr = "";
-      if (s.subjectAvgs.size > 0) {
-        const weak = [...s.subjectAvgs.entries()]
-          .filter(([, avg]) => avg < 10)
-          .sort(([, a], [, b]) => a - b)
-          .map(([subj, avg]) => `${subj}:${avg}`)
-          .join(",");
-        const strong = [...s.subjectAvgs.entries()]
-          .filter(([, avg]) => avg >= 10)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, 3)
-          .map(([subj, avg]) => `${subj}:${avg}`)
-          .join(",");
-        if (weak)   subjStr += ` | ضعف:[${weak}]`;
-        if (strong) subjStr += ` | قوة:[${strong}]`;
-      }
-
-      ctx += `  ${rank + 1}. ${s.nomPrenom} [${sexeStr}${statutStr}${ageStr}] — ${triStr ? triStr + " | " : ""}معدل:${s.annualAvg ?? "—"}/20 — ${resLabel}${absStr}${subjStr}\n`;
-    });
-  }
-
-  // ── Cross-cutting analytics ───────────────────────────────────────────────
-
-  // Most absent (top 15)
-  const mostAbsent = [...enriched]
-    .filter(s => s.absences.total > 0)
-    .sort((a, b) => b.absences.total - a.absences.total)
-    .slice(0, 15);
-  if (mostAbsent.length > 0) {
-    ctx += `\n### أكثر التلاميذ غياباً (أعلى 15)\n`;
-    ctx += mostAbsent
-      .map(s => `  • ${s.nomPrenom} (${s.niveau}-${s.classe}): ${s.absences.total}س — مبرر:${s.absences.justified}س غير مبرر:${s.absences.unjustified}س — ${s.resultat === "non_admis" ? "راسب" : s.resultat === "admis" ? "ناجح" : "منتقل"}`)
-      .join("\n") + "\n";
-  }
-
-  // Students in double danger: failing + high absences
-  const highAbsThreshold = 30;
-  const doubleDanger = enriched
-    .filter(s => s.resultat === "non_admis" && s.absences.total >= highAbsThreshold)
-    .sort((a, b) => b.absences.total - a.absences.total);
-  if (doubleDanger.length > 0) {
-    ctx += `\n### تلاميذ في خطر مزدوج (راسب + غياب ≥ ${highAbsThreshold}س)\n`;
-    ctx += doubleDanger
-      .map(s => `  • ${s.nomPrenom} (${s.niveau}-${s.classe}): معدل ${s.annualAvg ?? "—"}/20 | غياب ${s.absences.total}س`)
-      .join("\n") + "\n";
-  }
-
-  // Failing students closest to passing
-  const closestToPass = enriched
-    .filter(s => s.resultat === "non_admis" && s.annualAvg != null && s.annualAvg >= 7)
-    .sort((a, b) => b.annualAvg! - a.annualAvg!)
-    .slice(0, 20);
-  if (closestToPass.length > 0) {
-    ctx += `\n### الراسبون الأقرب للنجاح (معدل ≥ 7/20) — أولى بالدعم\n`;
-    ctx += closestToPass
-      .map(s => `  • ${s.nomPrenom} (${s.niveau}-${s.classe}): ${s.annualAvg}/20 — ينقصه ${Math.round((10 - s.annualAvg!) * 10) / 10} نقطة`)
-      .join("\n") + "\n";
-  }
-
-  // Age-detected probable repeaters (not already marked redoublant)
-  const ageProbable = enriched.filter(s => s.ageRepeat && s.statut !== "redoublant");
-  if (ageProbable.length > 0) {
-    ctx += `\n### معيدون محتملون بالسن (تجاوزوا السن الطبيعي لمستواهم)\n`;
-    ctx += `حد السن الطبيعي: 1AM≤11 | 2AM≤12 | 3AM≤13 | 4AM≤15 (عند مطلع السنة الدراسية)\n`;
-    ctx += ageProbable
-      .map(s => `  • ${s.nomPrenom} (${s.niveau}-${s.classe}): عمر ${s.age} سنة | معدل ${s.annualAvg ?? "—"}/20 | ${s.resultat === "non_admis" ? "راسب" : s.resultat === "admis" ? "ناجح" : "منتقل"}`)
-      .join("\n") + "\n";
-  }
-
-  // Top 5 students school-wide
-  const top5 = [...enriched]
-    .filter(s => s.annualAvg != null)
-    .sort((a, b) => b.annualAvg! - a.annualAvg!)
-    .slice(0, 5);
-  if (top5.length > 0) {
-    ctx += `\n### أفضل 5 تلاميذ في المؤسسة\n`;
-    ctx += top5.map((s, i) =>
-      `  ${i + 1}. ${s.nomPrenom} (${s.niveau}-${s.classe}): ${s.annualAvg}/20`
-    ).join("\n") + "\n";
-  }
-
-  // Class ranking by success rate
-  const classRanking = sortedClasses
-    .map(([label, students]) => {
-      const p = students.filter(s => s.resultat === "admis").length;
-      const avgs = students.map(s => s.annualAvg).filter((v): v is number => v != null);
-      const avg = avgs.length ? Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length * 10) / 10 : null;
-      return { label, rate: Math.round(p / students.length * 100), avg, total: students.length, passed: p };
-    })
-    .sort((a, b) => b.rate - a.rate);
-
-  if (classRanking.length > 1) {
-    ctx += `\n### ترتيب الأقسام بنسبة النجاح\n`;
-    ctx += classRanking
-      .map((c, i) => `  ${i + 1}. ${c.label}: ${c.rate}% (${c.passed}/${c.total})${c.avg != null ? ` متوسط ${c.avg}/20` : ""}`)
-      .join("\n") + "\n";
-  }
+  if (failingAll) ctx += `\n### جميع الراسبين (${nonAdm})\nتنسيق: الاسم|المستوى-القسم|المعدل|ملاحظات\n${failingAll}\n`;
+  if (closestPass) ctx += `\n### راسبون قريبون من النجاح (≥7/20) — أولى بالدعم\n${closestPass}\n`;
+  if (doubleDanger) ctx += `\n### تلاميذ في خطر مزدوج (راسب + غياب ≥30س)\n${doubleDanger}\n`;
+  if (mostAbsent)   ctx += `\n### الأكثر غياباً (أعلى 15)\n${mostAbsent}\n`;
+  if (ageRepList)   ctx += `\n### معيدون محتملون بالسن (1AM≤11|2AM≤12|3AM≤13|4AM≤15)\n${ageRepList}\n`;
 
   return ctx;
 }
 
 // ── POST /api/assistant/chat ──────────────────────────────────────────────────
 router.post("/assistant/chat", async (req, res) => {
-  if (!req.isAuthenticated()) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const parsed = AssistantChatBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "طلب غير صالح" });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: "طلب غير صالح" }); return; }
 
   if (!process.env.GROQ_API_KEY) {
-    res.status(500).json({ error: "المساعد الذكي غير مُهيّأ بعد — يرجى إضافة GROQ_API_KEY" });
+    res.status(500).json({ error: "المساعد الذكي غير مُهيّأ — يرجى إضافة GROQ_API_KEY" });
     return;
   }
 
@@ -409,7 +234,7 @@ router.post("/assistant/chat", async (req, res) => {
     const completion = await client.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       temperature: 0.3,
-      max_tokens: 2048,
+      max_tokens: 1200,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "system", content: schoolContext },
@@ -421,10 +246,13 @@ router.post("/assistant/chat", async (req, res) => {
       || "تعذّر الحصول على رد، حاول مجدداً.";
     res.json(AssistantChatResponse.parse({ reply }));
   } catch (err: any) {
-    console.error("Assistant chat error:", err);
-    const msg = err?.status === 413
-      ? "البيانات كبيرة جداً للمعالجة، حاول تصفية النتائج أولاً."
-      : "تعذّر الاتصال بالمساعد الذكي، حاول مجدداً بعد قليل";
+    console.error("Assistant chat error:", err?.status, err?.message?.slice(0, 200));
+    const msg =
+      err?.status === 429
+        ? "تجاوزنا حد الطلبات، انتظر دقيقة ثم أعد المحاولة."
+        : err?.status === 413
+        ? "البيانات كبيرة جداً للمعالجة — يُرجى التواصل مع مطوّر التطبيق."
+        : "تعذّر الاتصال بالمساعد، حاول مجدداً بعد قليل.";
     res.status(502).json({ error: msg });
   }
 });
