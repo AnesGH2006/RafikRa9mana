@@ -251,8 +251,8 @@ export default function AgentSetupPage() {
                 ملف تثبيت Windows جاهز — لا يحتاج Node.js أو أي أدوات مطوّر.
               </p>
               <a
-                href="/downloads/SchoolManagerAgent-Setup.exe"
-                download
+                href={`${BASE}api/agent/download`}
+                download="SchoolManagerAgent-Setup.exe"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-sm font-semibold transition-all shadow-lg shadow-blue-600/30"
               >
                 <Download className="w-4 h-4" />
