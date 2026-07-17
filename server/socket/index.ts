@@ -14,7 +14,9 @@ export function getIO(): SocketIOServer {
 
 export function initSocketIO(httpServer: HttpServer): void {
   io = new SocketIOServer(httpServer, {
-    cors: { origin: true, credentials: true },
+    // Allow any origin — the desktop agent connects from file:// (null origin).
+    // Auth is enforced by Bearer token in the socket middleware below, not by origin.
+    cors: { origin: "*", methods: ["GET", "POST"] },
     path: "/agent-socket",
   });
 

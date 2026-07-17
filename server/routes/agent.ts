@@ -1,10 +1,20 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { existsSync } from "fs";
 import { resolve } from "path";
 import * as ctrl from "../controllers/agentController.js";
 import { agentAuthMiddleware } from "../middlewares/agentAuth.js";
 
 const router = Router();
+
+// ── CORS for agent endpoints (Electron app uses Bearer token, not cookies) ────
+// Allow any origin so the desktop agent (file:// origin) can reach these routes.
+function agentCors(req: Request, res: Response, next: NextFunction) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  if (req.method === "OPTIONS") { res.sendStatus(204); return; }
+  next();
+}
 
 // ── Installer download ────────────────────────────────────────────────────────
 router.get("/agent/download", (req, res) => {
@@ -29,10 +39,12 @@ router.post("/agent/token", ctrl.createToken);
 router.get("/agent/tokens", ctrl.listTokens);
 router.delete("/agent/tokens/:id", ctrl.revokeToken);
 
-// ── Agent-token-authenticated (desktop agent) ─────────────────────────────────
-router.get("/agent/status", agentAuthMiddleware, ctrl.getStatus);
-router.post("/agent/upload-excel", agentAuthMiddleware, ...ctrl.uploadExcel);
-router.post("/agent/folders", agentAuthMiddleware, ctrl.updateFolders);
-router.get("/agent/logs", agentAuthMiddleware, ctrl.getLogs);
+// ── Agent-token-authenticated (desktop agent) — CORS open, Bearer token guards ─
+router.get("/agent/status",       agentCors, agentAuthMiddleware, ctrl.getStatus);
+router.post("/agent/upload-excel",agentCors, agentAuthMiddleware, ...ctrl.uploadExcel);
+router.post("/agent/folders",     agentCors, agentAuthMiddleware, ctrl.updateFolders);
+router.get("/agent/logs",         agentCors, agentAuthMiddleware, ctrl.getLogs);
+// Preflight for all /agent/* paths
+router.options("/agent/*",        agentCors);
 
 export default router;

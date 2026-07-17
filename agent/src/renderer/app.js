@@ -167,51 +167,70 @@ async function login() {
   const tokenInput  = document.getElementById('login-token');
   const deviceInput = document.getElementById('login-device');
   const errEl       = document.getElementById('login-error');
+  const btn         = document.querySelector('#login-screen .btn-primary');
   const token  = tokenInput.value.trim();
   const device = deviceInput.value.trim() || 'حاسوب الإدارة';
   errEl.textContent = '';
 
   if (!token) { errEl.textContent = 'يرجى إدخال رمز الوكيل.'; return; }
 
-  // Get server URL from login field (user must fill it in)
-  const urlInput = document.getElementById('login-url');
+  const urlInput  = document.getElementById('login-url');
   const serverUrl = (urlInput?.value || '').trim().replace(/\/$/, '');
   if (!serverUrl) { errEl.textContent = 'يرجى إدخال عنوان الخادم (Server URL).'; return; }
 
+  // Show loading state
+  const origText = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'جارٍ الاتصال…'; }
+  errEl.textContent = '';
+
   const settings = await api.getSettings();
 
-  // Quick validate against server
   try {
-    const res = await fetch(`${serverUrl}/api/agent/status`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) { errEl.textContent = 'رمز غير صالح أو الخادم غير متاح.'; return; }
+    let res;
+    try {
+      res = await fetch(`${serverUrl}/api/agent/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (netErr) {
+      // Network error or CORS — give actionable message
+      errEl.textContent = `تعذّر الوصول إلى الخادم. تحقق من العنوان أو اتصالك بالإنترنت. (${netErr.message})`;
+      return;
+    }
+
+    if (res.status === 401) {
+      errEl.textContent = 'الرمز غير صالح أو منتهي الصلاحية — أنشئ رمزاً جديداً من لوحة التحكم.';
+      return;
+    }
+    if (!res.ok) {
+      errEl.textContent = `خطأ من الخادم (${res.status}) — تأكد من أن الخادم يعمل وأن الرمز صحيح.`;
+      return;
+    }
+
     const data = await res.json();
 
-    // Save token securely
+    // Save credentials
     await api.saveToken(token);
     await api.setSettings({ ...settings, serverUrl, deviceName: device });
 
-    State.token        = token;
-    State.deviceName   = data.deviceName ?? device;
-    State.serverUrl    = serverUrl;
+    State.token          = token;
+    State.deviceName     = data.deviceName ?? device;
+    State.serverUrl      = serverUrl;
     State.allowedFolders = data.allowedFolders ?? [];
 
     // Update UI
     document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('info-device').textContent  = State.deviceName;
-    document.getElementById('info-server').textContent  = serverUrl;
-    document.getElementById('kpi-folders').textContent  = State.allowedFolders.length;
+    document.getElementById('info-device').textContent = State.deviceName;
+    document.getElementById('info-server').textContent = serverUrl;
+    document.getElementById('kpi-folders').textContent = State.allowedFolders.length;
     renderFolders();
 
-    // Connect socket
     await connectSocket(token, serverUrl);
-
-    // Load recent logs into dashboard
     refreshDashboard(data.recentLogs ?? []);
 
   } catch (err) {
-    errEl.textContent = 'خطأ في الاتصال: ' + err.message;
+    errEl.textContent = 'خطأ غير متوقع: ' + err.message;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
   }
 }
 
