@@ -243,15 +243,23 @@ router.post("/assistant/chat", async (req, res) => {
       baseURL: "https://api.groq.com/openai/v1",
     });
 
+    // Rough token estimate: ~1 token per 3 chars (Arabic is denser than English)
+    const messages = [
+      { role: "system" as const, content: SYSTEM_PROMPT },
+      { role: "system" as const, content: schoolContext },
+      ...parsed.data.messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+    ];
+    const estTokens = messages.reduce((s, m) => s + Math.ceil(m.content.length / 3), 0);
+
+    // llama-3.3-70b: 12 000 TPM free  →  use when context is small (better quality)
+    // llama-3.1-8b-instant: 30 000 TPM free → use when context is large
+    const model = estTokens < 9_000 ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant";
+
     const completion = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model,
       temperature: 0.3,
       max_tokens: 1200,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "system", content: schoolContext },
-        ...parsed.data.messages.map(m => ({ role: m.role, content: m.content })),
-      ],
+      messages,
     });
 
     const reply = completion.choices[0]?.message?.content?.trim()

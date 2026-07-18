@@ -63,10 +63,10 @@ async function loadSocketIO() {
   return new Promise((resolve, reject) => {
     if (window.io) { resolve(window.io); return; }
     const s = document.createElement('script');
-    // socket.io-client ships a browser bundle
-    s.src = '../../node_modules/socket.io-client/dist/socket.io.min.js';
+    // Use the bundled copy shipped with the renderer (no node_modules dependency)
+    s.src = './socket.io.min.js';
     s.onload  = () => resolve(window.io);
-    s.onerror = () => reject(new Error('Failed to load socket.io-client'));
+    s.onerror = () => reject(new Error('تعذّر تحميل مكتبة الاتصال — تأكد من وجود socket.io.min.js'));
     document.head.appendChild(s);
   });
 }
@@ -257,6 +257,108 @@ function refreshDashboard(logs) {
       <td>${badgeHtml(l.status)}</td>
       <td style="font-size:11px;color:var(--muted)">${fmtDate(l.createdAt)}</td>
     </tr>`).join('');
+}
+
+// ── Manager Commands (local execution) ────────────────────────────────────────
+// parentDir: for a file path get the containing folder; for a folder path return it
+function parentDir(p) {
+  const sep = p.includes('\\') ? '\\' : '/';
+  return p.includes(sep) ? p.split(sep).slice(0, -1).join(sep) || p : p;
+}
+
+async function cmdPickFolder() {
+  const folder = await api.pickFolder();
+  if (!folder) return;
+  try {
+    // Pass the folder itself as the allowed root so the check passes
+    await api.openPath(folder, [folder, ...State.allowedFolders]);
+    toast('تم فتح المجلد بنجاح');
+    api.appendLog({ level: 'INFO', message: 'Manager opened folder', folder });
+  } catch (err) { toast('فشل فتح المجلد: ' + err.message, 'error'); }
+}
+
+async function cmdPickFile() {
+  const file = await api.pickFile([
+    { name: 'ملفات', extensions: ['pdf', 'xlsx', 'xls', 'docx', 'doc', 'pptx', 'txt', '*'] },
+  ]);
+  if (!file) return;
+  try {
+    const dir = parentDir(file);
+    await api.openPath(file, [dir, ...State.allowedFolders]);
+    toast('تم فتح الملف بنجاح');
+    api.appendLog({ level: 'INFO', message: 'Manager opened file', file });
+  } catch (err) { toast('فشل فتح الملف: ' + err.message, 'error'); }
+}
+
+async function cmdPickApp() {
+  const appPath = await api.pickFile([{ name: 'تطبيقات', extensions: ['exe'] }]);
+  if (!appPath) return;
+  try {
+    const dir = parentDir(appPath);
+    await api.openApp(appPath, [dir, ...State.allowedFolders]);
+    toast('تم تشغيل التطبيق');
+    api.appendLog({ level: 'INFO', message: 'Manager launched app', appPath });
+  } catch (err) { toast('فشل تشغيل التطبيق: ' + err.message, 'error'); }
+}
+
+async function cmdPickSrc() {
+  const f = await api.pickFolder();
+  if (f) document.getElementById('cmd-src').value = f;
+}
+async function cmdPickDst() {
+  const f = await api.pickFolder();
+  if (f) document.getElementById('cmd-dst').value = f;
+}
+
+async function cmdBackup() {
+  const src = document.getElementById('cmd-src').value.trim();
+  const dst = document.getElementById('cmd-dst').value.trim();
+  if (!src || !dst) { toast('اختر المجلد المصدر والوجهة أولاً', 'error'); return; }
+  try {
+    const result = await api.backup(src, dst, State.allowedFolders);
+    toast(`تم النسخ الاحتياطي — ${result.copied} ملف`);
+    api.appendLog({ level: 'INFO', message: 'Backup done', src, dst, copied: result.copied });
+  } catch (err) { toast('فشل النسخ الاحتياطي: ' + err.message, 'error'); }
+}
+
+async function cmdMonitor() {
+  const folder = await api.pickFolder();
+  if (!folder) return;
+  // Add to allowed folders if not already present
+  if (!State.allowedFolders.includes(folder)) {
+    State.allowedFolders.push(folder);
+    document.getElementById('kpi-folders').textContent = State.allowedFolders.length;
+    renderFolders();
+  }
+  try {
+    await api.watchFolder(folder, State.allowedFolders);
+    toast('بدأت مراقبة المجلد: ' + folder.split('\\').pop());
+    api.appendLog({ level: 'INFO', message: 'Watching folder', folder });
+  } catch (err) { toast('فشل بدء المراقبة: ' + err.message, 'error'); }
+}
+
+async function cmdFreeRun() {
+  const path   = document.getElementById('cmd-free-path').value.trim();
+  const action = document.getElementById('cmd-free-type').value;
+  if (!path) { toast('أدخل مسار الملف أو المجلد', 'error'); return; }
+  // Auto-add path to allowed list
+  const dir = path.includes('\\') ? path.split('\\').slice(0, -1).join('\\') : path;
+  if (!State.allowedFolders.includes(dir) && !State.allowedFolders.includes(path)) {
+    State.allowedFolders.push(path);
+  }
+  try {
+    let result;
+    if (action === 'openFolder')    result = await api.openPath(path, State.allowedFolders);
+    else if (action === 'openFile') result = await api.openPath(path, State.allowedFolders);
+    else if (action === 'openApp')  result = await api.openApp(path, State.allowedFolders);
+    else if (action === 'monitorFolder') {
+      State.allowedFolders = [...new Set([...State.allowedFolders, path])];
+      result = await api.watchFolder(path, State.allowedFolders);
+    }
+    toast('تم تنفيذ الأمر بنجاح');
+    api.appendLog({ level: 'INFO', message: `Free command: ${action}`, path });
+    document.getElementById('cmd-free-path').value = '';
+  } catch (err) { toast('فشل تنفيذ الأمر: ' + err.message, 'error'); }
 }
 
 // ── Logout ─────────────────────────────────────────────────────────────────────
@@ -477,6 +579,10 @@ window.App = {
   nav, login, logout, reconnect,
   pickFolder, addFolder, removeFolder, renderFolders, saveFolders,
   refreshLogs, loadSettingsUI, saveSettings, setAutostart,
+  // manager commands
+  cmdPickFolder, cmdPickFile, cmdPickApp,
+  cmdPickSrc, cmdPickDst, cmdBackup,
+  cmdMonitor, cmdFreeRun,
 };
 
 init();
