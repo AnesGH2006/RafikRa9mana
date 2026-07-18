@@ -208,6 +208,18 @@ async function buildSchoolContext(userId: string): Promise<string> {
   if (mostAbsent)   ctx += `\n### الأكثر غياباً (أعلى 15)\n${mostAbsent}\n`;
   if (ageRepList)   ctx += `\n### معيدون محتملون بالسن (1AM≤11|2AM≤12|3AM≤13|4AM≤15)\n${ageRepList}\n`;
 
+  // ── Full student roster (compact — for individual lookups by name) ─────────
+  // Format: الاسم|مستوى-قسم|معدل|غياب
+  const rosterLines = students
+    .sort((a, b) => a.nomPrenom.localeCompare(b.nomPrenom, 'ar'))
+    .map(s => {
+      const g = s.avg != null ? String(s.avg) : "—";
+      const ab = s.abs.tot > 0 ? `غ${s.abs.tot}` : "";
+      const res = s.resultat === "admis" ? "ن" : s.resultat === "non_admis" ? "ر" : "م";
+      return `${s.nomPrenom}|${s.niveau}-${s.classe}|${g}|${res}${ab}`;
+    });
+  ctx += `\n### قائمة جميع التلاميذ (الاسم|مستوى-قسم|معدل|ن=ناجح/ر=راسب/م=منتقل+غياب)\n${rosterLines.join("\n")}\n`;
+
   return ctx;
 }
 

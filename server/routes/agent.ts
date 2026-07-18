@@ -3,6 +3,7 @@ import { existsSync } from "fs";
 import { resolve } from "path";
 import * as ctrl from "../controllers/agentController.js";
 import { agentAuthMiddleware } from "../middlewares/agentAuth.js";
+import { getIO } from "../socket/index.js";
 
 const router = Router();
 
@@ -50,5 +51,44 @@ router.get("/agent/status",        agentCors, agentAuthMiddleware, ctrl.getStatu
 router.post("/agent/upload-excel", agentCors, agentAuthMiddleware, ...ctrl.uploadExcel);
 router.post("/agent/folders",      agentCors, agentAuthMiddleware, ctrl.updateFolders);
 router.get("/agent/logs",          agentCors, agentAuthMiddleware, ctrl.getLogs);
+
+// ── Send a command to a connected desktop agent (session-auth from web UI) ────
+const ALLOWED_COMMANDS = new Set([
+  "openFolder", "openFile", "openApp", "backupReports",
+  "monitorFolder", "syncData", "printReport",
+]);
+
+router.options("/agent/command", agentCors);
+router.post("/agent/command", async (req: Request, res: Response) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { agentTokenId, action, payload } = req.body ?? {};
+  if (!agentTokenId || !action) {
+    res.status(400).json({ error: "agentTokenId and action are required" }); return;
+  }
+  if (!ALLOWED_COMMANDS.has(action)) {
+    res.status(400).json({ error: `Unknown action: ${action}` }); return;
+  }
+
+  try {
+    const io = getIO();
+    let sent = false;
+    for (const [, socket] of io.sockets.sockets) {
+      const tok = (socket as any).agentToken;
+      if (tok?.id === agentTokenId && tok?.userId === (req.user as any)?.id) {
+        socket.emit("agent:command", { action, payload: payload ?? {} });
+        sent = true;
+        break;
+      }
+    }
+    if (!sent) {
+      res.status(404).json({ error: "agent_offline", message: "الوكيل غير متصل حالياً" });
+    } else {
+      res.json({ ok: true, action });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 export default router;

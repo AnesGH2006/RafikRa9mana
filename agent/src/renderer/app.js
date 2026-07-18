@@ -145,6 +145,11 @@ async function handleCommand({ action, payload }) {
       case 'syncData':
         result = { ok: true, acknowledged: true };
         break;
+      case 'printReport':
+        // Open the file with the default app (user prints from there)
+        result = await api.openPath(payload.path, State.allowedFolders);
+        toast('تم فتح الملف للطباعة: ' + (payload.path?.split('\\').pop() || payload.path));
+        break;
       default:
         throw new Error('Unknown action: ' + action);
     }
@@ -179,20 +184,19 @@ async function login() {
   if (!serverUrl) { errEl.textContent = 'يرجى إدخال عنوان الخادم (Server URL).'; return; }
 
   // Show loading state
-  const origText = btn?.textContent;
+  const origText = btn ? btn.textContent : 'تسجيل الدخول والاتصال';
   if (btn) { btn.disabled = true; btn.textContent = 'جارٍ الاتصال…'; }
   errEl.textContent = '';
 
-  const settings = await api.getSettings();
-
   try {
+    const settings = await api.getSettings();
+
     let res;
     try {
       res = await fetch(`${serverUrl}/api/agent/status`, {
         headers: { Authorization: `Bearer ${token}` },
       });
     } catch (netErr) {
-      // Network error or CORS — give actionable message
       errEl.textContent = `تعذّر الوصول إلى الخادم. تحقق من العنوان أو اتصالك بالإنترنت. (${netErr.message})`;
       return;
     }
