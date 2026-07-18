@@ -77,7 +77,10 @@ async function connectSocket(token, serverUrl) {
     _socket = io(serverUrl, {
       path:       '/agent-socket',
       auth:       { token },
-      transports: ['websocket'],
+      // Start with polling so the handshake goes through Replit's proxy,
+      // then upgrade to WebSocket. Pure websocket-only fails on some proxies.
+      transports: ['polling', 'websocket'],
+      upgrade:    true,
       reconnection: true,
       reconnectionDelay: 5000,
       reconnectionAttempts: Infinity,
