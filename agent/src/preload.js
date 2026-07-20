@@ -54,6 +54,9 @@ contextBridge.exposeInMainWorld('agent', {
   // ── Shell execution ─────────────────────────────────────────────────────────
   shellExec: (cmd)    => ipcRenderer.invoke('shell:exec', cmd),
 
+  // ── Open URL in default browser ─────────────────────────────────────────────
+  openUrl: (url)      => ipcRenderer.invoke('shell:openUrl', url),
+
   // ── Events pushed from main process ─────────────────────────────────────────
   onFileChanged: (cb) => ipcRenderer.on('fs:fileChanged', (_, d) => cb(d)),
 });

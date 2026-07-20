@@ -14,6 +14,18 @@ const ALLOWED_ACTIONS = new Set<AgentAction>([
   "open_app", "backup_reports", "sync_data", "monitor_folder",
 ]);
 
+// Commands that the agent can execute — sent from web UI → server → agent socket.
+// These are forwarded as-is; the agent renderer dispatches them via handleCommand().
+const FORWARDABLE_COMMANDS = new Set([
+  "openFolder", "openFile", "openApp", "backupReports",
+  "monitorFolder", "syncData", "printReport",
+  "openUrl",
+  "screenCapture", "startStream", "stopStream",
+  "mouseClick", "mouseDoubleClick", "mouseScroll", "mouseMove",
+  "typeText", "pressKey",
+  "shellExec",
+]);
+
 async function logAction(
   agentTokenId: string,
   userId: string,
@@ -50,6 +62,17 @@ export function agentHandler(io: SocketIOServer, socket: Socket): void {
       .where(eq(agentTokensTable.id, agentTokenId))
       .catch(() => {});
     if (typeof cb === "function") cb({ ok: true, ts: Date.now() });
+  });
+
+  // ── Screen frame forwarded from agent to any listening web clients ───────────
+  socket.on("agent:screenFrame", (frame: unknown) => {
+    // Broadcast to web-control room so the dashboard can receive live frames
+    io.to(`control:${userId}`).emit("agent:screenFrame", frame);
+  });
+
+  // ── Shell result forwarded to web clients ─────────────────────────────────────
+  socket.on("agent:shellResult", (result: unknown) => {
+    io.to(`control:${userId}`).emit("agent:shellResult", result);
   });
 
   // ── Task result from agent ──────────────────────────────────────────────────

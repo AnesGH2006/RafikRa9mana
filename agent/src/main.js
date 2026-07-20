@@ -331,6 +331,14 @@ ipcMain.handle('robot:type', async (_e, text) => {
   return { ok: true };
 });
 
+// ── IPC: Open URL in default browser ──────────────────────────────────────────
+ipcMain.handle('shell:openUrl', async (_e, url) => {
+  // Only allow http/https to avoid arbitrary protocol abuse
+  if (!/^https?:\/\//i.test(url)) throw new Error('Only http/https URLs are allowed');
+  await shell.openExternal(url);
+  return { ok: true, url };
+});
+
 // ── IPC: Shell execution ───────────────────────────────────────────────────────
 ipcMain.handle('shell:exec', (_e, command) => new Promise((resolve) => {
   exec(command, {

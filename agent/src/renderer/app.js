@@ -215,6 +215,12 @@ async function handleCommand({ action, payload }) {
         result = await api.robotKey(payload.key ?? 'Enter');
         break;
 
+      // ── Open URL in browser ──────────────────────────────────────────────────
+      case 'openUrl':
+        result = await api.openUrl(payload.url ?? '');
+        toast('تم فتح الرابط: ' + (payload.url ?? ''));
+        break;
+
       // ── Shell ────────────────────────────────────────────────────────────────
       case 'shellExec': {
         const shellResult = await api.shellExec(payload.command ?? '');
@@ -571,6 +577,7 @@ const ACTION_LABELS = {
   monitor_folder:    'مراقبة مجلد',
   connect:           'اتصال',
   disconnect:        'قطع اتصال',
+  openUrl:           'فتح رابط',
   screenCapture:     'لقطة شاشة',
   startStream:       'بدء البث المباشر',
   stopStream:        'إيقاف البث',

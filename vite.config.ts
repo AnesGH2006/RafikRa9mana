@@ -47,6 +47,14 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      // Proxy the Socket.IO agent namespace so the Electron agent can reach it
+      // through the Vite dev server (port 5000 → external :80).
+      "/agent-socket": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        secure: false,
+        ws: true, // upgrade WebSocket connections
+      },
     },
   },
 });

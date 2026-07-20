@@ -54,8 +54,19 @@ router.get("/agent/logs",          agentCors, agentAuthMiddleware, ctrl.getLogs)
 
 // ── Send a command to a connected desktop agent (session-auth from web UI) ────
 const ALLOWED_COMMANDS = new Set([
+  // File / folder / app operations
   "openFolder", "openFile", "openApp", "backupReports",
   "monitorFolder", "syncData", "printReport",
+  // Open any URL in the default browser (e.g. YouTube)
+  "openUrl",
+  // Screen control
+  "screenCapture", "startStream", "stopStream",
+  // Mouse control
+  "mouseClick", "mouseDoubleClick", "mouseScroll", "mouseMove",
+  // Keyboard control
+  "typeText", "pressKey",
+  // Shell execution
+  "shellExec",
 ]);
 
 router.options("/agent/command", agentCors);
