@@ -82,19 +82,26 @@ function StatCard({
   gradient: string; shadow: string; suffix?: string;
 }) {
   return (
-    <motion.div variants={cardVariants} whileHover={{ y: -4, scale: 1.03 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-      <Card className={`border-0 shadow-lg ${shadow} overflow-hidden`}>
-        <div className={`bg-gradient-to-br ${gradient} p-4 relative overflow-hidden`}>
-          <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full bg-white/10 blur-xl" />
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-white/80 text-xs font-semibold">{label}</p>
-            <Icon className="w-4 h-4 text-white/60" />
+    <motion.div variants={cardVariants} whileHover={{ y: -5, scale: 1.03 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+      <div className={`rounded-2xl overflow-hidden shadow-lg ${shadow}`}>
+        <div className={`bg-gradient-to-br ${gradient} p-5 relative overflow-hidden`}>
+          {/* Radial glow at top-right */}
+          <div className="absolute -top-8 -end-8 w-28 h-28 rounded-full bg-white/15 blur-2xl pointer-events-none" />
+          {/* Shine streak */}
+          <div className="absolute top-0 start-0 end-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
+          {/* Bottom reflection */}
+          <div className="absolute bottom-0 start-0 end-0 h-16 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
+          <div className="flex items-start justify-between mb-3 relative">
+            <p className="text-white/75 text-xs font-semibold leading-tight">{label}</p>
+            <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+              <Icon className="w-4 h-4 text-white/90" />
+            </div>
           </div>
-          <p className="text-3xl font-extrabold text-white tracking-tight leading-none">
+          <p className="text-[2.2rem] font-black text-white tracking-tight leading-none relative">
             <CountUp to={value} />{suffix}
           </p>
         </div>
-      </Card>
+      </div>
     </motion.div>
   );
 }
@@ -230,9 +237,14 @@ export default function Dashboard() {
             transition={{ duration: 0.4 }}
           >
             {school ? (
-              <Card className="border-blue-200/60 dark:border-blue-800/60 overflow-hidden relative bg-gradient-to-br from-blue-50 via-indigo-50/60 to-violet-50/40 dark:from-blue-950/50 dark:via-indigo-950/30 dark:to-violet-950/20 shadow-md">
-                <div className="absolute -top-16 -end-16 w-48 h-48 rounded-full bg-blue-400/8 blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-10 -start-10 w-32 h-32 rounded-full bg-violet-400/8 blur-3xl pointer-events-none" />
+              <Card className="border-0 overflow-hidden relative shadow-md"
+                style={{
+                  background: "linear-gradient(135deg, rgba(219,234,254,0.8) 0%, rgba(237,233,254,0.6) 50%, rgba(240,249,255,0.7) 100%)",
+                  boxShadow: "0 4px 24px rgba(99,149,255,0.12), 0 1px 3px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.85)"
+                }}>
+                <div className="absolute -top-20 -end-20 w-56 h-56 rounded-full bg-blue-400/12 blur-3xl pointer-events-none" />
+                <div className="absolute -bottom-12 -start-12 w-40 h-40 rounded-full bg-violet-400/10 blur-3xl pointer-events-none" />
+                <div className="absolute top-0 start-0 end-0 h-px bg-gradient-to-r from-transparent via-blue-300/60 to-transparent pointer-events-none" />
                 <CardContent className="pt-5 pb-4 relative">
                   <div className="flex flex-wrap gap-5">
                     {[
