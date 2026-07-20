@@ -2,10 +2,26 @@
 
 const {
   app, BrowserWindow, ipcMain, Tray, Menu,
-  shell, dialog, nativeTheme,
+  shell, dialog, nativeTheme, desktopCapturer, screen,
 } = require('electron');
-const path = require('path');
-const fs   = require('fs');
+const path    = require('path');
+const fs      = require('fs');
+const { exec } = require('child_process');
+
+// ── PowerShell helper (EncodedCommand avoids all quoting issues) ───────────────
+function runPS(script, timeoutMs = 12000) {
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  return new Promise((resolve, reject) => {
+    exec(
+      `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
+      { timeout: timeoutMs, windowsHide: true, maxBuffer: 10 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        if (err) reject(new Error(stderr.trim() || err.message));
+        else resolve(stdout.trim());
+      },
+    );
+  });
+}
 
 const isDev = process.argv.includes('--dev');
 
@@ -198,6 +214,141 @@ ipcMain.handle('token:delete', async () => {
   try { await fs.promises.unlink(TOKEN_PATH); } catch {}
   return true;
 });
+
+// ── IPC: Screen capture (Electron desktopCapturer) ────────────────────────────
+ipcMain.handle('screen:capture', async () => {
+  const display = screen.getPrimaryDisplay();
+  const { width, height } = display.size;
+  const scaleFactor = display.scaleFactor || 1;
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: {
+      width:  Math.round(width  * scaleFactor * 0.6),
+      height: Math.round(height * scaleFactor * 0.6),
+    },
+  });
+  if (!sources.length) throw new Error('No screen sources found');
+  return {
+    dataUrl:      sources[0].thumbnail.toDataURL(),
+    screenWidth:  Math.round(width  * scaleFactor),
+    screenHeight: Math.round(height * scaleFactor),
+  };
+});
+
+ipcMain.handle('screen:size', () => {
+  const { width, height } = screen.getPrimaryDisplay().size;
+  const sf = screen.getPrimaryDisplay().scaleFactor || 1;
+  return { width: Math.round(width * sf), height: Math.round(height * sf) };
+});
+
+// ── IPC: Mouse control (via PowerShell P/Invoke) ───────────────────────────────
+const MOUSE_TYPE_DEF = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class RobotMouse {
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, int dwExtraInfo);
+    public const uint LEFTDOWN   = 0x0002;
+    public const uint LEFTUP     = 0x0004;
+    public const uint RIGHTDOWN  = 0x0008;
+    public const uint RIGHTUP    = 0x0010;
+    public const uint MIDDLEDOWN = 0x0020;
+    public const uint MIDDLEUP   = 0x0040;
+    public const uint WHEEL      = 0x0800;
+}
+"@`;
+
+ipcMain.handle('robot:click', async (_e, x, y, button = 'left') => {
+  const downFlag = { left: '[RobotMouse]::LEFTDOWN', right: '[RobotMouse]::RIGHTDOWN', middle: '[RobotMouse]::MIDDLEDOWN' }[button] || '[RobotMouse]::LEFTDOWN';
+  const upFlag   = { left: '[RobotMouse]::LEFTUP',   right: '[RobotMouse]::RIGHTUP',   middle: '[RobotMouse]::MIDDLEUP'   }[button] || '[RobotMouse]::LEFTUP';
+  await runPS(`${MOUSE_TYPE_DEF}
+[RobotMouse]::SetCursorPos(${Math.round(x)}, ${Math.round(y)})
+Start-Sleep -Milliseconds 80
+[RobotMouse]::mouse_event(${downFlag}, 0, 0, 0, 0)
+Start-Sleep -Milliseconds 50
+[RobotMouse]::mouse_event(${upFlag}, 0, 0, 0, 0)`);
+  return { ok: true };
+});
+
+ipcMain.handle('robot:doubleclick', async (_e, x, y) => {
+  await runPS(`${MOUSE_TYPE_DEF}
+[RobotMouse]::SetCursorPos(${Math.round(x)}, ${Math.round(y)})
+Start-Sleep -Milliseconds 80
+[RobotMouse]::mouse_event([RobotMouse]::LEFTDOWN, 0, 0, 0, 0); Start-Sleep -Milliseconds 40
+[RobotMouse]::mouse_event([RobotMouse]::LEFTUP,   0, 0, 0, 0); Start-Sleep -Milliseconds 120
+[RobotMouse]::mouse_event([RobotMouse]::LEFTDOWN, 0, 0, 0, 0); Start-Sleep -Milliseconds 40
+[RobotMouse]::mouse_event([RobotMouse]::LEFTUP,   0, 0, 0, 0)`);
+  return { ok: true };
+});
+
+ipcMain.handle('robot:scroll', async (_e, x, y, delta) => {
+  // delta: positive = scroll up, negative = scroll down
+  await runPS(`${MOUSE_TYPE_DEF}
+[RobotMouse]::SetCursorPos(${Math.round(x)}, ${Math.round(y)})
+Start-Sleep -Milliseconds 40
+[RobotMouse]::mouse_event([RobotMouse]::WHEEL, 0, 0, ${Math.round(delta * 120)}, 0)`);
+  return { ok: true };
+});
+
+ipcMain.handle('robot:move', async (_e, x, y) => {
+  await runPS(`${MOUSE_TYPE_DEF}
+[RobotMouse]::SetCursorPos(${Math.round(x)}, ${Math.round(y)})`);
+  return { ok: true };
+});
+
+// ── IPC: Keyboard control ──────────────────────────────────────────────────────
+const KEY_MAP = {
+  enter: '{ENTER}', return: '{ENTER}', tab: '{TAB}', escape: '{ESC}', esc: '{ESC}',
+  backspace: '{BACKSPACE}', delete: '{DELETE}', home: '{HOME}', end: '{END}',
+  pageup: '{PGUP}', pagedown: '{PGDN}',
+  arrowup: '{UP}', arrowdown: '{DOWN}', arrowleft: '{LEFT}', arrowright: '{RIGHT}',
+  up: '{UP}', down: '{DOWN}', left: '{LEFT}', right: '{RIGHT}',
+  f1: '{F1}', f2: '{F2}', f3: '{F3}', f4: '{F4}', f5: '{F5}',
+  f6: '{F6}', f7: '{F7}', f8: '{F8}', f9: '{F9}', f10: '{F10}',
+  f11: '{F11}', f12: '{F12}',
+  // Combos
+  'ctrl+c': '^c', 'ctrl+v': '^v', 'ctrl+x': '^x', 'ctrl+z': '^z', 'ctrl+y': '^y',
+  'ctrl+a': '^a', 'ctrl+s': '^s', 'ctrl+f': '^f', 'ctrl+p': '^p', 'ctrl+w': '^w',
+  'ctrl+t': '^t', 'ctrl+n': '^n', 'ctrl+r': '^r',
+  'alt+f4': '%{F4}', 'alt+tab': '%{TAB}', 'win': '{LWIN}',
+};
+
+ipcMain.handle('robot:key', async (_e, key) => {
+  const k       = (key || '').toLowerCase();
+  const sendKey = KEY_MAP[k] || `{${key.toUpperCase()}}`;
+  await runPS(`Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.SendKeys]::SendWait(${JSON.stringify(sendKey)})`);
+  return { ok: true };
+});
+
+ipcMain.handle('robot:type', async (_e, text) => {
+  if (!text) return { ok: true };
+  // Escape special SendKeys chars: + ^ % ~ ( ) { } [ ]
+  const escaped = String(text).replace(/([+^%~(){}[\]])/g, '{$1}');
+  await runPS(`Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.SendKeys]::SendWait(${JSON.stringify(escaped)})`);
+  return { ok: true };
+});
+
+// ── IPC: Shell execution ───────────────────────────────────────────────────────
+ipcMain.handle('shell:exec', (_e, command) => new Promise((resolve) => {
+  exec(command, {
+    shell: true,
+    timeout: 30_000,
+    maxBuffer: 5 * 1024 * 1024,
+    windowsHide: true,
+    encoding: 'buffer',
+  }, (err, stdout, stderr) => {
+    const dec = (b) => { try { return b.toString('utf-8'); } catch { return b.toString('binary'); } };
+    resolve({
+      ok:       !err || err.code === 0,
+      stdout:   dec(stdout),
+      stderr:   dec(stderr),
+      exitCode: err?.code ?? 0,
+    });
+  });
+}));
 
 // ── IPC: action log ────────────────────────────────────────────────────────────
 const LOG_PATH    = dataPath('agent.log');

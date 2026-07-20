@@ -37,6 +37,23 @@ contextBridge.exposeInMainWorld('agent', {
   appendLog: (e)      => ipcRenderer.invoke('log:append', e),
   readLog:   ()       => ipcRenderer.invoke('log:read'),
 
+  // ── Screen capture ──────────────────────────────────────────────────────────
+  captureScreen: ()                => ipcRenderer.invoke('screen:capture'),
+  getScreenSize: ()                => ipcRenderer.invoke('screen:size'),
+
+  // ── Mouse control ───────────────────────────────────────────────────────────
+  robotClick:        (x, y, btn)  => ipcRenderer.invoke('robot:click',       x, y, btn),
+  robotDoubleClick:  (x, y)       => ipcRenderer.invoke('robot:doubleclick', x, y),
+  robotScroll:       (x, y, d)    => ipcRenderer.invoke('robot:scroll',      x, y, d),
+  robotMove:         (x, y)       => ipcRenderer.invoke('robot:move',        x, y),
+
+  // ── Keyboard control ─────────────────────────────────────────────────────────
+  robotType: (text)   => ipcRenderer.invoke('robot:type', text),
+  robotKey:  (key)    => ipcRenderer.invoke('robot:key',  key),
+
+  // ── Shell execution ─────────────────────────────────────────────────────────
+  shellExec: (cmd)    => ipcRenderer.invoke('shell:exec', cmd),
+
   // ── Events pushed from main process ─────────────────────────────────────────
   onFileChanged: (cb) => ipcRenderer.on('fs:fileChanged', (_, d) => cb(d)),
 });

@@ -124,12 +124,36 @@ function reportResult(action, status, details) {
   _socket?.emit('agent:taskResult', { action, status, details });
 }
 
+// ── Screen streaming ───────────────────────────────────────────────────────────
+let _streamInterval = null;
+
+async function captureAndSend() {
+  if (!_socket?.connected) return;
+  try {
+    const frame = await api.captureScreen();
+    _socket.emit('agent:screenFrame', frame);
+  } catch (err) {
+    console.error('captureAndSend', err);
+  }
+}
+
+function startStreaming(fps = 2) {
+  stopStreaming();
+  _streamInterval = setInterval(captureAndSend, Math.round(1000 / fps));
+  toast('بدأ بث الشاشة');
+}
+
+function stopStreaming() {
+  if (_streamInterval) { clearInterval(_streamInterval); _streamInterval = null; }
+}
+
 // ── Command dispatcher ─────────────────────────────────────────────────────────
 async function handleCommand({ action, payload }) {
   api.appendLog({ level: 'INFO', message: `Command received: ${action}`, payload });
   let result, status;
   try {
     switch (action) {
+      // ── File / folder / app ──────────────────────────────────────────────────
       case 'openFolder':
         result = await api.openPath(payload.path, State.allowedFolders);
         break;
@@ -149,15 +173,69 @@ async function handleCommand({ action, payload }) {
         result = { ok: true, acknowledged: true };
         break;
       case 'printReport':
-        // Open the file with the default app (user prints from there)
         result = await api.openPath(payload.path, State.allowedFolders);
         toast('تم فتح الملف للطباعة: ' + (payload.path?.split('\\').pop() || payload.path));
         break;
+
+      // ── Screen control ───────────────────────────────────────────────────────
+      case 'screenCapture': {
+        const frame = await api.captureScreen();
+        _socket?.emit('agent:screenFrame', frame);
+        result = { ok: true };
+        break;
+      }
+      case 'startStream':
+        startStreaming(payload?.fps ?? 2);
+        result = { ok: true, streaming: true };
+        break;
+      case 'stopStream':
+        stopStreaming();
+        result = { ok: true, streaming: false };
+        break;
+
+      // ── Mouse ────────────────────────────────────────────────────────────────
+      case 'mouseClick':
+        result = await api.robotClick(payload.x, payload.y, payload.button ?? 'left');
+        break;
+      case 'mouseDoubleClick':
+        result = await api.robotDoubleClick(payload.x, payload.y);
+        break;
+      case 'mouseScroll':
+        result = await api.robotScroll(payload.x, payload.y, payload.delta ?? 3);
+        break;
+      case 'mouseMove':
+        result = await api.robotMove(payload.x, payload.y);
+        break;
+
+      // ── Keyboard ─────────────────────────────────────────────────────────────
+      case 'typeText':
+        result = await api.robotType(payload.text ?? '');
+        break;
+      case 'pressKey':
+        result = await api.robotKey(payload.key ?? 'Enter');
+        break;
+
+      // ── Shell ────────────────────────────────────────────────────────────────
+      case 'shellExec': {
+        const shellResult = await api.shellExec(payload.command ?? '');
+        _socket?.emit('agent:shellResult', {
+          command:  payload.command,
+          stdout:   shellResult.stdout,
+          stderr:   shellResult.stderr,
+          exitCode: shellResult.exitCode,
+          ts:       Date.now(),
+        });
+        result = { ok: shellResult.ok };
+        break;
+      }
+
       default:
         throw new Error('Unknown action: ' + action);
     }
     status = 'success';
-    toast('تم تنفيذ: ' + actionLabel(action));
+    // Don't toast for streaming/mouse/key events — too noisy
+    const silentActions = new Set(['screenCapture','startStream','stopStream','mouseClick','mouseDoubleClick','mouseScroll','mouseMove','typeText','pressKey','shellExec']);
+    if (!silentActions.has(action)) toast('تم تنفيذ: ' + actionLabel(action));
     api.appendLog({ level: 'INFO', message: `Task success: ${action}`, result });
   } catch (err) {
     status = 'failed';
@@ -166,7 +244,6 @@ async function handleCommand({ action, payload }) {
     api.appendLog({ level: 'ERROR', message: `Task failed: ${action}`, error: err.message });
   }
   reportResult(action, status, result);
-  // Refresh task list if visible
   if (document.getElementById('page-tasks').classList.contains('active')) App.refreshLogs();
 }
 
@@ -363,12 +440,13 @@ async function cmdFreeRun() {
 
 // ── Logout ─────────────────────────────────────────────────────────────────────
 async function logout() {
+  stopStreaming();
   _socket?.disconnect();
   _socket = null;
   await api.deleteToken();
   State.token = null;
   setStatus('disconnected', 'غير متصل');
-  document.getElementById('login-screen').classList.remove('hidden');
+  showWizard();
 }
 
 // ── Reconnect ──────────────────────────────────────────────────────────────────
@@ -483,16 +561,26 @@ async function setAutostart(enabled) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const ACTION_LABELS = {
-  upload_excel:   'رفع ملف Excel',
-  print_report:   'طباعة تقرير',
-  open_folder:    'فتح مجلد',
-  open_file:      'فتح ملف',
-  open_app:       'تشغيل تطبيق',
-  backup_reports: 'نسخ احتياطي',
-  sync_data:      'مزامنة البيانات',
-  monitor_folder: 'مراقبة مجلد',
-  connect:        'اتصال',
-  disconnect:     'قطع اتصال',
+  upload_excel:      'رفع ملف Excel',
+  print_report:      'طباعة تقرير',
+  open_folder:       'فتح مجلد',
+  open_file:         'فتح ملف',
+  open_app:          'تشغيل تطبيق',
+  backup_reports:    'نسخ احتياطي',
+  sync_data:         'مزامنة البيانات',
+  monitor_folder:    'مراقبة مجلد',
+  connect:           'اتصال',
+  disconnect:        'قطع اتصال',
+  screenCapture:     'لقطة شاشة',
+  startStream:       'بدء البث المباشر',
+  stopStream:        'إيقاف البث',
+  mouseClick:        'نقر الماوس',
+  mouseDoubleClick:  'نقر مزدوج',
+  mouseScroll:       'تمرير الشاشة',
+  mouseMove:         'تحريك الماوس',
+  typeText:          'كتابة نص',
+  pressKey:          'ضغط مفتاح',
+  shellExec:         'تنفيذ أمر',
 };
 function actionLabel(a) { return ACTION_LABELS[a] ?? a; }
 
@@ -538,40 +626,134 @@ api.onFileChanged(async ({ eventType, filename, folder }) => {
   }
 });
 
+// ── Setup Wizard ───────────────────────────────────────────────────────────────
+function showWizard() {
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.querySelectorAll('.wiz-panel').forEach(p => p.classList.add('hidden'));
+  const p1 = document.getElementById('wiz-panel-1');
+  if (p1) p1.classList.remove('hidden');
+  updateWizDots(1);
+  // Pre-fill saved values
+  api.getSettings().then(s => {
+    const u = document.getElementById('wiz-url');
+    if (u && s.serverUrl) u.value = s.serverUrl;
+    const d = document.getElementById('wiz-device');
+    if (d && s.deviceName) d.value = s.deviceName;
+  }).catch(() => {});
+}
+
+function updateWizDots(step) {
+  document.querySelectorAll('.wiz-dot').forEach((dot, i) => {
+    dot.classList.toggle('active', i + 1 === step);
+    dot.classList.toggle('done',   i + 1 <  step);
+  });
+}
+
+async function wizTestUrl() {
+  const url    = (document.getElementById('wiz-url')?.value || '').trim().replace(/\/$/, '');
+  const status = document.getElementById('wiz-url-status');
+  if (!url) { if (status) { status.textContent = 'أدخل الرابط أولاً'; status.className = 'wiz-status error'; } return; }
+  if (status) { status.textContent = 'جارٍ الاختبار…'; status.className = 'wiz-status'; }
+  try {
+    const r = await fetch(`${url}/api/healthz`);
+    if (r.ok) { status.textContent = '✓ الخادم متصل وجاهز'; status.className = 'wiz-status ok'; }
+    else { status.textContent = `⚠ الخادم يرد بخطأ (${r.status})`; status.className = 'wiz-status warn'; }
+  } catch (err) {
+    if (status) { status.textContent = '✗ تعذّر الوصول: ' + err.message; status.className = 'wiz-status error'; }
+  }
+}
+
+function wizNext(step) {
+  const url = (document.getElementById('wiz-url')?.value || '').trim();
+  if (!url) { toast('أدخل عنوان الخادم أولاً', 'error'); return; }
+  document.querySelectorAll('.wiz-panel').forEach(p => p.classList.add('hidden'));
+  document.getElementById('wiz-panel-' + step)?.classList.remove('hidden');
+  updateWizDots(step);
+}
+
+function wizBack(step) {
+  document.querySelectorAll('.wiz-panel').forEach(p => p.classList.add('hidden'));
+  document.getElementById('wiz-panel-' + step)?.classList.remove('hidden');
+  updateWizDots(step);
+}
+
+async function wizConnect() {
+  const url    = (document.getElementById('wiz-url')?.value    || '').trim().replace(/\/$/, '');
+  const token  = (document.getElementById('wiz-token')?.value  || '').trim();
+  const device = (document.getElementById('wiz-device')?.value || '').trim() || 'حاسوب الإدارة';
+  const errEl  = document.getElementById('wiz-error');
+  const btn    = document.getElementById('wiz-connect-btn');
+
+  if (!token) { if (errEl) errEl.textContent = 'يرجى إدخال رمز الوكيل.'; return; }
+  if (!url)   { if (errEl) errEl.textContent = 'يرجى العودة وإدخال عنوان الخادم.'; return; }
+
+  if (btn)   { btn.disabled = true; btn.textContent = 'جارٍ الاتصال…'; }
+  if (errEl) errEl.textContent = '';
+
+  try {
+    let res;
+    try {
+      res = await fetch(`${url}/api/agent/status`, { headers: { Authorization: `Bearer ${token}` } });
+    } catch (netErr) {
+      if (errEl) errEl.textContent = 'تعذّر الوصول إلى الخادم: ' + netErr.message;
+      return;
+    }
+    if (res.status === 401) { if (errEl) errEl.textContent = 'الرمز غير صالح أو منتهي الصلاحية.'; return; }
+    if (!res.ok) { if (errEl) errEl.textContent = `خطأ من الخادم (${res.status}).`; return; }
+
+    const data = await res.json();
+    await api.saveToken(token);
+    await api.setSettings({ serverUrl: url, deviceName: device });
+
+    State.token          = token;
+    State.serverUrl      = url;
+    State.deviceName     = data.deviceName ?? device;
+    State.allowedFolders = data.allowedFolders ?? [];
+
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('info-device').textContent = State.deviceName;
+    document.getElementById('info-server').textContent = url;
+    document.getElementById('kpi-folders').textContent = State.allowedFolders.length;
+    renderFolders();
+    await connectSocket(token, url);
+    refreshDashboard(data.recentLogs ?? []);
+  } catch (err) {
+    if (errEl) errEl.textContent = 'خطأ غير متوقع: ' + err.message;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'اتصال والدخول'; }
+  }
+}
+
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 async function init() {
-  // Try auto-login from saved token
   const token = await api.loadToken();
   if (token) {
-    const settings   = await api.getSettings();
-    const serverUrl  = settings.serverUrl || 'https://your-school-manager.replit.app';
-    try {
-      const res = await fetch(`${serverUrl}/api/agent/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        document.getElementById('login-screen').classList.add('hidden');
-        State.token         = token;
-        State.serverUrl     = serverUrl;
-        State.deviceName    = data.deviceName ?? settings.deviceName ?? '';
-        State.allowedFolders = data.allowedFolders ?? [];
-        document.getElementById('info-device').textContent = State.deviceName;
-        document.getElementById('info-server').textContent = serverUrl;
-        document.getElementById('kpi-folders').textContent = State.allowedFolders.length;
-        renderFolders();
-        refreshDashboard(data.recentLogs ?? []);
-        await connectSocket(token, serverUrl);
-        return;
-      }
-    } catch { /* fall through to login screen */ }
+    const settings  = await api.getSettings();
+    const serverUrl = settings.serverUrl || '';
+    if (serverUrl) {
+      try {
+        const res = await fetch(`${serverUrl}/api/agent/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('login-screen').classList.add('hidden');
+          State.token          = token;
+          State.serverUrl      = serverUrl;
+          State.deviceName     = data.deviceName ?? settings.deviceName ?? '';
+          State.allowedFolders = data.allowedFolders ?? [];
+          document.getElementById('info-device').textContent = State.deviceName;
+          document.getElementById('info-server').textContent = serverUrl;
+          document.getElementById('kpi-folders').textContent = State.allowedFolders.length;
+          renderFolders();
+          refreshDashboard(data.recentLogs ?? []);
+          await connectSocket(token, serverUrl);
+          return;
+        }
+      } catch { /* fall through to wizard */ }
+    }
   }
-  // Show login — pre-fill server URL from saved settings
-  const savedSettings = await api.getSettings().catch(() => ({}));
-  const savedUrl = savedSettings.serverUrl || '';
-  const urlFld = document.getElementById('login-url');
-  if (urlFld && savedUrl) urlFld.value = savedUrl;
-  document.getElementById('login-screen').classList.remove('hidden');
+  showWizard();
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -583,6 +765,8 @@ window.App = {
   cmdPickFolder, cmdPickFile, cmdPickApp,
   cmdPickSrc, cmdPickDst, cmdBackup,
   cmdMonitor, cmdFreeRun,
+  // setup wizard
+  showWizard, wizNext, wizBack, wizTestUrl, wizConnect,
 };
 
 init();
