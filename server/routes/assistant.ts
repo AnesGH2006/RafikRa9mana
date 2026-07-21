@@ -25,7 +25,7 @@ function calcAge(dob: string | null, annee: string): number | null {
   return Math.floor((new Date(yr, 8, 1).getTime() - birth.getTime()) / (365.25 * 864e5));
 }
 
-// ── Context builder — stays under ~5,000 tokens ───────────────────────────────
+// ── Context builder — Optimized to prevent HTTP 413 Payload Too Large ─────────
 async function buildSchoolContext(userId: string): Promise<string> {
   const [schoolRows, allStudents, allGrades, allAbsences] = await Promise.all([
     db.select().from(schoolInfoTable).where(eq(schoolInfoTable.userId, userId)),
@@ -37,7 +37,7 @@ async function buildSchoolContext(userId: string): Promise<string> {
   if (allStudents.length === 0) return "لا توجد بيانات تلاميذ بعد.";
 
   const school = schoolRows[0];
-  const annee  = school?.annee || "";
+  const annee   = school?.annee || "";
 
   // ── Build lookup maps ─────────────────────────────────────────────────────
   const triAvg = new Map<string, Map<number, number>>();  // sid → tri → avg
@@ -75,7 +75,6 @@ async function buildSchoolContext(userId: string): Promise<string> {
     const age  = calcAge(s.dateNaissance, annee);
     const ageRep = age !== null && age > (MAX_NORMAL_AGE[s.niveau] ?? 99);
 
-    // per-student subject averages (for weak-subject flags)
     const sAvgs = new Map<string, number>();
     for (const [subj, scores] of (subjAcc.get(s.id) ?? new Map()).entries())
       sAvgs.set(subj, +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
@@ -108,7 +107,7 @@ async function buildSchoolContext(userId: string): Promise<string> {
     return `${niv}: ${g.length}تلميذ | ناجح ${p}(${Math.round(p/g.length*100)}%) | متوسط ${la}${rb ? ` | معيد ${rb}` : ""}${ar ? ` | محتمل-سن ${ar}` : ""}`;
   }).filter(Boolean);
 
-  // ── Per-class summary (stats only, no individual roster) ──────────────────
+  // ── Per-class summary ──────────────────────────────────────────────────────
   const classeMap = new Map<string, typeof students>();
   for (const s of students) {
     const key = `${s.niveau}-${s.classe}`;
@@ -116,7 +115,6 @@ async function buildSchoolContext(userId: string): Promise<string> {
     classeMap.get(key)!.push(s);
   }
 
-  // School-wide subject averages
   const schoolSubj = new Map<string, { sum: number; n: number; fail: number }>();
   for (const s of students) {
     for (const [subj, avg] of s.sAvgs.entries()) {
@@ -137,19 +135,11 @@ async function buildSchoolContext(userId: string): Promise<string> {
       const nr = g.filter(s => s.resultat === "non_admis").length;
       const avgs = g.map(s => s.avg).filter((v): v is number => v !== null);
       const ca = avgs.length ? (avgs.reduce((a, b) => a + b, 0) / avgs.length).toFixed(1) : "—";
-      const rb = g.filter(s => s.statut === "redoublant").length;
-      const ar = g.filter(s => s.ageRep && s.statut !== "redoublant").length;
       const top = [...g].filter(s => s.avg != null).sort((a, b) => b.avg! - a.avg!)[0];
-      return `${cls}: ${g.length}طالب | ناجح ${p}(${Math.round(p/g.length*100)}%) | راسب ${nr} | متوسط ${ca}${rb ? ` | معيد ${rb}` : ""}${ar ? ` | محتمل-سن ${ar}` : ""}${top ? ` | أعلى: ${top.nomPrenom}(${top.avg})` : ""}`;
+      return `${cls}: ${g.length}طالب | ناجح ${p}(${Math.round(p/g.length*100)}%) | راسب ${nr} | متوسط ${ca}${top ? ` | أعلى: ${top.nomPrenom}(${top.avg})` : ""}`;
     });
 
-  // Class ranking
-  const clsRank = [...classeMap.entries()]
-    .map(([cls, g]) => ({ cls, rate: Math.round(g.filter(s => s.resultat === "admis").length / g.length * 100) }))
-    .sort((a, b) => b.rate - a.rate)
-    .map((c, i) => `${i+1}.${c.cls}:${c.rate}%`).join(" | ");
-
-  // ── Notable student lists (compact: name|level-class|avg|flags) ────────────
+  // ── Notable student lists (Compact & Truncated to avoid payload errors) ───
   const fmt = (s: (typeof students)[0], extras: string[] = []) => {
     const flags = [
       s.statut === "redoublant" ? "معيد" : s.ageRep ? `سن${s.age}` : null,
@@ -163,63 +153,40 @@ async function buildSchoolContext(userId: string): Promise<string> {
   const top10       = sorted.slice(0, 10).map(s => fmt(s)).join(" | ");
   const bottom10    = [...sorted].reverse().slice(0, 10).map(s => fmt(s)).join(" | ");
   const mostAbsent  = [...students].sort((a, b) => b.abs.tot - a.abs.tot)
-    .filter(s => s.abs.tot > 0).slice(0, 15).map(s => fmt(s)).join(" | ");
+    .filter(s => s.abs.tot > 0).slice(0, 10).map(s => fmt(s)).join(" | ");
   const closestPass = students
     .filter(s => s.resultat === "non_admis" && s.avg != null && s.avg >= 7)
-    .sort((a, b) => b.avg! - a.avg!).slice(0, 20)
+    .sort((a, b) => b.avg! - a.avg!).slice(0, 15)
     .map(s => fmt(s, s.weakSubjs.slice(0, 2))).join(" | ");
-  const doubleDanger = students
-    .filter(s => s.resultat === "non_admis" && s.abs.tot >= 30)
-    .sort((a, b) => b.abs.tot - a.abs.tot).slice(0, 15)
-    .map(s => fmt(s)).join(" | ");
-  const ageRepList  = students
-    .filter(s => s.ageRep && s.statut !== "redoublant")
-    .map(s => fmt(s)).join(" | ");
 
-  // All failing students for detailed lookup
+  // Limit failing students list to a max of 25 to protect payload size
   const failingAll = students
     .filter(s => s.resultat === "non_admis")
     .sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1))
-    .map(s => fmt(s, s.weakSubjs.slice(0, 3))).join(" | ");
+    .slice(0, 25)
+    .map(s => fmt(s, s.weakSubjs.slice(0, 2))).join(" | ");
 
   // ── Assemble context ──────────────────────────────────────────────────────
   let ctx = "## بيانات المؤسسة\n";
   if (school) {
-    ctx += `${school.nom || ""}${school.commune ? "، " + school.commune : ""}${school.wilaya ? " — " + school.wilaya : ""} | السنة: ${annee}${school.directeur ? " | المدير: " + school.directeur : ""}\n`;
+    ctx += `${school.nom || ""}${school.commune ? "، " + school.commune : ""}${school.wilaya ? " — " + school.wilaya : ""} | السنة: ${annee}\n`;
   }
 
   ctx += `\n### إحصاءات المؤسسة\n`;
   ctx += `الإجمالي: ${total} | ذكور: ${boys}(ناجح ${bPass}) | إناث: ${girls}(ناجحة ${gPass})\n`;
   ctx += `ناجح: ${admis}(${Math.round(admis/total*100)}%) | راسب: ${nonAdm}(${Math.round(nonAdm/total*100)}%)${mustar ? ` | منتقل: ${mustar}` : ""}\n`;
-  ctx += `معيدون مؤكدون: ${redob} | محتملون بالسن: ${students.filter(s => s.ageRep && s.statut !== "redoublant").length}\n`;
-  ctx += `نسبة نجاح الذكور: ${boys ? Math.round(bPass/boys*100) : 0}% | نسبة نجاح الإناث: ${girls ? Math.round(gPass/girls*100) : 0}%\n`;
 
   ctx += `\n### حسب المستوى\n${levelLines.join("\n")}\n`;
-  if (subjRanked) ctx += `\n### مواد المؤسسة (ضعيف→قوي)\n${subjRanked}\n`;
+  if (subjRanked) ctx += `\n### مواد المؤسسة (ضعيف←قوي)\n${subjRanked}\n`;
 
   ctx += `\n### الأقسام (إحصاء)\n${classSummaryLines.join("\n")}\n`;
-  ctx += `\n### ترتيب الأقسام بنسبة النجاح\n${clsRank}\n`;
 
   ctx += `\n### أفضل 10 تلاميذ\n${top10 || "—"}\n`;
   ctx += `\n### أدنى 10 معدلات\n${bottom10 || "—"}\n`;
 
-  if (failingAll) ctx += `\n### جميع الراسبين (${nonAdm})\nتنسيق: الاسم|المستوى-القسم|المعدل|ملاحظات\n${failingAll}\n`;
-  if (closestPass) ctx += `\n### راسبون قريبون من النجاح (≥7/20) — أولى بالدعم\n${closestPass}\n`;
-  if (doubleDanger) ctx += `\n### تلاميذ في خطر مزدوج (راسب + غياب ≥30س)\n${doubleDanger}\n`;
-  if (mostAbsent)   ctx += `\n### الأكثر غياباً (أعلى 15)\n${mostAbsent}\n`;
-  if (ageRepList)   ctx += `\n### معيدون محتملون بالسن (1AM≤11|2AM≤12|3AM≤13|4AM≤15)\n${ageRepList}\n`;
-
-  // ── Full student roster (compact — for individual lookups by name) ─────────
-  // Format: الاسم|مستوى-قسم|معدل|غياب
-  const rosterLines = students
-    .sort((a, b) => a.nomPrenom.localeCompare(b.nomPrenom, 'ar'))
-    .map(s => {
-      const g = s.avg != null ? String(s.avg) : "—";
-      const ab = s.abs.tot > 0 ? `غ${s.abs.tot}` : "";
-      const res = s.resultat === "admis" ? "ن" : s.resultat === "non_admis" ? "ر" : "م";
-      return `${s.nomPrenom}|${s.niveau}-${s.classe}|${g}|${res}${ab}`;
-    });
-  ctx += `\n### قائمة جميع التلاميذ (الاسم|مستوى-قسم|معدل|ن=ناجح/ر=راسب/م=منتقل+غياب)\n${rosterLines.join("\n")}\n`;
+  if (failingAll) ctx += `\n### عينة من الراسبين (أول 25 من إجمالي ${nonAdm})\n${failingAll}\n`;
+  if (closestPass) ctx += `\n### راسبون قريبون من النجاح (≥7/20)\n${closestPass}\n`;
+  if (mostAbsent)   ctx += `\n### الأكثر غياباً (أعلى 10)\n${mostAbsent}\n`;
 
   return ctx;
 }
@@ -244,17 +211,16 @@ router.post("/assistant/chat", async (req, res) => {
       baseURL: "https://api.groq.com/openai/v1",
     });
 
-    // Rough token estimate: ~1 token per 3 chars (Arabic is denser than English)
+    // Take only last 8 messages to prevent context payload explosion
+    const recentMessages = parsed.data.messages.slice(-8);
+
     const messages = [
       { role: "system" as const, content: SYSTEM_PROMPT },
       { role: "system" as const, content: schoolContext },
-      ...parsed.data.messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ...recentMessages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
     ];
-    const estTokens = messages.reduce((s, m) => s + Math.ceil(m.content.length / 3), 0);
 
-    // llama-3.3-70b: 12 000 TPM free  →  use when context is small (better quality)
-    // llama-3.1-8b-instant: 30 000 TPM free → use when context is large
-    const model = estTokens < 9_000 ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant";
+    const model = "llama-3.3-70b-versatile";
 
     const completion = await client.chat.completions.create({
       model,
@@ -304,10 +270,13 @@ router.post("/assistant/run", async (req, res) => {
   try {
     const schoolContext = await buildSchoolContext(req.user!.id);
 
+    // Pass only the last 8 messages to keep ReAct payload light
+    const recentMessages = parsed.data.messages.slice(-8);
+
     await runReActAgent({
       userId: req.user!.id,
       schoolContext,
-      messages: parsed.data.messages,
+      messages: recentMessages,
       onStep: (step) => send("step", step),
     });
 
