@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import OpenAI from "openai";
 import { db, studentsTable, gradesTable, absencesTable, schoolInfoTable } from "../../shared/db.js";
 import { AssistantChatBody, AssistantChatResponse } from "../../shared/schemas.js";
+import { runReActAgent } from "../lib/react-agent.js";
 
 const router: IRouter = Router();
 
@@ -69,7 +70,7 @@ async function buildSchoolContext(userId: string): Promise<string> {
     const tri  = triAvg.get(s.id);
     const t1 = tri?.get(1) ?? null, t2 = tri?.get(2) ?? null, t3 = tri?.get(3) ?? null;
     const vals = [t1, t2, t3].filter((v): v is number => v !== null);
-    const avg  = vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : null;
+    const avg  = vals.length ? +(vals.reduce((a: number, b: number) => a + b, 0) / vals.length).toFixed(2) : null;
     const abs  = absMap.get(s.id) ?? { tot: 0, nj: 0 };
     const age  = calcAge(s.dateNaissance, annee);
     const ageRep = age !== null && age > (MAX_NORMAL_AGE[s.niveau] ?? 99);
@@ -274,6 +275,54 @@ router.post("/assistant/chat", async (req, res) => {
         ? "البيانات كبيرة جداً للمعالجة — يُرجى التواصل مع مطوّر التطبيق."
         : "تعذّر الاتصال بالمساعد، حاول مجدداً بعد قليل.";
     res.status(502).json({ error: msg });
+  }
+});
+
+// ── POST /api/assistant/run — ReAct agent with SSE streaming ─────────────────
+router.post("/assistant/run", async (req, res) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const parsed = AssistantChatBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "طلب غير صالح" }); return; }
+
+  if (!process.env.GROQ_API_KEY) {
+    res.status(500).json({ error: "المساعد الذكي غير مُهيّأ — يرجى إضافة GROQ_API_KEY" });
+    return;
+  }
+
+  // Set up Server-Sent Events
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const schoolContext = await buildSchoolContext(req.user!.id);
+
+    await runReActAgent({
+      userId: req.user!.id,
+      schoolContext,
+      messages: parsed.data.messages,
+      onStep: (step) => send("step", step),
+    });
+
+    send("done", { ok: true });
+  } catch (err: any) {
+    console.error("ReAct agent error:", err?.status, err?.message?.slice?.(0, 200));
+    const msg =
+      err?.status === 429
+        ? "تجاوزنا حد الطلبات، انتظر دقيقة ثم أعد المحاولة."
+        : err?.status === 413
+        ? "البيانات كبيرة جداً للمعالجة."
+        : (err?.message || "حدث خطأ غير متوقع في المساعد.");
+    send("error", { message: msg });
+  } finally {
+    res.end();
   }
 });
 

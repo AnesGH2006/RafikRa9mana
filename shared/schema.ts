@@ -178,3 +178,38 @@ export const agentLogsTable = pgTable("agent_logs", {
 
 export type AgentLog = typeof agentLogsTable.$inferSelect;
 export type InsertAgentLog = typeof agentLogsTable.$inferInsert;
+
+// ─── Executive Assistant — Reminders & Notifications ──────────────────────────
+export const reminderPriorityEnum = pgEnum("reminder_priority", ["low", "medium", "high"]);
+export const reminderStatusEnum   = pgEnum("reminder_status",   ["pending", "completed", "dismissed"]);
+
+export const remindersTable = pgTable("reminders", {
+  id:          varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId:      varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  title:       varchar("title",       { length: 500  }).notNull(),
+  description: varchar("description", { length: 2000 }),
+  dueDate:     timestamp("due_date",  { withTimezone: true }),
+  priority:    reminderPriorityEnum("priority").notNull().default("medium"),
+  status:      reminderStatusEnum("status").notNull().default("pending"),
+  category:    varchar("category",    { length: 100  }),
+  metadata:    jsonb("metadata"),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type Reminder       = typeof remindersTable.$inferSelect;
+export type InsertReminder = typeof remindersTable.$inferInsert;
+
+export const notificationsTable = pgTable("notifications", {
+  id:        varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId:    varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  title:     varchar("title", { length: 500  }).notNull(),
+  body:      varchar("body",  { length: 2000 }),
+  type:      varchar("type",  { length: 50   }).notNull().default("info"),
+  read:      boolean("read").notNull().default(false),
+  metadata:  jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Notification       = typeof notificationsTable.$inferSelect;
+export type InsertNotification = typeof notificationsTable.$inferInsert;
