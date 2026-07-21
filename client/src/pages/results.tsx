@@ -138,10 +138,10 @@ function TabGeneral({ results }: { results: StudentResult[] }) {
 
   // ── Grade categories
   const GRADE_CATS = [
-    { label: "ممتاز",    min: 18,  max: 20.1, color: "#f59e0b" },
-    { label: "جيد جداً", min: 16,  max: 18,   color: "#10b981" },
-    { label: "جيد",      min: 14,  max: 16,   color: "#3b82f6" },
-    { label: "مقبول",    min: 10,  max: 14,   color: "#8b5cf6" },
+    { label: "امتياز",    min: 18,  max: 20, color: "#f59e0b" },
+    { label: "تهنئة", min: 16,  max: 18,   color: "#10b981" },
+    { label: "تشجيع",      min: 14,  max: 16,   color: "#3b82f6" },
+    { label: "لوحة شرف",    min: 10,  max: 14,   color: "#8b5cf6" },
     { label: "راسب",     min: 0,   max: 10,   color: "#ef4444" },
   ];
   const catData = GRADE_CATS.map(c => ({
