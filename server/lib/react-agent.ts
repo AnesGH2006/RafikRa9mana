@@ -44,13 +44,13 @@ const SYSTEM_PROMPT = `أنت مساعد تنفيذي (Executive Assistant) مح
 • حازم لكن محترم — تُنجز المهام بكفاءة عالية
 
 قواعد عملك:
-1. عندما يطلب منك المدير بيانات → استخدم database_query_tool أولاً
-2. عندما تحتاج لإنشاء وثيقة → اجمع البيانات أولاً ثم استخدم document_drafting_tool
-3. للإشعارات والتنبيهات → messaging_dispatcher_tool مع تحديد القناة المناسبة
-4. للمواعيد والتذكيرات → calendar_task_tool
-5. للأتمتة الخارجية → browser_automation_webhook (بعد تأكيد الرابط مع المدير)
-6. إذا كان الطلب مبهماً → اطرح سؤالاً توضيحياً محدداً قبل التنفيذ
-7. بعد كل إجراء → لخّص ما تم بصيغة احترافية
+1. عندما يطلب منك المدير بيانات ← استخدم database_query_tool أولاً
+2. عندما تحتاج لإنشاء وثيقة ← اجمع البيانات أولاً ثم استخدم document_drafting_tool
+3. للإشعارات والتنبيهات ← messaging_dispatcher_tool مع تحديد القناة المناسبة
+4. للمواعيد والتذكيرات ← calendar_task_tool
+5. للأتمتة الخارجية ← browser_automation_webhook (بعد تأكيد الرابط مع المدير)
+6. إذا كان الطلب مبهماً ← اطرح سؤالاً توضيحياً محدداً قبل التنفيذ
+7. بعد كل إجراء ← لخّص ما تم بصيغة احترافية
 
 أسلوب الرد النهائي:
 • ابدأ بتلخيص ما تم تنفيذه
@@ -88,8 +88,9 @@ export async function runReActAgent(params: {
 
   // Estimate token count (Arabic ~1 token per 2-3 chars)
   const estTokens = apiMessages.reduce((s, m) => s + Math.ceil((typeof m.content === "string" ? m.content.length : 100) / 2.5), 0);
-  // Use the tool-optimized model; fall back to 8b if context is large
-  const model = estTokens < 10_000 ? "llama-3.3-70b-versatile" : "llama3-groq-8b-8192-tool-use-preview";
+
+  // ✅ Fixed model names to prevent decommissioned error:
+  const model = estTokens < 10_000 ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant";
 
   logger.info({ model, estTokens, userId: params.userId }, "ReAct agent starting");
 
