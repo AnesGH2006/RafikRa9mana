@@ -90,7 +90,8 @@ export async function runReActAgent(params: {
   const estTokens = apiMessages.reduce((s, m) => s + Math.ceil((typeof m.content === "string" ? m.content.length : 100) / 2.5), 0);
 
   // ✅ Fixed model names to prevent decommissioned error:
-  const model = estTokens < 10_000 ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant";
+  // ✅ جديد (سياق ضخم يتسع لكافة البيانات)
+  const model = "llama-3.3-70b-versatile";
 
   logger.info({ model, estTokens, userId: params.userId }, "ReAct agent starting");
 
