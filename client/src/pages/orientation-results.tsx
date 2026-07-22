@@ -32,10 +32,20 @@ function orientTrack(avg: number) {
     color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
     key: "science",
   };
-  return {
+  if (avg >= 10) return {
     label: "جذع مشترك آداب وفلسفة",
     color: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
     key: "arts",
+  };
+  if (avg >= 8) return {
+    label: "تعليم مهني",
+    color: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
+    key: "technical",
+  };
+  return {
+    label: "تكوين مهني",
+    color: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+    key: "vocational",
   };
 }
 

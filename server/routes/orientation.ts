@@ -32,12 +32,59 @@ function parseChoices(cell: string): string[] {
   return parts;
 }
 
-function suggestTrack(annualAvg: number | null, _scores: Record<string, number>): string | null {
+/**
+ * Scientific subjects keys for 4AM (maths, physics/tech, SVT/science).
+ * The orientation to جذع مشترك علوم is allowed even with avg < 14
+ * when the student's average on these three subjects is above 10.
+ */
+const SCIENCE_SUBJECTS = ["maths", "physique", "svt"] as const;
+
+function scienceAvg(scores: Record<string, number>): number | null {
+  const vals = SCIENCE_SUBJECTS.map(k => scores[k]).filter((v): v is number => typeof v === "number" && v >= 0);
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+function suggestTrack(annualAvg: number | null, scores: Record<string, number>): string | null {
   if (annualAvg === null) return null;
   if (annualAvg < 8)  return "تكوين مهني";
   if (annualAvg < 10) return "تعليم مهني";
-  if (annualAvg >= 14) return "جذع مشترك علوم";
+  // avg >= 10: suggest علوم if avg >= 14 OR if average of scientific subjects > 10
+  const sAvg = scienceAvg(scores);
+  if (annualAvg >= 14 || (sAvg !== null && sAvg > 10)) return "جذع مشترك علوم";
   return "جذع مشترك آداب وفلسفة";
+}
+
+/**
+ * Check whether a student's first choice is compatible with the suggested track.
+ * The choices from Excel often include extra words like "و تكنولوجيا", so we use
+ * keyword matching instead of exact string equality:
+ *   - suggested "جذع مشترك علوم" matches any choice containing "علوم"
+ *   - suggested "جذع مشترك آداب وفلسفة" matches any choice containing "آداب"
+ *   - vocational tracks are matched by exact normalised comparison
+ */
+function tracksCompatible(choice: string, suggested: string): boolean {
+  const n = (s: string) => String(s ?? "")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآا]/g, "ا")
+    .replace(/[ةه]/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+  const nc = n(choice);
+  const ns = n(suggested);
+
+  if (nc === ns) return true;
+
+  // Keyword-based matching for the two secondary tracks
+  if (ns.includes("علوم") && nc.includes("علوم")) return true;
+  if (ns.includes("اداب") && nc.includes("اداب")) return true;
+  if (ns.includes("مهني") && nc.includes("مهني") && ns.includes("تكوين") && nc.includes("تكوين")) return true;
+  if (ns.includes("مهني") && nc.includes("مهني") && ns.includes("تعليم") && nc.includes("تعليم")) return true;
+
+  return false;
 }
 
 // ── POST /api/orientation/wishes/import ────────────────────────────────────────
@@ -179,7 +226,7 @@ router.get("/orientation/wishes", async (req, res): Promise<void> => {
     const suggestedTrack = student ? suggestTrack(annualAvg, latestScores) : null;
     const firstChoice = w.choices[0] ?? null;
     const firstChoiceMatchesSuggestion = suggestedTrack && firstChoice
-      ? norm(firstChoice) === norm(suggestedTrack)
+      ? tracksCompatible(firstChoice, suggestedTrack)
       : null;
 
     return {

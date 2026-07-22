@@ -7,13 +7,15 @@ import { documentDraftingTool } from "./document-drafting.js";
 import { messagingDispatcherTool } from "./messaging.js";
 import { calendarTaskTool } from "./calendar.js";
 import { browserAutomationWebhook } from "./webhook.js";
+import { desktopControlTool } from "./desktop-control.js";
 
 export type ToolName =
   | "database_query_tool"
   | "document_drafting_tool"
   | "messaging_dispatcher_tool"
   | "calendar_task_tool"
-  | "browser_automation_webhook";
+  | "browser_automation_webhook"
+  | "desktop_control_tool";
 
 // ── OpenAI-compatible tool definitions (sent to Groq) ────────────────────────
 export const toolDefinitions: OpenAI.Chat.ChatCompletionTool[] = [
@@ -139,6 +141,33 @@ export const toolDefinitions: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "desktop_control_tool",
+      description: "يتحكم في جهاز الحاسوب المحلي الخاص بالمدير عبر وكيل سطح المكتب المتصل. استخدمه للنقر على أزرار الشاشة، كتابة نص، الضغط على مفاتيح النظام، أو أخذ لقطة شاشة. يتطلب أن يكون وكيل سطح المكتب (Python/Electron) متصلاً.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: ["click", "type", "press", "hotkey", "screenshot"],
+            description: "click=نقر بالماوس على إحداثيات، type=كتابة نص، press=ضغط مفتاح، hotkey=اختصار لوحة مفاتيح، screenshot=لقطة شاشة",
+          },
+          x: { type: "number", description: "الإحداثية الأفقية للنقر (مطلوب لـ click)" },
+          y: { type: "number", description: "الإحداثية الرأسية للنقر (مطلوب لـ click)" },
+          text: { type: "string", description: "النص المراد كتابته (مطلوب لـ type)" },
+          key: { type: "string", description: "المفتاح المراد ضغطه مثل: enter, esc, tab, f5 (مطلوب لـ press)" },
+          keys: {
+            type: "array",
+            items: { type: "string" },
+            description: "مصفوفة مفاتيح الاختصار مثل: ['ctrl', 'c'] أو ['alt', 'f4'] (مطلوب لـ hotkey)",
+          },
+        },
+        required: ["action"],
+      },
+    },
+  },
 ];
 
 // ── Tool executor ─────────────────────────────────────────────────────────────
@@ -158,6 +187,8 @@ export async function executeTool(
       return calendarTaskTool(input as any, userId);
     case "browser_automation_webhook":
       return browserAutomationWebhook(input as any, userId);
+    case "desktop_control_tool":
+      return desktopControlTool(input as any, userId);
     default:
       throw new Error(`أداة غير معروفة: ${name}`);
   }
