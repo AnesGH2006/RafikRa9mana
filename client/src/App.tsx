@@ -10,8 +10,9 @@ import {
   ChevronDown, FileSpreadsheet, BarChart3, UserX, List, CheckSquare,
   User, BarChart2, CalendarOff, UserCheck, RefreshCw, AlertCircle,
   TrendingUp, Star, CreditCard, Upload, FileText,
-  CircleArrowRight, CircleDot, Trophy, FileBarChart, Bot,
+  CircleArrowRight, CircleDot, Trophy, FileBarChart, Bot, Download,
 } from "lucide-react";
+import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { QuickImportDialog } from "@/components/quick-import";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -294,6 +295,9 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         ))}
       </nav>
 
+      {/* PWA Install button */}
+      <PwaInstallButton />
+
       {/* Upgrade banner */}
       <motion.div
         className="mx-2 mb-2 rounded-xl overflow-hidden"
@@ -349,6 +353,41 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         </motion.button>
       </motion.div>
     </div>
+  );
+}
+
+// ── PWA Install Button (sidebar) ─────────────────────────────────────────────
+function PwaInstallButton() {
+  const { canInstall, install, justInstalled } = usePwaInstall();
+  if (!canInstall && !justInstalled) return null;
+  return (
+    <motion.div
+      className="mx-2 mb-2"
+      initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
+    >
+      <motion.button
+        onClick={install}
+        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-start transition-all
+          ${justInstalled
+            ? "bg-emerald-600/20 border border-emerald-500/30"
+            : "bg-blue-600/15 border border-blue-500/20 hover:bg-blue-600/25"
+          }`}
+      >
+        <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0
+          ${justInstalled ? "bg-emerald-500" : "bg-gradient-to-br from-blue-500 to-indigo-600"}`}>
+          <Download className="w-3 h-3 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-[11px] font-bold leading-tight ${justInstalled ? "text-emerald-400" : "text-blue-300"}`}>
+            {justInstalled ? "تم التثبيت ✓" : "تثبيت التطبيق"}
+          </p>
+          <p className="text-[9px] text-slate-500 mt-0.5">
+            {justInstalled ? "يمكنك فتحه من سطح المكتب" : "اعمل بدون متصفح"}
+          </p>
+        </div>
+      </motion.button>
+    </motion.div>
   );
 }
 

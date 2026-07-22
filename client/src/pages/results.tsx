@@ -2641,84 +2641,108 @@ export default function Results() {
         </Select>
       </motion.div>
 
-      {/* ── ANALYTICS DASHBOARD (new) ── */}
+      {/* ── ANALYTICS DASHBOARD ── */}
       {!loading && results.length > 0 && (
         <ResultsAnalyticsDashboard results={results} onTabChange={setAnalyticsTab} />
       )}
 
-      {/* ── Existing Table — only shown on الناجحون / الراسبون tabs (or when no data yet) ── */}
-      {(loading || results.length === 0 || analyticsTab === "passed" || analyticsTab === "failed") && (
-      <AnimatePresence mode="wait">
-        {loading ? (
-          <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
-            {[...Array(6)].map((_, i) => (
-              <motion.div key={i} className="h-12 rounded-lg bg-muted"
-                animate={{ opacity: [0.4, 0.7, 0.4] }} transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.1 }} />
-            ))}
-          </motion.div>
-        ) : displayed.length === 0 ? (
-          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="text-center py-16 text-muted-foreground">
-            <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 3, repeat: Infinity }}>
-              <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-20" />
-            </motion.div>
-            <p>{t("results.empty")}</p>
-          </motion.div>
-        ) : (
-          <motion.div key={`table-${listKey}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="rounded-xl border overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/60 sticky top-0">
-                  <tr>
-                    {["#", t("col.name"), t("col.level"), t("col.class"), t("col.t1"), t("col.t2"), t("col.t3"), t("col.avg"), t("col.result"), ""].map((h, i) => (
-                      <th key={i} className="px-3 py-3 text-start text-xs font-semibold text-muted-foreground uppercase whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayed.map((r, i) => (
-                    <motion.tr key={r.student.id}
-                      initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: Math.min(i * 0.02, 0.4) }}
-                      className={`border-t hover:bg-muted/30 transition-colors cursor-pointer ${i % 2 === 0 ? "" : "bg-muted/15"}`}
-                      onClick={() => setSelected(r)}>
-                      <td className="px-3 py-3 text-muted-foreground text-xs font-mono">
-                        {r.rank !== null ? (
-                          <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${r.rank === 1 ? "bg-amber-100 text-amber-700" : r.rank === 2 ? "bg-slate-100 text-slate-600" : r.rank === 3 ? "bg-orange-100 text-orange-600" : "text-muted-foreground"}`}>{r.rank}</span>
-                        ) : "—"}
-                      </td>
-                      <td className="px-3 py-3 font-medium">{r.student.nomPrenom}</td>
-                      <td className="px-3 py-3"><Badge variant="secondary" className="text-xs">{LEVEL_LABELS[r.student.niveau as Niveau]}</Badge></td>
-                      <td className="px-3 py-3"><Badge variant="outline" className="font-bold">{r.student.classe}</Badge></td>
-                      {[r.t1Avg, r.t2Avg, r.t3Avg].map((a, ti) => (
-                        <td key={ti} className={`px-3 py-3 font-mono text-sm ${a === null ? "text-muted-foreground" : a >= 10 ? "text-emerald-600" : "text-red-500"}`}>{avg2(a)}</td>
-                      ))}
-                      <td className={`px-3 py-3 font-bold font-mono ${r.annualAvg === null ? "text-muted-foreground" : r.annualAvg >= 10 ? "text-emerald-600" : "text-red-500"}`}>{avg2(r.annualAvg)}</td>
-                      <td className="px-3 py-3">
-                        {r.passed === null ? <span className="text-muted-foreground text-xs">—</span>
-                          : r.passed
-                            ? <span className="text-xs font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{t("val.admis")}</span>
-                            : <span className="text-xs font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">{t("val.non_admis")}</span>}
-                      </td>
-                      <td className="px-3 py-3">
-                        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
-                            onClick={e => { e.stopPropagation(); setSelected(r); }}>
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
-                        </motion.div>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
+      {/* ── STUDENT LIST — always visible ── */}
+      <div className="space-y-2">
+        {/* Section header */}
+        {!loading && results.length > 0 && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex w-6 h-6 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 items-center justify-center shadow">
+                <ClipboardList className="w-3.5 h-3.5 text-white" />
+              </span>
+              <span className="text-sm font-bold">قائمة التلاميذ</span>
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full font-mono">
+                {displayed.length}
+              </span>
+              {displayed.filter(r => r.passed).length > 0 && (
+                <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-full">
+                  {displayed.filter(r => r.passed).length} ناجح
+                </span>
+              )}
+              {displayed.filter(r => r.passed === false).length > 0 && (
+                <span className="text-xs font-semibold text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-full">
+                  {displayed.filter(r => r.passed === false).length} راسب
+                </span>
+              )}
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
-      )}
+        <AnimatePresence mode="wait">
+          {loading ? (
+            <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
+              {[...Array(6)].map((_, i) => (
+                <motion.div key={i} className="h-12 rounded-lg bg-muted"
+                  animate={{ opacity: [0.4, 0.7, 0.4] }} transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.1 }} />
+              ))}
+            </motion.div>
+          ) : displayed.length === 0 ? (
+            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="text-center py-16 text-muted-foreground">
+              <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 3, repeat: Infinity }}>
+                <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              </motion.div>
+              <p>{t("results.empty")}</p>
+            </motion.div>
+          ) : (
+            <motion.div key={`table-${listKey}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="rounded-xl border overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/60 sticky top-0">
+                    <tr>
+                      {["#", t("col.name"), t("col.level"), t("col.class"), t("col.t1"), t("col.t2"), t("col.t3"), t("col.avg"), t("col.result"), ""].map((h, i) => (
+                        <th key={i} className="px-3 py-3 text-start text-xs font-semibold text-muted-foreground uppercase whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayed.map((r, i) => (
+                      <motion.tr key={r.student.id}
+                        initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: Math.min(i * 0.02, 0.4) }}
+                        className={`border-t hover:bg-muted/30 transition-colors cursor-pointer ${i % 2 === 0 ? "" : "bg-muted/15"}`}
+                        onClick={() => setSelected(r)}>
+                        <td className="px-3 py-3 text-muted-foreground text-xs font-mono">
+                          {r.rank !== null ? (
+                            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${r.rank === 1 ? "bg-amber-100 text-amber-700" : r.rank === 2 ? "bg-slate-100 text-slate-600" : r.rank === 3 ? "bg-orange-100 text-orange-600" : "text-muted-foreground"}`}>{r.rank}</span>
+                          ) : "—"}
+                        </td>
+                        <td className="px-3 py-3 font-medium">{r.student.nomPrenom}</td>
+                        <td className="px-3 py-3"><Badge variant="secondary" className="text-xs">{LEVEL_LABELS[r.student.niveau as Niveau]}</Badge></td>
+                        <td className="px-3 py-3"><Badge variant="outline" className="font-bold">{r.student.classe}</Badge></td>
+                        {[r.t1Avg, r.t2Avg, r.t3Avg].map((a, ti) => (
+                          <td key={ti} className={`px-3 py-3 font-mono text-sm ${a === null ? "text-muted-foreground" : a >= 10 ? "text-emerald-600" : "text-red-500"}`}>{avg2(a)}</td>
+                        ))}
+                        <td className={`px-3 py-3 font-bold font-mono ${r.annualAvg === null ? "text-muted-foreground" : r.annualAvg >= 10 ? "text-emerald-600" : "text-red-500"}`}>{avg2(r.annualAvg)}</td>
+                        <td className="px-3 py-3">
+                          {r.passed === null ? <span className="text-muted-foreground text-xs">—</span>
+                            : r.passed
+                              ? <span className="text-xs font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{t("val.admis")}</span>
+                              : <span className="text-xs font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">{t("val.non_admis")}</span>}
+                        </td>
+                        <td className="px-3 py-3">
+                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                              onClick={e => { e.stopPropagation(); setSelected(r); }}>
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                          </motion.div>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {selected    && <GradeModal result={selected} annee={annee} onClose={() => setSelected(null)} onSaved={fetchResults} />}
       {showImport  && <ImportModal annee={annee} onClose={() => setShowImport(false)} onDone={fetchResults} />}

@@ -1,63 +1,44 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, X, Smartphone, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
+import { usePwaInstall } from "@/hooks/use-pwa-install";
 
 export function PwaInstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const { canInstall, install, justInstalled } = usePwaInstall();
   const [show, setShow] = useState(false);
-  const [installed, setInstalled] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    // Don't show if already dismissed recently
-    const dismissed = localStorage.getItem("pwa-prompt-dismissed");
-    if (dismissed && Date.now() - Number(dismissed) < 7 * 24 * 60 * 60 * 1000) return;
-
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      // Delay slightly so it doesn't pop up instantly on load
-      setTimeout(() => setShow(true), 3000);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
-
-    // Also listen for successful install
-    const onInstalled = () => {
-      setShow(false);
-      setInstalled(true);
-      setTimeout(() => setInstalled(false), 4000);
-    };
-    window.addEventListener("appinstalled", onInstalled);
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
+    const raw = localStorage.getItem("pwa-prompt-dismissed");
+    if (raw && Date.now() - Number(raw) < 7 * 24 * 60 * 60 * 1000) {
+      setDismissed(true);
+    }
   }, []);
 
-  const handleInstall = async () => {
-    if (!deferredPrompt) return;
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
+  useEffect(() => {
+    if (canInstall && !dismissed) {
+      const t = setTimeout(() => setShow(true), 3000);
+      return () => clearTimeout(t);
+    } else {
       setShow(false);
     }
-    setDeferredPrompt(null);
+  }, [canInstall, dismissed]);
+
+  const handleInstall = async () => {
+    setShow(false);
+    await install();
   };
 
   const handleDismiss = () => {
     setShow(false);
+    setDismissed(true);
     localStorage.setItem("pwa-prompt-dismissed", String(Date.now()));
   };
 
   return (
     <>
-      {/* Install prompt */}
+      {/* Floating install prompt */}
       <AnimatePresence>
         {show && (
           <motion.div
@@ -130,7 +111,7 @@ export function PwaInstallPrompt() {
 
       {/* Success toast */}
       <AnimatePresence>
-        {installed && (
+        {justInstalled && (
           <motion.div
             initial={{ y: 80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
