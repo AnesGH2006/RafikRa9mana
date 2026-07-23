@@ -70,7 +70,7 @@ export async function databaseQueryTool(input: DatabaseQueryInput, userId: strin
     const abs = absMap.get(s.id) ?? { total: 0, justified: 0, unjustified: 0 };
     const subjectAvgs: Record<string, number> = {};
     for (const [subj, scores] of (subjAcc.get(s.id) ?? new Map()).entries()) {
-      subjectAvgs[subj] = +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
+      subjectAvgs[subj] = +(scores.reduce((a: number, b: number) => a + b, 0) / scores.length).toFixed(2);
     }
     return { ...s, avg, absences: abs, subjectAvgs };
   });

@@ -75,8 +75,10 @@ export async function sendDesktopCommand(
 
     taskResultWaiters.set(userId, { action, resolve, reject, timer });
 
+    // Emit to both Electron agent (agent:command) and Python agent (execute_desktop_command)
     socket.emit("agent:command", { action, payload });
-    logger.info({ userId, action, payload }, "Desktop command sent → agent:command");
+    socket.emit("execute_desktop_command", { action, payload });
+    logger.info({ userId, action, payload }, "Desktop command sent → agent:command + execute_desktop_command");
   });
 }
 
@@ -104,6 +106,24 @@ export async function waitForScreenFrame(
 
     screenFrameWaiters.set(userId, { resolve, reject, timer });
   });
+}
+
+/**
+ * Shared handler for any inbound screen frame — resolves a waiting
+ * desktop_control_tool screenshot promise and broadcasts to the web
+ * control room. Used by both `agent:screenFrame` (Electron) and
+ * `screen_response` (Python agent).
+ */
+function resolveScreenFrame(userId: string, frame: unknown, io: SocketIOServer): void {
+  const waiter = screenFrameWaiters.get(userId);
+  if (waiter) {
+    clearTimeout(waiter.timer);
+    screenFrameWaiters.delete(userId);
+    const base64 = typeof frame === "string" ? frame : JSON.stringify(frame);
+    waiter.resolve(base64);
+  }
+  // Broadcast raw frame to any web dashboard listening on the control room
+  io.to(`control:${userId}`).emit("agent:screenFrame", frame);
 }
 
 async function logAction(
@@ -147,19 +167,19 @@ export function agentHandler(io: SocketIOServer, socket: Socket): void {
     if (typeof cb === "function") cb({ ok: true, ts: Date.now() });
   });
 
-  // ── Screen frame: from agent after screenCapture or streaming ────────────────
+  // ── Screen frame: from Electron agent after screenCapture or streaming ────────
   socket.on("agent:screenFrame", (frame: unknown) => {
-    // 1. Resolve a waiting screenshot promise (used by desktop_control_tool)
-    const waiter = screenFrameWaiters.get(userId);
-    if (waiter) {
-      clearTimeout(waiter.timer);
-      screenFrameWaiters.delete(userId);
-      const base64 = typeof frame === "string" ? frame : JSON.stringify(frame);
-      waiter.resolve(base64);
-    }
+    resolveScreenFrame(userId, frame, io);
+  });
 
-    // 2. Broadcast to web-control room (live stream / dashboard)
-    io.to(`control:${userId}`).emit("agent:screenFrame", frame);
+  // ── screen_response: Python desktop agent equivalent of agent:screenFrame ────
+  socket.on("screen_response", (payload: unknown) => {
+    // Python agent sends { image: "<base64>" } or a raw base64 string
+    const frame =
+      payload && typeof payload === "object" && "image" in (payload as Record<string, unknown>)
+        ? (payload as Record<string, unknown>).image
+        : payload;
+    resolveScreenFrame(userId, frame, io);
   });
 
   // ── Shell result forwarded to web clients ─────────────────────────────────────
@@ -192,6 +212,38 @@ export function agentHandler(io: SocketIOServer, socket: Socket): void {
     // 2. Persist known administrative actions
     if (ALLOWED_ACTIONS.has(payload.action as AgentAction)) {
       await logAction(agentTokenId, userId, payload.action as AgentAction, payload.status, payload.details).catch(() => {});
+    }
+  });
+
+  // ── task_result: Python agent equivalent of agent:taskResult ────────────────
+  // Python agent sends { action, status, result } where result maps to details.
+  socket.on("task_result", async (payload: {
+    action?: string;
+    status?: "success" | "failed" | "ok" | "error";
+    result?: object;
+    details?: object;
+  }) => {
+    const normalised = {
+      action: payload.action ?? "unknown",
+      status: (payload.status === "ok" || payload.status === "success") ? "success" as const : "failed" as const,
+      details: payload.details ?? payload.result,
+    };
+
+    const waiter = taskResultWaiters.get(userId);
+    if (waiter) {
+      if (!waiter.action || waiter.action === normalised.action) {
+        clearTimeout(waiter.timer);
+        taskResultWaiters.delete(userId);
+        if (normalised.status === "success") {
+          waiter.resolve(normalised.details ?? { ok: true, action: normalised.action });
+        } else {
+          waiter.reject(new Error(`فشل تنفيذ "${normalised.action}" على الجهاز المحلي`));
+        }
+      }
+    }
+
+    if (ALLOWED_ACTIONS.has(normalised.action as AgentAction)) {
+      await logAction(agentTokenId, userId, normalised.action as AgentAction, normalised.status, normalised.details).catch(() => {});
     }
   });
 

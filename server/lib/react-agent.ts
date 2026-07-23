@@ -141,12 +141,13 @@ export async function runReActAgent(params: {
 
     // ── Execute each tool call ───────────────────────────────────────────────
     for (const toolCall of msg.tool_calls) {
-      const toolName = toolCall.function.name;
+      const tc = toolCall as { function: { name: string; arguments: string } };
+      const toolName = tc.function.name;
       const toolLabel = TOOL_LABELS[toolName] || toolName;
 
       let toolInput: Record<string, unknown>;
       try {
-        toolInput = JSON.parse(toolCall.function.arguments);
+        toolInput = JSON.parse(tc.function.arguments);
       } catch {
         toolInput = {};
       }

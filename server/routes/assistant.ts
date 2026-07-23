@@ -77,7 +77,7 @@ async function buildSchoolContext(userId: string): Promise<string> {
 
     const sAvgs = new Map<string, number>();
     for (const [subj, scores] of (subjAcc.get(s.id) ?? new Map()).entries())
-      sAvgs.set(subj, +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
+      sAvgs.set(subj, +(scores.reduce((a: number, b: number) => a + b, 0) / scores.length).toFixed(1));
     const weakSubjs = [...sAvgs.entries()].filter(([, v]) => v < 10)
       .sort((a, b) => a[1] - b[1]).map(([subj, v]) => `${subj}:${v}`);
 

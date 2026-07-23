@@ -78,7 +78,7 @@ function ToolStepCard({ step }: { step: ReActStep }) {
             : <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />}
         </div>
         <AnimatePresence>
-          {expanded && step.input && (
+          {expanded && step.input != null && (
             <motion.pre
               initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
               className="mt-2 text-[10px] bg-black/20 rounded-lg p-2 overflow-x-auto text-muted-foreground max-h-40"
