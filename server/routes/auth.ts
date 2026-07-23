@@ -145,7 +145,14 @@ router.get("/auth/user", (req: Request, res: Response) => {
 });
 
 router.get("/login", async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
+  let config;
+  try {
+    config = await getOidcConfig();
+  } catch (err) {
+    req.log.error({ err }, "OIDC configuration failed — check REPL_ID and network access to the OIDC issuer");
+    res.redirect("/?auth_error=config_error");
+    return;
+  }
   const callbackUrl = `${getOrigin(req)}/api/callback`;
   const returnTo = getSafeReturnTo(req.query.returnTo);
   const state = oidc.randomState();
@@ -205,11 +212,20 @@ router.get("/callback", async (req: Request, res: Response) => {
 });
 
 router.get("/logout", async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
   const origin = getOrigin(req);
   const sid = getSessionId(req);
   await clearSession(res, sid);
-  const endSessionUrl = oidc.buildEndSessionUrl(config, { client_id: process.env.REPL_ID!, post_logout_redirect_uri: origin });
+  // If OIDC is broken we still clear the local session and redirect home
+  // rather than leaving the user stuck on a broken logout page.
+  let endSessionUrl: URL;
+  try {
+    const config = await getOidcConfig();
+    endSessionUrl = oidc.buildEndSessionUrl(config, { client_id: process.env.REPL_ID!, post_logout_redirect_uri: origin });
+  } catch (err) {
+    req.log.error({ err }, "OIDC end-session URL build failed — redirecting home after local session clear");
+    res.redirect("/");
+    return;
+  }
   res.redirect(endSessionUrl.href);
 });
 

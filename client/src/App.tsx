@@ -554,11 +554,19 @@ function AppLayout() {
 }
 
 // ── Login ─────────────────────────────────────────────────────────────────────
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  config_error: "تعذّر الاتصال بخدمة تسجيل الدخول. يرجى التحقق من إعدادات الخادم والمحاولة لاحقاً.",
+  callback_failed: "فشلت عملية تسجيل الدخول. يرجى المحاولة مرة أخرى.",
+};
+
 function LoginScreen() {
   const { login } = useAuth();
   const { t } = useLanguage();
   const features = ["login.feature1", "login.feature2", "login.feature3", "login.feature4"] as const;
   const featureIcons = [Users, BarChart3, LayoutDashboard, GraduationCap];
+
+  const authError = new URLSearchParams(window.location.search).get("auth_error");
+  const errorMessage = authError ? (AUTH_ERROR_MESSAGES[authError] ?? "حدث خطأ غير متوقع أثناء تسجيل الدخول.") : null;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12 overflow-hidden relative"
@@ -578,6 +586,23 @@ function LoginScreen() {
       </div>
 
       <motion.div className="text-center max-w-xl mx-auto relative z-10">
+        {/* Auth error banner */}
+        {errorMessage && (
+          <motion.div
+            className="mb-6 flex items-start gap-3 px-5 py-4 rounded-2xl text-sm text-red-700 dark:text-red-300 text-start"
+            style={{
+              background: "rgba(254,226,226,0.85)",
+              border: "1px solid rgba(252,165,165,0.6)",
+              boxShadow: "0 4px 20px rgba(239,68,68,0.10)",
+              backdropFilter: "blur(8px)",
+            }}
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
+          >
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-red-500" />
+            <span className="leading-relaxed font-medium">{errorMessage}</span>
+          </motion.div>
+        )}
+
         {/* Brand pill */}
         <motion.div
           className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full text-blue-700 dark:text-blue-300 text-sm font-bold mb-8 backdrop-blur-md"
