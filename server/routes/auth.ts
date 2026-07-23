@@ -68,8 +68,8 @@ async function upsertUser(claims: Record<string, unknown>) {
   const email = (claims.email as string) || null;
   const isAdminEmail = email && adminEmails.includes(email.toLowerCase());
 
-  const insertData = {
-    id: claims.sub as string,
+  const id = claims.sub as string;
+  const identityFields = {
     email,
     firstName: (claims.first_name as string) || null,
     lastName: (claims.last_name as string) || null,
@@ -77,15 +77,17 @@ async function upsertUser(claims: Record<string, unknown>) {
   };
 
   // On conflict, only update identity fields — never overwrite role/subscription
+  // NOTE: id must NOT appear in the set clause (PG forbids updating the PK in ON CONFLICT)
   const [user] = await db.insert(usersTable)
     .values({
-      ...insertData,
+      id,
+      ...identityFields,
       role: isAdminEmail ? "admin" : "user",
       subscriptionStatus: isAdminEmail ? "active" : "pending",
     })
     .onConflictDoUpdate({
       target: usersTable.id,
-      set: { ...insertData, updatedAt: new Date() },
+      set: { ...identityFields, updatedAt: new Date() },
     })
     .returning();
 
@@ -112,12 +114,11 @@ router.get("/dev-login", async (req: Request, res: Response) => {
     email: "dev@test.local",
     firstName: "مدير",
     lastName: "تجريبي",
-    profileImageUrl: null,
+    profileImageUrl: null as string | null,
     role: "admin" as const,
     subscriptionStatus: "active" as const,
-    subscriptionExpiresAt: null,
   };
-  // Upsert test user in DB
+  // Upsert test user in DB — do NOT include id in the set clause (PG forbids updating PK)
   await db.insert(usersTable).values(testUser)
     .onConflictDoUpdate({
       target: usersTable.id,

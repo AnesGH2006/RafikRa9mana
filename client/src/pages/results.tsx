@@ -454,20 +454,56 @@ function TabSubjects({ results }: { results: StudentResult[] }) {
 
   const top = [...withAvg].sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0))[0];
   const radarData = subjectStats.map(s => {
-    // Top student's average for this subject across trimesters
     const topTriScores: number[] = [];
     for (const t of [1, 2, 3] as const) {
       const v = (top?.scores as any)?.[t]?.[s.key];
       if (typeof v === "number" && v >= 0) topTriScores.push(v);
     }
-    const topScore = topTriScores.length
-      ? topTriScores.reduce((a, b) => a + b, 0) / topTriScores.length
-      : 0;
+    const topScore = topTriScores.length ? topTriScores.reduce((a, b) => a + b, 0) / topTriScores.length : 0;
     return { subject: s.arLabel, "أعلى تلميذ": +topScore.toFixed(2), "معدل القسم": +(s.avg ?? 0).toFixed(2) };
+  });
+
+  // Gender breakdown per subject
+  const genderSubjectData = subjectStats.map(s => {
+    const maleScores: number[] = [], femaleScores: number[] = [];
+    withAvg.forEach(r => {
+      const triScores: number[] = [];
+      for (const t of [1, 2, 3] as const) {
+        const v = (r.scores as any)?.[t]?.[s.key];
+        if (typeof v === "number" && v >= 0) triScores.push(v);
+      }
+      if (triScores.length === 0) return;
+      const subAvg = triScores.reduce((a, b) => a + b, 0) / triScores.length;
+      if (r.student.sexe === "M") maleScores.push(subAvg);
+      else femaleScores.push(subAvg);
+    });
+    const maleAvg   = maleScores.length   ? maleScores.reduce((a, b) => a + b, 0) / maleScores.length   : null;
+    const femaleAvg = femaleScores.length ? femaleScores.reduce((a, b) => a + b, 0) / femaleScores.length : null;
+    const shortLabel = s.arLabel.split(" ").slice(-1)[0] ?? s.arLabel;
+    return { shortLabel, ذكور: maleAvg !== null ? +maleAvg.toFixed(2) : 0, إناث: femaleAvg !== null ? +femaleAvg.toFixed(2) : 0 };
+  });
+
+  // Trimester evolution per subject (avg across students for each trimester)
+  const triSubjectData = subjectStats.slice(0, 8).map(s => {
+    const scores: Record<number, number[]> = { 1: [], 2: [], 3: [] };
+    withAvg.forEach(r => {
+      for (const t of [1, 2, 3] as const) {
+        const v = (r.scores as any)?.[t]?.[s.key];
+        if (typeof v === "number" && v >= 0) scores[t].push(v);
+      }
+    });
+    const shortLabel = s.arLabel.split(" ").slice(-1)[0] ?? s.arLabel;
+    return {
+      shortLabel,
+      ف1: scores[1].length ? +(scores[1].reduce((a, b) => a + b, 0) / scores[1].length).toFixed(2) : null,
+      ف2: scores[2].length ? +(scores[2].reduce((a, b) => a + b, 0) / scores[2].length).toFixed(2) : null,
+      ف3: scores[3].length ? +(scores[3].reduce((a, b) => a + b, 0) / scores[3].length).toFixed(2) : null,
+    };
   });
 
   return (
     <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-5">
+      {/* Row 1: avg + pass rate */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <motion.div variants={cardAnim}>
           <Card className="rounded-2xl border bg-card shadow-sm">
@@ -504,7 +540,52 @@ function TabSubjects({ results }: { results: StudentResult[] }) {
         </motion.div>
       </div>
 
-      {/* Radar */}
+      {/* Row 2: gender breakdown per subject */}
+      {genderSubjectData.length > 0 && (
+        <motion.div variants={cardAnim}>
+          <Card className="rounded-2xl border bg-card shadow-sm">
+            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">متوسط المادة حسب الجنس</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={Math.max(200, genderSubjectData.length * 22)}>
+                <BarChart data={genderSubjectData} margin={{ left: -10, right: 5, bottom: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                  <XAxis dataKey="shortLabel" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} angle={-35} textAnchor="end" interval={0} />
+                  <YAxis domain={[0, 20]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<MiniTooltip />} />
+                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="ذكور" fill={MALE_COLOR}   radius={[3, 3, 0, 0]} barSize={12} />
+                  <Bar dataKey="إناث" fill={FEMALE_COLOR} radius={[3, 3, 0, 0]} barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Row 3: Trimester evolution per subject */}
+      {triSubjectData.length > 0 && (
+        <motion.div variants={cardAnim}>
+          <Card className="rounded-2xl border bg-card shadow-sm">
+            <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">تطور نقاط المواد عبر الفصول الثلاثة</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={Math.max(200, triSubjectData.length * 22)}>
+                <BarChart data={triSubjectData} margin={{ left: -10, right: 5, bottom: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                  <XAxis dataKey="shortLabel" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} angle={-35} textAnchor="end" interval={0} />
+                  <YAxis domain={[0, 20]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<MiniTooltip />} />
+                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="ف1" fill="#6366f1" radius={[3, 3, 0, 0]} barSize={10} />
+                  <Bar dataKey="ف2" fill="#8b5cf6" radius={[3, 3, 0, 0]} barSize={10} />
+                  <Bar dataKey="ف3" fill="#a855f7" radius={[3, 3, 0, 0]} barSize={10} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Radar: top student vs class avg */}
       {top && radarData.length > 0 && (
         <motion.div variants={cardAnim}>
           <Card className="rounded-2xl border bg-card shadow-sm">
@@ -526,7 +607,7 @@ function TabSubjects({ results }: { results: StudentResult[] }) {
         </motion.div>
       )}
 
-      {/* Table */}
+      {/* Subject performance table */}
       <motion.div variants={cardAnim}>
         <Card className="rounded-2xl border bg-card shadow-sm">
           <CardHeader className="pb-1"><CardTitle className="text-xs font-bold text-muted-foreground">جدول أداء المواد</CardTitle></CardHeader>
@@ -536,14 +617,14 @@ function TabSubjects({ results }: { results: StudentResult[] }) {
                 <thead>
                   <tr className="border-b">
                     <th className="text-right pb-2 text-xs text-muted-foreground font-semibold pr-2">المادة</th>
-                    <th className="text-center pb-2 text-xs text-muted-foreground font-semibold">المعامل</th>
+                    <th className="text-center pb-2 text-xs text-muted-foreground font-semibold">م</th>
                     <th className="text-center pb-2 text-xs text-muted-foreground font-semibold">المتوسط</th>
                     <th className="text-center pb-2 text-xs text-muted-foreground font-semibold">الناجحون</th>
                     <th className="text-center pb-2 text-xs text-muted-foreground font-semibold min-w-[120px]">نسبة النجاح</th>
                   </tr>
                 </thead>
                 <tbody>
-              {subjectStats.map((s, i) => (
+                  {subjectStats.map((s, i) => (
                     <tr key={i} className={`border-b ${i % 2 === 0 ? "" : "bg-muted/20"}`}>
                       <td className="py-2 pr-2 font-medium">{s.arLabel}</td>
                       <td className="py-2 text-center text-muted-foreground font-mono font-semibold">{s.coef}</td>
@@ -2426,6 +2507,145 @@ function ImportModal({ annee, onClose, onDone }: { annee: string; onClose: () =>
   );
 }
 
+// ─── Subject Breakdown Modal (click average to see subject scores) ────────────
+function SubjectBreakdownModal({ result, onClose }: { result: StudentResult; onClose: () => void }) {
+  const niveau = result.student.niveau as Niveau;
+  const subjects = getSubjectsWithCorrectCoefs(niveau);
+
+  // Per-subject: compute T1/T2/T3 scores + annual avg
+  const subjectRows = subjects.map(s => {
+    const t1 = (result.scores as any)?.[1]?.[s.key] as number | undefined;
+    const t2 = (result.scores as any)?.[2]?.[s.key] as number | undefined;
+    const t3 = (result.scores as any)?.[3]?.[s.key] as number | undefined;
+    const vals = [t1, t2, t3].filter((v): v is number => v !== undefined && v >= 0);
+    const avg  = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    return { ...s, t1, t2, t3, avg };
+  }).filter(s => s.t1 !== undefined || s.t2 !== undefined || s.t3 !== undefined);
+
+  // Bar chart data: subject averages
+  const barData = subjectRows
+    .filter(s => s.avg !== null)
+    .map(s => ({ subject: s.arLabel, avg: +s.avg!.toFixed(2), fill: s.avg! >= 10 ? "#16a34a" : "#ef4444" }));
+
+  // Tri comparison data
+  const triData = subjectRows.slice(0, 8).map(s => ({
+    subject: s.arLabel.split(" ").slice(-1)[0]!,
+    ف1: s.t1 ?? null,
+    ف2: s.t2 ?? null,
+    ف3: s.t3 ?? null,
+  }));
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Target className="w-5 h-5 text-violet-500" />
+            <span>{result.student.nomPrenom}</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              — {LEVEL_LABELS[niveau]} · قسم {result.student.classe}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Annual avg headline */}
+        <div className="flex items-center gap-4 pb-3 border-b">
+          {[
+            { label: "المعدل السنوي", val: result.annualAvg, big: true },
+            { label: "ف1", val: result.t1Avg },
+            { label: "ف2", val: result.t2Avg },
+            { label: "ف3", val: result.t3Avg },
+          ].map(({ label, val, big }) => (
+            <div key={label} className="text-center">
+              <p className="text-[10px] text-muted-foreground">{label}</p>
+              <p className={`${big ? "text-3xl font-extrabold" : "text-lg font-bold"} font-mono ${val === null ? "text-muted-foreground" : val >= 10 ? "text-emerald-600" : "text-red-500"}`}>
+                {val !== null ? val.toFixed(2) : "—"}
+              </p>
+            </div>
+          ))}
+          <div className="ms-auto">
+            {result.passed === true
+              ? <span className="text-sm font-bold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">ناجح ✓</span>
+              : result.passed === false
+              ? <span className="text-sm font-bold px-3 py-1.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">راسب ✗</span>
+              : null}
+          </div>
+        </div>
+
+        {/* Subject avg bar chart */}
+        {barData.length > 0 && (
+          <div>
+            <p className="text-xs font-bold text-muted-foreground mb-2">متوسط كل مادة (عبر الفصول)</p>
+            <ResponsiveContainer width="100%" height={Math.max(160, barData.length * 26)}>
+              <BarChart data={barData} layout="vertical" margin={{ left: 110, right: 40 }} barSize={14}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.07} horizontal={false} />
+                <XAxis type="number" domain={[0, 20]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="subject" tick={{ fontSize: 10 }} width={105} axisLine={false} tickLine={false} />
+                <Tooltip content={<MiniTooltip />} />
+                <Bar dataKey="avg" name="المتوسط" radius={[0, 4, 4, 0]}>
+                  {barData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Tri comparison chart */}
+        {triData.length > 0 && (
+          <div>
+            <p className="text-xs font-bold text-muted-foreground mb-2">مقارنة الفصول الثلاثة</p>
+            <ResponsiveContainer width="100%" height={Math.max(160, triData.length * 26)}>
+              <BarChart data={triData} layout="vertical" margin={{ left: 60, right: 10 }} barSize={10}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.07} horizontal={false} />
+                <XAxis type="number" domain={[0, 20]} tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="subject" tick={{ fontSize: 10 }} width={55} axisLine={false} tickLine={false} />
+                <Tooltip content={<MiniTooltip />} />
+                <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
+                <Bar dataKey="ف1" fill="#6366f1" radius={[0, 3, 3, 0]} />
+                <Bar dataKey="ف2" fill="#8b5cf6" radius={[0, 3, 3, 0]} />
+                <Bar dataKey="ف3" fill="#a855f7" radius={[0, 3, 3, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Subject scores table */}
+        <div className="rounded-xl border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/60">
+              <tr>
+                {["المادة", "م", "ف1", "ف2", "ف3", "المتوسط"].map((h, i) => (
+                  <th key={i} className="px-3 py-2 text-xs font-semibold text-muted-foreground text-start">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {subjectRows.map((s, i) => (
+                <tr key={s.key} className={`border-t ${i % 2 === 0 ? "" : "bg-muted/15"}`}>
+                  <td className="px-3 py-2 font-medium">{s.arLabel}</td>
+                  <td className="px-3 py-2 text-muted-foreground text-xs font-mono">{s.coef}</td>
+                  {[s.t1, s.t2, s.t3].map((v, ti) => (
+                    <td key={ti} className={`px-3 py-2 font-mono text-sm ${v === undefined ? "text-muted-foreground" : v >= 10 ? "text-emerald-600" : "text-red-500"}`}>
+                      {v !== undefined ? v.toFixed(2) : "—"}
+                    </td>
+                  ))}
+                  <td className={`px-3 py-2 font-bold font-mono ${s.avg === null ? "text-muted-foreground" : s.avg >= 10 ? "text-emerald-600" : "text-red-500"}`}>
+                    {s.avg !== null ? s.avg.toFixed(2) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex justify-end">
+          <Button variant="outline" onClick={onClose}>إغلاق</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Grade Modal ──────────────────────────────────────────────────────────────
 function GradeModal({ result, annee, onClose, onSaved }: {
   result: StudentResult; annee: string; onClose: () => void; onSaved: () => void;
@@ -2542,11 +2762,12 @@ export default function Results() {
   const { t } = useLanguage();
   const [results, setResults] = useState<StudentResult[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<StudentResult | null>(null);
-  const [showImport, setShowImport] = useState(false);
-  const [annee, setAnnee] = useState(DEFAULT_YEAR);
-  const [filters, setFilters] = useState({ niveau: "", classe: "", sexe: "", q: "" });
-  const [listKey, setListKey] = useState(0);
+  const [selected, setSelected]       = useState<StudentResult | null>(null);
+  const [subjectDetail, setSubjectDetail] = useState<StudentResult | null>(null);
+  const [showImport, setShowImport]   = useState(false);
+  const [annee, setAnnee]             = useState(DEFAULT_YEAR);
+  const [filters, setFilters]         = useState({ niveau: "", classe: "", sexe: "", q: "" });
+  const [listKey, setListKey]         = useState(0);
   const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTabId>("general");
 
   const fetchResults = useCallback(async () => {
@@ -2719,7 +2940,9 @@ export default function Results() {
                         {[r.t1Avg, r.t2Avg, r.t3Avg].map((a, ti) => (
                           <td key={ti} className={`px-3 py-3 font-mono text-sm ${a === null ? "text-muted-foreground" : a >= 10 ? "text-emerald-600" : "text-red-500"}`}>{avg2(a)}</td>
                         ))}
-                        <td className={`px-3 py-3 font-bold font-mono ${r.annualAvg === null ? "text-muted-foreground" : r.annualAvg >= 10 ? "text-emerald-600" : "text-red-500"}`}>{avg2(r.annualAvg)}</td>
+                        <td className={`px-3 py-3 font-bold font-mono cursor-pointer underline-offset-2 hover:underline ${r.annualAvg === null ? "text-muted-foreground" : r.annualAvg >= 10 ? "text-emerald-600 hover:text-emerald-700" : "text-red-500 hover:text-red-600"}`}
+                          title="انقر لعرض تفاصيل المواد"
+                          onClick={e => { e.stopPropagation(); setSubjectDetail(r); }}>{avg2(r.annualAvg)}</td>
                         <td className="px-3 py-3">
                           {r.passed === null ? <span className="text-muted-foreground text-xs">—</span>
                             : r.passed
@@ -2744,8 +2967,9 @@ export default function Results() {
         </AnimatePresence>
       </div>
 
-      {selected    && <GradeModal result={selected} annee={annee} onClose={() => setSelected(null)} onSaved={fetchResults} />}
-      {showImport  && <ImportModal annee={annee} onClose={() => setShowImport(false)} onDone={fetchResults} />}
+      {selected      && <GradeModal result={selected} annee={annee} onClose={() => setSelected(null)} onSaved={fetchResults} />}
+      {subjectDetail && <SubjectBreakdownModal result={subjectDetail} onClose={() => setSubjectDetail(null)} />}
+      {showImport    && <ImportModal annee={annee} onClose={() => setShowImport(false)} onDone={fetchResults} />}
     </motion.div>
   );
 }
