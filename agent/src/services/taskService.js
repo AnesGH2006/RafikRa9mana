@@ -12,6 +12,7 @@ const HANDLERS = {
   backupReports: doBackup,
   syncData:      doSyncData,
   monitorFolder: doMonitorFolder,
+  send_sms:      doSendSms,
 };
 
 /**
@@ -55,6 +56,14 @@ async function doSyncData(payload, _af, _api) {
 async function doMonitorFolder({ path: p }, af, api) {
   await api.watchFolder(p, af);
   return { ok: true, watching: p };
+}
+
+async function doSendSms(payload) {
+  return {
+    ok: false,
+    error: 'إرسال SMS يتطلب تشغيل python-agent.py مع مودم GSM متصل.',
+    phone: payload?.phone,
+  };
 }
 
 module.exports = { execute };

@@ -46,6 +46,17 @@ function setStatus(status, label) {
   dot.className = 'status-dot ' + status;
   lbl.textContent = label;
   document.getElementById('info-status').textContent = label;
+  const headerDot = document.getElementById('header-status-dot');
+  const headerLabel = document.getElementById('header-status-label');
+  const heroLabel = document.getElementById('hero-connection-label');
+  const connectionBadge = document.getElementById('connection-badge');
+  if (headerDot) headerDot.className = 'status-dot ' + status;
+  if (headerLabel) headerLabel.textContent = label;
+  if (heroLabel) heroLabel.textContent = label === 'متصل' ? 'متصل وجاهز' : label;
+  if (connectionBadge) {
+    connectionBadge.textContent = label;
+    connectionBadge.className = `mini-badge ${status === 'connected' ? 'badge-green' : status === 'error' ? 'badge-red' : 'badge-muted'}`;
+  }
   State.connected = (status === 'connected');
 }
 
@@ -105,6 +116,18 @@ async function connectSocket(token, serverUrl) {
 
     _socket.on('agent:command', (payload) => {
       handleCommand(payload);
+    });
+
+    // Keep the Electron client aware of dedicated SMS tasks. Actual GSM
+    // dispatch is performed by the Python agent; this client acknowledges
+    // receipt so the UI never hides an incoming task.
+    _socket.on('send_sms', (payload) => {
+      api.appendLog({ level: 'INFO', message: 'SMS task received', payload });
+      toast('وصلت مهمة SMS — يلزم وكيل GSM لإرسالها');
+      reportResult('send_sms', 'failed', {
+        error: 'Electron agent لا يملك مودم GSM. شغّل python-agent.py للإرسال.',
+        phone: payload?.phone,
+      });
     });
 
     // Heartbeat
@@ -588,6 +611,7 @@ const ACTION_LABELS = {
   typeText:          'كتابة نص',
   pressKey:          'ضغط مفتاح',
   shellExec:         'تنفيذ أمر',
+  send_sms:          'إرسال SMS',
 };
 function actionLabel(a) { return ACTION_LABELS[a] ?? a; }
 

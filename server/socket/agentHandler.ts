@@ -75,11 +75,38 @@ export async function sendDesktopCommand(
 
     taskResultWaiters.set(userId, { action, resolve, reject, timer });
 
-    // Emit to both Electron agent (agent:command) and Python agent (execute_desktop_command)
-    socket.emit("agent:command", { action, payload });
-    socket.emit("execute_desktop_command", { action, payload });
-    logger.info({ userId, action, payload }, "Desktop command sent → agent:command + execute_desktop_command");
+    if (action === "send_sms") {
+      // SMS has a dedicated event so Python agents can handle it without
+      // conflating communication tasks with general desktop automation.
+      socket.emit("send_sms", payload);
+      logger.info({ userId, action, phone: payload.phone }, "SMS dispatch sent → send_sms");
+    } else {
+      // Emit to both Electron agent (agent:command) and Python agent
+      // (execute_desktop_command) for the existing desktop command protocol.
+      socket.emit("agent:command", { action, payload });
+      socket.emit("execute_desktop_command", { action, payload });
+      logger.info({ userId, action, payload }, "Desktop command sent → agent:command + execute_desktop_command");
+    }
   });
+}
+
+/**
+ * Dispatch an SMS using the explicit `{ phone, message }` agent contract.
+ * The resolved confirmation is returned to the AI tool and also broadcast to
+ * any connected control-room UI.
+ */
+export function sendSmsToAgent(
+  userId: string,
+  payload: { phone: string; message: string },
+  timeoutMs = 30_000,
+): Promise<unknown> {
+  if (!payload.phone?.trim() || !payload.message?.trim()) {
+    return Promise.reject(new Error("phone و message مطلوبان لإرسال SMS"));
+  }
+  return sendDesktopCommand(userId, "send_sms", {
+    phone: payload.phone.trim(),
+    message: payload.message.trim(),
+  }, timeoutMs);
 }
 
 /**
@@ -213,6 +240,20 @@ export function agentHandler(io: SocketIOServer, socket: Socket): void {
     if (ALLOWED_ACTIONS.has(payload.action as AgentAction)) {
       await logAction(agentTokenId, userId, payload.action as AgentAction, payload.status, payload.details).catch(() => {});
     }
+
+    io.to(`control:${userId}`).emit("agent:actionConfirmation", {
+      action: payload.action,
+      status: payload.status,
+      details: payload.details,
+      taskId: payload.taskId,
+    });
+    if (payload.action === "send_sms") {
+      io.to(`control:${userId}`).emit("agent:smsConfirmation", {
+        status: payload.status,
+        details: payload.details,
+        taskId: payload.taskId,
+      });
+    }
   });
 
   // ── task_result: Python agent equivalent of agent:taskResult ────────────────
@@ -245,6 +286,41 @@ export function agentHandler(io: SocketIOServer, socket: Socket): void {
     if (ALLOWED_ACTIONS.has(normalised.action as AgentAction)) {
       await logAction(agentTokenId, userId, normalised.action as AgentAction, normalised.status, normalised.details).catch(() => {});
     }
+
+    io.to(`control:${userId}`).emit("agent:actionConfirmation", normalised);
+    if (normalised.action === "send_sms") {
+      io.to(`control:${userId}`).emit("agent:smsConfirmation", normalised);
+    }
+  });
+
+  // Dedicated confirmation emitted by the Python agent after GSM dispatch.
+  // Keep this event separate from the generic task result so control-room
+  // consumers can render an SMS-specific state immediately.
+  socket.on("sms:confirmation", (payload: {
+    status?: "success" | "failed";
+    details?: object;
+    taskId?: string;
+  }) => {
+    const normalised = {
+      action: "send_sms",
+      status: payload.status === "success" ? "success" as const : "failed" as const,
+      details: payload.details,
+      taskId: payload.taskId,
+    };
+
+    const waiter = taskResultWaiters.get(userId);
+    if (waiter?.action === "send_sms") {
+      clearTimeout(waiter.timer);
+      taskResultWaiters.delete(userId);
+      if (normalised.status === "success") {
+        waiter.resolve(normalised.details ?? { ok: true, action: "send_sms" });
+      } else {
+        waiter.reject(new Error(`فشل إرسال SMS على الجهاز المحلي`));
+      }
+    }
+
+    io.to(`control:${userId}`).emit("agent:actionConfirmation", normalised);
+    io.to(`control:${userId}`).emit("agent:smsConfirmation", normalised);
   });
 
   // ── Server → agent commands ─────────────────────────────────────────────────

@@ -88,18 +88,45 @@
       <!-- Dashboard -->
       <div class="page active" id="page-dashboard">
         <div class="page-header">
-          <h1>لوحة التحكم</h1>
-          <p>نظرة عامة على حالة الوكيل والمهام الأخيرة</p>
+          <div>
+            <div class="eyebrow">مركز العمليات الرقمية</div>
+            <h1>لوحة التحكم</h1>
+            <p>نظرة عامة على حالة الوكيل والمهام الأخيرة</p>
+          </div>
+          <div class="header-status" id="header-status">
+            <span class="status-dot" id="header-status-dot"></span>
+            <span id="header-status-label">غير متصل</span>
+          </div>
+        </div>
+        <div class="dashboard-hero">
+          <div class="hero-copy">
+            <span class="hero-kicker">School Manager Agent</span>
+            <strong>كل مهام الإدارة في مكان واحد</strong>
+            <span>اتصال آمن، تنفيذ سريع، ومتابعة واضحة لكل إجراء.</span>
+          </div>
+          <div class="hero-signal">
+            <span class="signal-ring"><span></span></span>
+            <div>
+              <small>حالة الوكيل</small>
+              <b id="hero-connection-label">بانتظار الاتصال</b>
+            </div>
+          </div>
         </div>
         <div class="grid-4" style="margin-bottom:20px">
-          <div class="card kpi green"><div class="val" id="kpi-tasks-ok">0</div><div class="lbl">مهام ناجحة</div></div>
-          <div class="card kpi red"><div class="val" id="kpi-tasks-fail">0</div><div class="lbl">مهام فاشلة</div></div>
-          <div class="card kpi blue"><div class="val" id="kpi-uploads">0</div><div class="lbl">ملفات مُرفَّعة</div></div>
-          <div class="card kpi amber"><div class="val" id="kpi-folders">0</div><div class="lbl">مجلدات مُصرَّح بها</div></div>
+          <div class="card kpi green"><div class="kpi-icon">✓</div><div class="val" id="kpi-tasks-ok">0</div><div class="lbl">مهام ناجحة</div></div>
+          <div class="card kpi red"><div class="kpi-icon">!</div><div class="val" id="kpi-tasks-fail">0</div><div class="lbl">مهام فاشلة</div></div>
+          <div class="card kpi blue"><div class="kpi-icon">↥</div><div class="val" id="kpi-uploads">0</div><div class="lbl">ملفات مُرفَّعة</div></div>
+          <div class="card kpi amber"><div class="kpi-icon">⌂</div><div class="val" id="kpi-folders">0</div><div class="lbl">مجلدات مُصرَّح بها</div></div>
         </div>
         <div class="grid-2">
           <div class="card">
-            <div class="card-title">معلومات الاتصال</div>
+            <div class="card-heading">
+              <div>
+                <div class="card-title">معلومات الاتصال</div>
+                <div class="card-subtitle">بيانات الوكيل والخادم المتصل</div>
+              </div>
+              <span class="mini-badge" id="connection-badge">غير متصل</span>
+            </div>
             <table>
               <tbody>
                 <tr><td style="color:var(--muted);width:120px">الحالة</td><td id="info-status">—</td></tr>
@@ -114,7 +141,13 @@
             </div>
           </div>
           <div class="card">
-            <div class="card-title">المهام الأخيرة</div>
+            <div class="card-heading">
+              <div>
+                <div class="card-title">المهام الأخيرة</div>
+                <div class="card-subtitle">آخر الإجراءات المسجلة على الجهاز</div>
+              </div>
+              <span class="live-label"><span></span> مباشر</span>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>الإجراء</th><th>الحالة</th><th>الوقت</th></tr></thead>
@@ -124,6 +157,14 @@
               </table>
             </div>
           </div>
+        </div>
+        <div class="card sms-readiness">
+          <div class="sms-mark">SMS</div>
+          <div class="sms-copy">
+            <strong>قناة الرسائل جاهزة للعمل</strong>
+            <span>يمكن للمساعد إرسال تنبيهات أولياء الأمور عبر وكيل GSM المتصل.</span>
+          </div>
+          <span class="mini-badge badge-blue">إرسال آمن</span>
         </div>
       </div>
 

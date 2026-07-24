@@ -203,7 +203,7 @@ def h_sync_data(_p: dict) -> tuple[bool, dict]:
 # ── SMS via local GSM modem ───────────────────────────────────────────────────
 
 def h_send_sms(p: dict) -> tuple[bool, dict]:
-    to      = str(p.get("to", "")).strip()
+    to      = str(p.get("phone") or p.get("to") or "").strip()
     message = str(p.get("message", "")).strip()
 
     if not to or not message:
@@ -253,6 +253,33 @@ def h_send_sms(p: dict) -> tuple[bool, dict]:
         return False, {"error": "مكتبة pyserial غير مثبّتة — نفّذ: pip install pyserial"}
     except Exception as exc:
         return False, {"error": str(exc)}
+
+
+def handle_sms_event(payload: dict):
+    """Handle the dedicated server → agent SMS contract."""
+    phone = str(payload.get("phone", "")).strip()
+    message = str(payload.get("message", "")).strip()
+    log.info(f"← send_sms  phone={phone or '—'}  message_length={len(message)}")
+
+    if not phone or not message:
+        details = {"error": "phone و message مطلوبان"}
+        sio.emit("sms:confirmation", {"status": "failed", "details": details})
+        emit_result("send_sms", False, details)
+        return
+
+    try:
+        ok, details = h_send_sms({"phone": phone, "message": message})
+        sio.emit("sms:confirmation", {
+            "status": "success" if ok else "failed",
+            "details": details,
+        })
+        emit_result("send_sms", ok, details)
+        log.info(f"→ send_sms  {'✓' if ok else '✗'}")
+    except Exception as exc:
+        details = {"error": str(exc)}
+        sio.emit("sms:confirmation", {"status": "failed", "details": details})
+        emit_result("send_sms", False, details)
+        log.error(f"  exception in send_sms: {exc}")
 
 
 # ── Parent contact scraping from الرقمنة ─────────────────────────────────────
@@ -403,6 +430,16 @@ def on_command(payload):
 @sio.on("execute_desktop_command")
 def on_execute(payload):
     on_command(payload)
+
+
+@sio.on("send_sms")
+def on_send_sms(payload):
+    """Dedicated SMS event emitted by server/socket for parent messages."""
+    threading.Thread(
+        target=handle_sms_event,
+        args=(payload if isinstance(payload, dict) else {},),
+        daemon=True,
+    ).start()
 
 
 # ─── Heartbeat ─────────────────────────────────────────────────────────────────

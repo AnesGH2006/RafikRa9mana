@@ -10,6 +10,7 @@ import { browserAutomationWebhook } from "./webhook.js";
 import { desktopControlTool } from "./desktop-control.js";
 import { fetchParentContactsTool } from "./fetch-parent-contacts.js";
 import { sendSmsAlertTool } from "./send-sms-alert.js";
+import { sendParentSmsTool } from "./send-parent-sms.js";
 
 export type ToolName =
   | "database_query_tool"
@@ -19,7 +20,8 @@ export type ToolName =
   | "browser_automation_webhook"
   | "desktop_control_tool"
   | "fetch_parent_contacts_tool"
-  | "send_sms_alert_tool";
+  | "send_sms_alert_tool"
+  | "send_parent_sms_tool";
 
 // ── OpenAI-compatible tool definitions (sent to Groq) ────────────────────────
 export const toolDefinitions: OpenAI.Chat.ChatCompletionTool[] = [
@@ -192,6 +194,21 @@ export const toolDefinitions: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "send_parent_sms_tool",
+      description: "يرسل رسالة SMS إلى ولي أمر تلميذ بالبحث عن اسمه ورقم هاتف ولي الأمر المحفوظ في قاعدة البيانات، ثم يمررها مباشرة إلى وكيل سطح المكتب المتصل. إذا لم يوجد الرقم، يطلب توفيره أو تشغيل أداة استخراج أرقام أولياء الأمور.",
+      parameters: {
+        type: "object",
+        properties: {
+          studentName: { type: "string", description: "اسم التلميذ كما هو مسجّل في قاعدة البيانات" },
+          message: { type: "string", description: "نص رسالة SMS المراد إرسالها" },
+        },
+        required: ["studentName", "message"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "send_sms_alert_tool",
       description: "يرسل رسالة SMS رسمية إلى ولي أمر التلميذ مباشرةً من قاعدة البيانات. يبحث تلقائياً عن رقم هاتف ولي الأمر. يوجّه الرسالة عبر بوابة SMS (إذا كانت مُهيّأة) أو عبر مودم GSM محلي متصل بالوكيل. يُسجّل حالة الإرسال في قاعدة البيانات.",
       parameters: {
@@ -231,6 +248,8 @@ export async function executeTool(
       return fetchParentContactsTool(input as any, userId);
     case "send_sms_alert_tool":
       return sendSmsAlertTool(input as any, userId);
+    case "send_parent_sms_tool":
+      return sendParentSmsTool(input as any, userId);
     default:
       throw new Error(`أداة غير معروفة: ${name}`);
   }
