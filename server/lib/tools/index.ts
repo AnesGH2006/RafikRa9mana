@@ -8,6 +8,8 @@ import { messagingDispatcherTool } from "./messaging.js";
 import { calendarTaskTool } from "./calendar.js";
 import { browserAutomationWebhook } from "./webhook.js";
 import { desktopControlTool } from "./desktop-control.js";
+import { fetchParentContactsTool } from "./fetch-parent-contacts.js";
+import { sendSmsAlertTool } from "./send-sms-alert.js";
 
 export type ToolName =
   | "database_query_tool"
@@ -15,7 +17,9 @@ export type ToolName =
   | "messaging_dispatcher_tool"
   | "calendar_task_tool"
   | "browser_automation_webhook"
-  | "desktop_control_tool";
+  | "desktop_control_tool"
+  | "fetch_parent_contacts_tool"
+  | "send_sms_alert_tool";
 
 // ── OpenAI-compatible tool definitions (sent to Groq) ────────────────────────
 export const toolDefinitions: OpenAI.Chat.ChatCompletionTool[] = [
@@ -168,6 +172,40 @@ export const toolDefinitions: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "fetch_parent_contacts_tool",
+      description: "يأمر وكيل سطح المكتب بالتنقل إلى منصة الرقمنة الجزائرية تلقائياً لاستخراج أرقام هواتف أولياء الأمور المفقودة وحفظها في قاعدة البيانات. إذا لم يكن الوكيل متصلاً، يُبلّغ عن قائمة التلاميذ الذين تنقصهم بيانات الاتصال.",
+      parameters: {
+        type: "object",
+        properties: {
+          niveau: { type: "string", enum: ["1AM", "2AM", "3AM", "4AM"], description: "تصفية حسب المستوى (اختياري)" },
+          classe: { type: "string", description: "تصفية حسب القسم مثل: A، B (اختياري)" },
+          annee: { type: "string", description: "السنة الدراسية (افتراضي: 2025-2026)" },
+          platform_url: { type: "string", description: "رابط منصة الرقمنة إذا كان مختلفاً عن الافتراضي" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_sms_alert_tool",
+      description: "يرسل رسالة SMS رسمية إلى ولي أمر التلميذ مباشرةً من قاعدة البيانات. يبحث تلقائياً عن رقم هاتف ولي الأمر. يوجّه الرسالة عبر بوابة SMS (إذا كانت مُهيّأة) أو عبر مودم GSM محلي متصل بالوكيل. يُسجّل حالة الإرسال في قاعدة البيانات.",
+      parameters: {
+        type: "object",
+        properties: {
+          student_id: { type: "string", description: "المعرّف الفريد للتلميذ في قاعدة البيانات" },
+          message: { type: "string", description: "نص الرسالة (يُنصح بالعربية، الحد الأقصى 160 حرفاً للرسالة الواحدة)" },
+          custom_phone: { type: "string", description: "رقم هاتف بديل إذا أراد المدير تجاوز الرقم المحفوظ (اختياري)" },
+          sender_id: { type: "string", description: "اسم المُرسِل كما يظهر في الرسالة (افتراضي: SchoolMgr)" },
+        },
+        required: ["student_id", "message"],
+      },
+    },
+  },
 ];
 
 // ── Tool executor ─────────────────────────────────────────────────────────────
@@ -189,6 +227,10 @@ export async function executeTool(
       return browserAutomationWebhook(input as any, userId);
     case "desktop_control_tool":
       return desktopControlTool(input as any, userId);
+    case "fetch_parent_contacts_tool":
+      return fetchParentContactsTool(input as any, userId);
+    case "send_sms_alert_tool":
+      return sendSmsAlertTool(input as any, userId);
     default:
       throw new Error(`أداة غير معروفة: ${name}`);
   }

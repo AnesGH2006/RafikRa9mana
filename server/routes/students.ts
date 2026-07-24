@@ -124,7 +124,8 @@ const RESULT_N = ["نتيجه","نتيجة","résultat","resultat","result","men
 
 // ✅ FIX 1: أزلنا "رقم" و"الرقم" لأنهما يلتقطان "رقم التعريف" الوطني (16 خانة)
 //    وأضفنا "رقم القيد" بشكل صريح
-const RAQM_N = ["رقم القيد","رقم التلميذ","رقم الفوج","رقم المتعلم","no","n°","numero","numéro","#"];
+const RAQM_N  = ["رقم القيد","رقم التلميذ","رقم الفوج","رقم المتعلم","no","n°","numero","numéro","#"];
+const PHONE_N = ["رقم هاتف الولي","هاتف الولي","هاتف ولي الأمر","رقم الهاتف","الهاتف","phone","tel","telephone","téléphone","mobile","gsm","portable","contact"];
 
 // ─── Column detector ──────────────────────────────────────────────────────────
 function findCol(headers: string[], needles: string[]): string | null {
@@ -271,8 +272,9 @@ function processRows(
   const colStatus = findCol(headerCells, STATUS_N);
   const colResult = findCol(headerCells, RESULT_N);
   const colRaqm   = findCol(headerCells, RAQM_N);   // ✅ now correctly picks "رقم القيد"
+  const colPhone  = findCol(headerCells, PHONE_N);   // رقم هاتف الولي
 
-  logger.info({ colNom, colPrenom, colName, colLevel, colClass, colGender, colRaqm }, "Column map");
+  logger.info({ colNom, colPrenom, colName, colLevel, colClass, colGender, colRaqm, colPhone }, "Column map");
 
   function rowToObj(r: unknown[]): Record<string, unknown> {
     const obj: Record<string, unknown> = {};
@@ -338,11 +340,16 @@ function processRows(
     const statut  = normalizeStatut(cellStr(row, colStatus));
     const resultat = normalizeResultat(cellStr(row, colResult));
 
+    // ── رقم هاتف الولي ────────────────────────────────────────────────────────
+    const rawPhone = cellStr(row, colPhone).replace(/\s+/g, "");
+    // Keep only valid-looking phone strings (digits, +, -, parentheses, min 7 chars)
+    const parentPhone = rawPhone && /^[+0-9()\-]{7,20}$/.test(rawPhone) ? rawPhone : null;
+
     toInsert.push({
       id: crypto.randomBytes(16).toString("hex"),
       userId, nomPrenom, dateNaissance,
       niveau: niveauFinal, classe: classeRaw,
-      sexe, statut, resultat, annee, raqm,
+      sexe, statut, resultat, annee, raqm, parentPhone,
     });
   }
 

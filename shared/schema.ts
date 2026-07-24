@@ -63,6 +63,7 @@ export const studentsTable = pgTable("students", {
   resultat: resultatEnum("resultat"),
   annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
   raqm: integer("raqm"),
+  parentPhone: varchar("parent_phone", { length: 30 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -213,3 +214,23 @@ export const notificationsTable = pgTable("notifications", {
 
 export type Notification       = typeof notificationsTable.$inferSelect;
 export type InsertNotification = typeof notificationsTable.$inferInsert;
+
+// ─── SMS Dispatch Log ──────────────────────────────────────────────────────────
+export const smsStatusEnum = pgEnum("sms_status", ["sent", "failed", "queued", "no_phone"]);
+export const smsChannelEnum = pgEnum("sms_channel", ["gateway", "modem", "socket"]);
+
+export const smsLogsTable = pgTable("sms_logs", {
+  id:          varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId:      varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  studentId:   varchar("student_id", { length: 64 }).references(() => studentsTable.id, { onDelete: "set null" }),
+  phone:       varchar("phone",   { length: 30 }),
+  message:     varchar("message", { length: 1000 }).notNull(),
+  status:      smsStatusEnum("status").notNull().default("queued"),
+  channel:     smsChannelEnum("channel"),
+  gatewayRef:  varchar("gateway_ref", { length: 255 }),
+  errorMsg:    varchar("error_msg",   { length: 500 }),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type SmsLog       = typeof smsLogsTable.$inferSelect;
+export type InsertSmsLog = typeof smsLogsTable.$inferInsert;

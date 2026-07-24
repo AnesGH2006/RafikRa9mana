@@ -728,6 +728,7 @@ export default function App() {
         <AuthGate />
         <Toaster />
         <PwaInstallPromptLazy />
+        <AgentInstallPromptLazy />
       </LanguageProvider>
     </ThemeProvider>
   );
@@ -742,6 +743,17 @@ function PwaInstallPromptLazy() {
   return (
     <Suspense fallback={null}>
       <_PwaPrompt />
+    </Suspense>
+  );
+}
+
+const _AgentPrompt = lazy(() =>
+  import("@/components/agent-install-prompt").then(m => ({ default: m.AgentInstallPrompt }))
+);
+function AgentInstallPromptLazy() {
+  return (
+    <Suspense fallback={null}>
+      <_AgentPrompt />
     </Suspense>
   );
 }
