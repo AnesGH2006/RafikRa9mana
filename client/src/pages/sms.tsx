@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  MessageSquare, Phone, AlertCircle, TrendingDown,
+  MessageSquare, Phone, AlertCircle, TrendingDown, TrendingUp,
   Clock, CheckCheck, Copy, Send, Save, RefreshCw,
   Filter, ChevronLeft, X, Edit3, Search,
 } from "lucide-react";
 
+const BASE = import.meta.env.BASE_URL;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
-type AlertReason = "avg_below_10" | "high_absence" | "mustarrak";
+type AlertReason = "avg_below_10" | "high_absence" | "mustarrak" | "passed";
 
 interface AlertStudent {
   id: string;
@@ -37,6 +39,10 @@ function buildMessage(reason: AlertReason, student: AlertStudent): string {
     const hrs = student.unjustifiedHours;
     return `السيد / السيدة ولي أمر التلميذ(ة): ${name}\nنُبلّغكم بأن عدد ساعات الغياب غير المبرر لابنكم/ابنتكم بلغ ${hrs} ساعة، مما قد يؤثر سلباً على نتائجه/نتائجها الدراسية. يُرجى التواصل مع الإدارة في أقرب وقت لتسوية الوضعية.\nمع فائق التقدير — إدارة المتوسطة`;
   }
+  if (reason === "passed") {
+    const avg = student.annualAvg !== null ? student.annualAvg.toFixed(2) : "—";
+    return `السيد / السيدة ولي أمر التلميذ(ة): ${name}\nيسرّنا إعلامكم بأن ابنكم/ابنتكم قد حقق معدّلاً سنوياً جيداً بلغ ${avg}/20، وقد تحصّل على النجاح. نشكركم على متابعتكم ونشجعه/نشجعها على مواصلة الاجتهاد.\nمع فائق التقدير — إدارة المتوسطة`;
+  }
   return "";
 }
 
@@ -56,6 +62,11 @@ const REASON_META: Record<AlertReason, { label: string; icon: React.ReactNode; c
     label: "غياب مفرط",
     icon: <Clock className="h-3 w-3" />,
     color: "bg-orange-500/15 text-orange-400 border-orange-500/30",
+  },
+  passed: {
+    label: "ناجح",
+    icon: <TrendingUp className="h-3 w-3" />,
+    color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   },
 };
 
@@ -94,7 +105,7 @@ export default function SmsPage() {
     setLoading(true);
     setSelected(null);
     try {
-      const res = await fetch(`/api/sms/alerts?annee=${encodeURIComponent(annee)}`);
+      const res = await fetch(`${BASE}api/sms/alerts?annee=${encodeURIComponent(annee)}`);
       if (res.ok) {
         const data: AlertStudent[] = await res.json();
         setStudents(data);
@@ -103,7 +114,9 @@ export default function SmsPage() {
         data.forEach(s => { if (!s.parentPhone) edits[s.id] = ""; });
         setPhoneEdit(prev => ({ ...edits, ...prev }));
       }
-    } catch {}
+    } catch (err) {
+      console.error("fetchAlerts failed:", err);
+    }
     setLoading(false);
   };
 
@@ -117,8 +130,8 @@ export default function SmsPage() {
 
   const handleSelect = (s: AlertStudent) => {
     setSelected(s);
-    // Auto-pick highest-priority reason
-    const priority: AlertReason[] = ["avg_below_10", "mustarrak", "high_absence"];
+    // Auto-pick highest-priority reason (issues first, then congratulations)
+    const priority: AlertReason[] = ["avg_below_10", "mustarrak", "high_absence", "passed"];
     const first = priority.find(r => s.reasons.includes(r)) ?? s.reasons[0] ?? null;
     setActiveReason(first);
     setCopied(false);
@@ -130,7 +143,7 @@ export default function SmsPage() {
     if (!phone) return;
     setPhoneSaving(p => ({ ...p, [studentId]: true }));
     try {
-      const res = await fetch(`/api/students/${studentId}/phone`, {
+      const res = await fetch(`${BASE}api/students/${studentId}/phone`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone }),
@@ -144,7 +157,9 @@ export default function SmsPage() {
         if (selected?.id === studentId) setSelected(s => s ? { ...s, parentPhone: phone } : s);
         setTimeout(() => setPhoneSaved(p => ({ ...p, [studentId]: false })), 2000);
       }
-    } catch {}
+    } catch (err) {
+      console.error("savePhone failed:", err);
+    }
     setPhoneSaving(p => ({ ...p, [studentId]: false }));
   };
 
@@ -178,6 +193,7 @@ export default function SmsPage() {
     avg_below_10: students.filter(s => s.reasons.includes("avg_below_10")).length,
     mustarrak: students.filter(s => s.reasons.includes("mustarrak")).length,
     high_absence: students.filter(s => s.reasons.includes("high_absence")).length,
+    passed: students.filter(s => s.reasons.includes("passed")).length,
   };
 
   const filterTabs: { key: FilterType; label: string; color: string }[] = [
@@ -185,6 +201,7 @@ export default function SmsPage() {
     { key: "avg_below_10",label: `معدّل ضعيف (${counts.avg_below_10})`, color: "text-red-400"    },
     { key: "mustarrak",   label: `مستدركون (${counts.mustarrak})`,      color: "text-amber-400"  },
     { key: "high_absence",label: `غياب مفرط (${counts.high_absence})`,  color: "text-orange-400" },
+    { key: "passed",      label: `ناجحون (${counts.passed})`,           color: "text-emerald-400"},
   ];
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -201,7 +218,7 @@ export default function SmsPage() {
               <h1 className="text-lg font-bold bg-gradient-to-l from-emerald-400 to-teal-300 bg-clip-text text-transparent">
                 إشعارات SMS الأولياء
               </h1>
-              <p className="text-xs text-muted-foreground">تنبيهات تلقائية للنتائج والغياب</p>
+              <p className="text-xs text-muted-foreground">تنبيهات وتهانٍ تلقائية للنتائج والغياب</p>
             </div>
           </div>
 
@@ -293,7 +310,7 @@ export default function SmsPage() {
                             {s.niveau} · الفوج {s.classe}
                             {s.annualAvg !== null && (
                               <span className={`mr-2 font-mono font-semibold ${
-                                s.annualAvg < 9 ? "text-red-400" : "text-amber-400"
+                                s.annualAvg < 9 ? "text-red-400" : s.annualAvg < 10 ? "text-amber-400" : "text-emerald-400"
                               }`}>
                                 {s.annualAvg.toFixed(2)}/20
                               </span>

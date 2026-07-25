@@ -7,11 +7,13 @@ import type { Niveau } from "../../shared/types.js";
 const router: IRouter = Router();
 
 // ── GET /api/sms/alerts ───────────────────────────────────────────────────────
-// Returns students that need an SMS alert:
+// Returns students that need an SMS message — either an alert or a
+// congratulation:
 //   - avgBelow10:  annual weighted average < 10
 //   - highAbsence: total unjustified hours >= threshold (default 10)
 //   - mustarrak:   average between 9.00–9.99 (borderline)
-// Each student can have multiple alert reasons.
+//   - passed:      annual weighted average >= 10 (congratulation candidate)
+// Each student can have multiple reasons (e.g. passed + high_absence).
 router.get("/sms/alerts", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
@@ -22,9 +24,7 @@ router.get("/sms/alerts", async (req, res): Promise<void> => {
   const students = await db.select().from(studentsTable)
     .where(and(eq(studentsTable.userId, userId), eq(studentsTable.annee, annee)));
 
-  if (!students.length) { res.json([]); return; }
-
-  const ids = students.map(s => s.id);
+  if (!students.length) { res.set("Cache-Control", "no-store"); res.json([]); return; }
 
   // ── 2. Fetch all grades for these students ──────────────────────────────────
   const grades = await db.select().from(gradesTable)
@@ -53,7 +53,7 @@ router.get("/sms/alerts", async (req, res): Promise<void> => {
   }
 
   // ── 6. Compute per-student annual average ──────────────────────────────────
-  type AlertReason = "avg_below_10" | "high_absence" | "mustarrak";
+  type AlertReason = "avg_below_10" | "high_absence" | "mustarrak" | "passed";
   interface AlertRow {
     id: string;
     nomPrenom: string;
@@ -75,8 +75,15 @@ router.get("/sms/alerts", async (req, res): Promise<void> => {
 
     if (byTrim && byTrim.size > 0) {
       const trimAvgs: number[] = [];
+      // ✅ FIX: calcWeightedAvg expects a Subject[] array (from
+      // getSubjectsForLevel), not the raw niveau string. Passing the
+      // string directly made the function iterate over its characters
+      // ('3','A','M'), find no matching .key, and always return null —
+      // which meant NO student ever had an annualAvg, and the alerts
+      // list was always empty regardless of real data.
+      const subjects = getSubjectsForLevel(s.niveau as Niveau);
       for (const [, gradeMap] of byTrim) {
-        const avg = calcWeightedAvg(gradeMap, getSubjectsForLevel(s.niveau as Niveau));
+        const avg = calcWeightedAvg(gradeMap, subjects);
         if (avg !== null) trimAvgs.push(avg);
       }
       if (trimAvgs.length > 0) {
@@ -89,6 +96,7 @@ router.get("/sms/alerts", async (req, res): Promise<void> => {
 
     if (annualAvg !== null && annualAvg >= 9.0 && annualAvg < 10.0) reasons.push("mustarrak");
     else if (annualAvg !== null && annualAvg < 10.0) reasons.push("avg_below_10");
+    else if (annualAvg !== null && annualAvg >= 10.0) reasons.push("passed");
 
     if (abs.unjustified >= absThreshold) reasons.push("high_absence");
 
@@ -109,12 +117,14 @@ router.get("/sms/alerts", async (req, res): Promise<void> => {
   }
 
   // Sort: students without phone first, then by annual avg ascending
+  // (weakest students surface first — passing students naturally sort last)
   results.sort((a, b) => {
     if (!a.parentPhone && b.parentPhone) return -1;
     if (a.parentPhone && !b.parentPhone) return 1;
     return (a.annualAvg ?? 99) - (b.annualAvg ?? 99);
   });
 
+  res.set("Cache-Control", "no-store");
   res.json(results);
 });
 
