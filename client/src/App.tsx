@@ -9,7 +9,7 @@ import {
   ClipboardList, GraduationCap, Compass, Database, Settings,
   ChevronDown, FileSpreadsheet, BarChart3, UserX, List, CheckSquare,
   User, BarChart2, CalendarOff, UserCheck, RefreshCw, AlertCircle,
-  TrendingUp, Star, CreditCard, Upload, FileText,
+  TrendingUp, Star, CreditCard, Upload, FileText, Archive,
   CircleArrowRight, CircleDot, Trophy, FileBarChart, Bot, Download,
 } from "lucide-react";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
@@ -21,7 +21,14 @@ import Students from "@/pages/students";
 import Results from "@/pages/results";
 import SubjectsPage from "@/pages/subjects";
 import YearEnd from "@/pages/yearend";
+import YearEndPassed from "@/pages/yearend-passed";
+import YearEndFailed from "@/pages/yearend-failed";
+import YearEndMustarrak from "@/pages/yearend-mustarrak";
+import YearEndRecovery from "@/pages/yearend-recovery";
+import YearEndGuides from "@/pages/yearend-guides";
+import YearEndFinal from "@/pages/yearend-final";
 import ImportPage from "@/pages/import";
+import ArchivePage from "@/pages/archive";
 import SettingsPage from "@/pages/settings";
 import BEMPage from "@/pages/bem";
 import ExamResultsPage from "@/pages/exam-results";
@@ -92,9 +99,13 @@ const SECTIONS: SectionDef[] = [
     id: "yearend", icon: GraduationCap, labelKey: "nav.yearend_section",
     color: "text-emerald-400", gradient: "from-emerald-500 to-green-700",
     items: [
-      { href: "/yearend",        icon: CheckSquare, labelKey: "nav.yearend"     },
-      { href: "/yearend/passed", icon: CheckSquare, labelKey: "nav.passed_list" },
-      { href: "/yearend/failed", icon: UserX,       labelKey: "nav.failed_list" },
+      { href: "/yearend",              icon: CheckSquare,      labelKey: "nav.yearend"          },
+      { href: "/yearend/passed",       icon: Users,            labelKey: "nav.passed_list"      },
+      { href: "/yearend/failed",       icon: AlertCircle,      labelKey: "nav.failed_list"      },
+      { href: "/yearend/mustarrak",    icon: RefreshCw,        labelKey: "nav.mustarrak_list"   },
+      { href: "/yearend/recovery",     icon: BarChart2,        labelKey: "nav.recovery_results" },
+      { href: "/yearend/guides",       icon: Compass,          labelKey: "nav.guides_list"      },
+      { href: "/yearend/final",        icon: ClipboardList,    labelKey: "nav.final_list"       },
     ],
   },
   {
@@ -128,8 +139,9 @@ const SECTIONS: SectionDef[] = [
     id: "data", icon: Database, labelKey: "nav.data_section",
     color: "text-sky-400", gradient: "from-sky-500 to-cyan-700",
     items: [
-      { href: "/import", icon: FileSpreadsheet, labelKey: "nav.import" },
-      { href: "/agent",  icon: Bot,             labelKey: "nav.agent"  },
+      { href: "/import",   icon: FileSpreadsheet, labelKey: "nav.import"   },
+      { href: "/archive",  icon: Archive,          labelKey: "nav.archive"  },
+      { href: "/agent",    icon: Bot,              labelKey: "nav.agent"    },
     ],
   },
   {
@@ -526,8 +538,12 @@ function AppLayout() {
               <Route path="/councils"            component={CouncilsPage} />
               <Route path="/bem"                 component={BEMPage} />
               <Route path="/yearend"             component={YearEnd} />
-              <Route path="/yearend/passed">{() => <YearEnd />}</Route>
-              <Route path="/yearend/failed">{() => <YearEnd />}</Route>
+              <Route path="/yearend/passed"     component={YearEndPassed} />
+              <Route path="/yearend/failed"     component={YearEndFailed} />
+              <Route path="/yearend/mustarrak"  component={YearEndMustarrak} />
+              <Route path="/yearend/recovery"   component={YearEndRecovery} />
+              <Route path="/yearend/guides"     component={YearEndGuides} />
+              <Route path="/yearend/final"      component={YearEndFinal} />
               <Route path="/analytics"           component={AnalyticsPage} />
               <Route path="/reports"             component={ReportsPage} />
               <Route path="/subscription"        component={SubscriptionPage} />
@@ -541,6 +557,7 @@ function AppLayout() {
               <Route path="/orientation">{() => <ComingSoon title="التوجيه النهائي" />}</Route>
               <Route path="/assistant"           component={AssistantPage} />
               <Route path="/import"              component={ImportPage} />
+              <Route path="/archive"            component={ArchivePage} />
               <Route path="/agent"               component={AgentSetupPage} />
               <Route path="/settings"            component={SettingsPage} />
               <Route path="/account">{() => <SettingsPage />}</Route>
