@@ -11,6 +11,9 @@ import assistantRouter from "./assistant.js";
 import orientationRouter from "./orientation.js";
 import agentRouter from "./agent.js";
 import documentsRouter from "./documents.js";
+import substitutionRouter from "./substitution.js";
+import classBalancerRouter from "./classBalancer.js";
+import qrRouter from "./qr.js";
 
 const router: IRouter = Router();
 
@@ -26,5 +29,8 @@ router.use(assistantRouter);
 router.use(orientationRouter);
 router.use(agentRouter);
 router.use(documentsRouter);
+router.use(substitutionRouter);
+router.use(classBalancerRouter);
+router.use(qrRouter);
 
 export default router;
