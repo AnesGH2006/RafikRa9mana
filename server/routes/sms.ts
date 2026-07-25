@@ -3,6 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, studentsTable, gradesTable, absencesTable } from "../../shared/db.js";
 import { getSubjectsForLevel, calcWeightedAvg } from "../../shared/subjects.js";
 import type { Niveau } from "../../shared/types.js";
+import { sendSmsAlertTool } from "../lib/tools/send-sms-alert.js";
 
 const router: IRouter = Router();
 
@@ -75,12 +76,6 @@ router.get("/sms/alerts", async (req, res): Promise<void> => {
 
     if (byTrim && byTrim.size > 0) {
       const trimAvgs: number[] = [];
-      // ✅ FIX: calcWeightedAvg expects a Subject[] array (from
-      // getSubjectsForLevel), not the raw niveau string. Passing the
-      // string directly made the function iterate over its characters
-      // ('3','A','M'), find no matching .key, and always return null —
-      // which meant NO student ever had an annualAvg, and the alerts
-      // list was always empty regardless of real data.
       const subjects = getSubjectsForLevel(s.niveau as Niveau);
       for (const [, gradeMap] of byTrim) {
         const avg = calcWeightedAvg(gradeMap, subjects);
@@ -116,8 +111,6 @@ router.get("/sms/alerts", async (req, res): Promise<void> => {
     }
   }
 
-  // Sort: students without phone first, then by annual avg ascending
-  // (weakest students surface first — passing students naturally sort last)
   results.sort((a, b) => {
     if (!a.parentPhone && b.parentPhone) return -1;
     if (a.parentPhone && !b.parentPhone) return 1;
@@ -152,6 +145,40 @@ router.patch("/students/:id/phone", async (req, res): Promise<void> => {
 
   if (!updated) { res.status(404).json({ error: "Student not found" }); return; }
   res.json({ success: true, parentPhone: updated.parentPhone });
+});
+
+// ── POST /api/sms/send ────────────────────────────────────────────────────────
+// Actually dispatches the SMS server-side, instead of relying on the client's
+// `sms:` protocol link — which only works on phones and does nothing on a
+// desktop/PC browser (no default SMS app to hand off to). This reuses the
+// exact same dispatch logic (gateway → modem fallback, logged to
+// smsLogsTable) already built for the AI assistant's send_sms_alert_tool,
+// so behavior stays identical whether the SMS is triggered from this page
+// or from the assistant chat.
+router.post("/sms/send", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const { studentId, message, phone } = req.body as {
+    studentId?: string;
+    message?: string;
+    phone?: string;
+  };
+
+  if (!studentId || !message || !message.trim()) {
+    res.status(400).json({ success: false, message: "بيانات ناقصة: المعرّف والرسالة مطلوبان" });
+    return;
+  }
+
+  try {
+    const result = await sendSmsAlertTool(
+      { student_id: studentId, message: message.trim(), custom_phone: phone || undefined },
+      userId,
+    );
+    res.json(result);
+  } catch (err: any) {
+    req.log?.error?.({ err }, "sms/send failed");
+    res.status(500).json({ success: false, message: err?.message || "فشل إرسال الرسالة" });
+  }
 });
 
 export default router;

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageSquare, Phone, AlertCircle, TrendingDown, TrendingUp,
   Clock, CheckCheck, Copy, Send, Save, RefreshCw,
-  Filter, ChevronLeft, X, Edit3, Search,
+  Filter, ChevronLeft, X, Edit3, Search, Loader2,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL;
@@ -81,6 +81,7 @@ function ReasonBadge({ reason }: { reason: AlertReason }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 type FilterType = "all" | AlertReason;
+type SendState = "idle" | "sending" | "sent" | "error";
 
 export default function SmsPage() {
   const [annee, setAnnee] = useState("2025-2026");
@@ -94,6 +95,10 @@ export default function SmsPage() {
   const [activeReason, setActiveReason] = useState<AlertReason | null>(null);
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // Server-side send state
+  const [sendState, setSendState] = useState<SendState>("idle");
+  const [sendResultMsg, setSendResultMsg] = useState<string | null>(null);
 
   // Phone editing
   const [phoneEdit, setPhoneEdit] = useState<Record<string, string>>({});
@@ -109,7 +114,6 @@ export default function SmsPage() {
       if (res.ok) {
         const data: AlertStudent[] = await res.json();
         setStudents(data);
-        // Pre-fill phone edit fields for students without phones
         const edits: Record<string, string> = {};
         data.forEach(s => { if (!s.parentPhone) edits[s.id] = ""; });
         setPhoneEdit(prev => ({ ...edits, ...prev }));
@@ -126,15 +130,18 @@ export default function SmsPage() {
   useEffect(() => {
     if (!selected || !activeReason) { setMessage(""); return; }
     setMessage(buildMessage(activeReason, selected));
+    setSendState("idle");
+    setSendResultMsg(null);
   }, [selected, activeReason]);
 
   const handleSelect = (s: AlertStudent) => {
     setSelected(s);
-    // Auto-pick highest-priority reason (issues first, then congratulations)
     const priority: AlertReason[] = ["avg_below_10", "mustarrak", "high_absence", "passed"];
     const first = priority.find(r => s.reasons.includes(r)) ?? s.reasons[0] ?? null;
     setActiveReason(first);
     setCopied(false);
+    setSendState("idle");
+    setSendResultMsg(null);
   };
 
   // ── Save phone ──────────────────────────────────────────────────────────────
@@ -150,7 +157,6 @@ export default function SmsPage() {
       });
       if (res.ok) {
         setPhoneSaved(p => ({ ...p, [studentId]: true }));
-        // Update local state
         setStudents(prev => prev.map(s =>
           s.id === studentId ? { ...s, parentPhone: phone } : s
         ));
@@ -163,7 +169,7 @@ export default function SmsPage() {
     setPhoneSaving(p => ({ ...p, [studentId]: false }));
   };
 
-  // ── Copy / SMS link ─────────────────────────────────────────────────────────
+  // ── Copy ────────────────────────────────────────────────────────────────────
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message);
     setCopied(true);
@@ -174,9 +180,39 @@ export default function SmsPage() {
     ? (selected.parentPhone || (phoneEdit[selected.id] ?? "").trim() || null)
     : null;
 
-  const smsHref = effectivePhone
-    ? `sms:${effectivePhone}${/iPhone|iPad/.test(navigator.userAgent) ? "&" : "?"}body=${encodeURIComponent(message)}`
-    : "#";
+  // ── Send via server (works on desktop — dispatches through the SMS
+  //    gateway or the connected desktop agent's modem, same path used by
+  //    the AI assistant's send_sms_alert_tool) ─────────────────────────────
+  const handleSendNow = async () => {
+    if (!selected || !message.trim() || !effectivePhone) return;
+    setSendState("sending");
+    setSendResultMsg(null);
+    try {
+      const res = await fetch(`${BASE}api/sms/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: selected.id,
+          message: message.trim(),
+          // Only send phone override if it differs from what's already
+          // stored — otherwise let the server use the saved parentPhone.
+          phone: selected.parentPhone ? undefined : effectivePhone,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setSendState("sent");
+        setSendResultMsg(data.message || "تم إرسال الرسالة بنجاح.");
+        setTimeout(() => setSendState("idle"), 3000);
+      } else {
+        setSendState("error");
+        setSendResultMsg(data.message || data.error || "فشل إرسال الرسالة.");
+      }
+    } catch (err: any) {
+      setSendState("error");
+      setSendResultMsg(err?.message || "تعذّر الاتصال بالخادم.");
+    }
+  };
 
   // ── Filtering ───────────────────────────────────────────────────────────────
   const filtered = students.filter(s => {
@@ -306,17 +342,20 @@ export default function SmsPage() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm truncate">{s.nomPrenom}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {s.niveau} · الفوج {s.classe}
+                          {/* ✅ FIX: explicit "·" separators so classe and
+                              avg never visually run together (was showing
+                              e.g. "116.38/20" for classe "1" + avg 16.38) */}
+                          <p className="text-xs text-muted-foreground mt-0.5 flex items-center flex-wrap gap-x-1.5">
+                            <span>{s.niveau} · الفوج {s.classe}</span>
                             {s.annualAvg !== null && (
-                              <span className={`mr-2 font-mono font-semibold ${
+                              <span className={`font-mono font-semibold ${
                                 s.annualAvg < 9 ? "text-red-400" : s.annualAvg < 10 ? "text-amber-400" : "text-emerald-400"
                               }`}>
-                                {s.annualAvg.toFixed(2)}/20
+                                · {s.annualAvg.toFixed(2)}/20
                               </span>
                             )}
                             {s.unjustifiedHours > 0 && (
-                              <span className="mr-2 text-orange-400">{s.unjustifiedHours}س غياب</span>
+                              <span className="text-orange-400">· {s.unjustifiedHours}س غياب</span>
                             )}
                           </p>
                         </div>
@@ -467,6 +506,24 @@ export default function SmsPage() {
                 />
               </div>
 
+              {/* Send result banner */}
+              <AnimatePresence>
+                {sendResultMsg && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs border ${
+                      sendState === "sent"
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                        : "bg-red-500/10 border-red-500/30 text-red-400"
+                    }`}
+                  >
+                    {sendState === "sent" ? <CheckCheck className="h-3.5 w-3.5 shrink-0" /> : <AlertCircle className="h-3.5 w-3.5 shrink-0" />}
+                    <span className="flex-1">{sendResultMsg}</span>
+                    <button onClick={() => setSendResultMsg(null)} className="hover:opacity-70">✕</button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Actions */}
               <div className="flex gap-2">
                 <button
@@ -479,23 +536,32 @@ export default function SmsPage() {
                     : <><Copy className="h-4 w-4" /> نسخ</>}
                 </button>
 
-                <a
-                  href={message.trim() && effectivePhone ? smsHref : undefined}
-                  onClick={e => { if (!message.trim() || !effectivePhone) e.preventDefault(); }}
+                {/* ✅ Replaces the sms: link (desktop-incompatible) with a
+                    real server-side send — works identically on PC. */}
+                <button
+                  onClick={handleSendNow}
+                  disabled={!message.trim() || !effectivePhone || sendState === "sending"}
                   className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
-                    message.trim() && effectivePhone
+                    message.trim() && effectivePhone && sendState !== "sending"
                       ? "bg-gradient-to-l from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/30 hover:opacity-90"
                       : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
                   }`}
                 >
-                  <Send className="h-4 w-4" />
-                  {effectivePhone ? "فتح تطبيق الرسائل" : "أدخل رقم الهاتف أولاً"}
-                </a>
+                  {sendState === "sending" ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> جارٍ الإرسال...</>
+                  ) : sendState === "sent" ? (
+                    <><CheckCheck className="h-4 w-4" /> تم الإرسال</>
+                  ) : !effectivePhone ? (
+                    <><Send className="h-4 w-4" /> أدخل رقم الهاتف أولاً</>
+                  ) : (
+                    <><Send className="h-4 w-4" /> إرسال الرسالة الآن</>
+                  )}
+                </button>
               </div>
 
               {/* Tip */}
               <p className="text-xs text-muted-foreground text-center">
-                سيفتح تطبيق الرسائل في هاتفك مع الرقم والنص جاهزَين — أنت تؤكد الإرسال
+                يتم إرسال الرسالة مباشرةً عبر السيرفر (بوابة SMS أو وكيل سطح المكتب) — لا حاجة لهاتف
               </p>
             </div>
           )}
