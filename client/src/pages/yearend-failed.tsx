@@ -3,7 +3,12 @@ import { motion } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Printer, AlertCircle, Users } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Printer, AlertCircle, Users, TrendingDown } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+} from "recharts";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
@@ -17,6 +22,19 @@ interface StudentResult {
 
 const LEVEL_LABELS: Record<string, string> = { "1AM": "1م", "2AM": "2م", "3AM": "3م", "4AM": "4م" };
 const LEVEL_COLORS: Record<string, string> = { "1AM": "#6366f1", "2AM": "#8b5cf6", "3AM": "#a855f7", "4AM": "#d946ef" };
+const LEVEL_COLOR_ARR = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
+
+function MiniTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-background/95 border rounded-lg shadow-xl p-2.5 text-xs backdrop-blur-sm">
+      {label && <p className="font-bold mb-1">{label}</p>}
+      {payload.map((p: any, i: number) => (
+        <p key={i} style={{ color: p.color || p.fill }} className="font-semibold">{p.name}: {p.value}</p>
+      ))}
+    </div>
+  );
+}
 
 export default function YearEndFailed() {
   const [results, setResults] = useState<StudentResult[]>([]);
@@ -42,6 +60,27 @@ export default function YearEndFailed() {
 
   const classes = [...new Set(results.map(r => r.student.classe))].sort();
   const redoublants = failed.filter(r => r.student.statut === "redoublant").length;
+  const males   = failed.filter(r => r.student.sexe === "M").length;
+  const females = failed.length - males;
+
+  // Charts
+  const byLevel = ["1AM","2AM","3AM","4AM"]
+    .map((niv, i) => ({
+      name: LEVEL_LABELS[niv] ?? niv,
+      راسب: failed.filter(r => r.student.niveau === niv).length,
+      fill: LEVEL_COLOR_ARR[i],
+    }))
+    .filter(d => d.راسب > 0);
+
+  const statutData = [
+    { name: "جديد", value: failed.length - redoublants, fill: "#64748b" },
+    { name: "معيد", value: redoublants, fill: "#f97316" },
+  ].filter(d => d.value > 0);
+
+  const genderData = [
+    { name: "ذكور", value: males, fill: "#3b82f6" },
+    { name: "إناث", value: females, fill: "#ec4899" },
+  ].filter(d => d.value > 0);
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="p-6 max-w-7xl mx-auto">
@@ -62,16 +101,94 @@ export default function YearEndFailed() {
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: "إجمالي الراسبين", value: failed.length, color: "from-red-500 to-rose-600" },
-          { label: "معيدون", value: redoublants, color: "from-orange-500 to-amber-600" },
-          { label: "جدد", value: failed.length - redoublants, color: "from-slate-500 to-slate-600" },
-        ].map(({ label, value, color }) => (
+          { label: "إجمالي الراسبين", value: failed.length, color: "from-red-500 to-rose-600", icon: Users },
+          { label: "معيدون", value: redoublants, color: "from-orange-500 to-amber-600", icon: TrendingDown },
+          { label: "جدد", value: failed.length - redoublants, color: "from-slate-500 to-slate-600", icon: AlertCircle },
+        ].map(({ label, value, color, icon: Icon }) => (
           <div key={label} className={`rounded-xl p-4 bg-gradient-to-br ${color} text-white shadow-lg`}>
-            <p className="text-white/70 text-xs font-semibold">{label}</p>
-            <p className="text-3xl font-extrabold mt-1">{value}</p>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-white/70 text-xs font-semibold">{label}</p>
+              <Icon className="w-4 h-4 text-white/60" />
+            </div>
+            <p className="text-3xl font-extrabold">{value}</p>
           </div>
         ))}
       </div>
+
+      {/* Charts row */}
+      {failed.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 print:hidden">
+          {/* By level */}
+          {byLevel.length > 0 && (
+            <Card className="border-0 bg-card/80 shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500" />الراسبون حسب المستوى
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={byLevel} barSize={28}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip content={<MiniTooltip />} />
+                    <Bar dataKey="راسب" radius={[6, 6, 0, 0]}>
+                      {byLevel.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Statut pie */}
+          {statutData.length > 0 && (
+            <Card className="border-0 bg-card/80 shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-orange-500" />جديد / معيد
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie data={statutData} cx="50%" cy="50%" innerRadius={42} outerRadius={64}
+                      paddingAngle={4} dataKey="value" animationDuration={600}>
+                      {statutData.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                    </Pie>
+                    <Tooltip content={<MiniTooltip />} />
+                    <Legend iconType="circle" iconSize={8} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Gender pie */}
+          {genderData.length > 0 && (
+            <Card className="border-0 bg-card/80 shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />توزيع الجنس
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie data={genderData} cx="50%" cy="50%" innerRadius={42} outerRadius={64}
+                      paddingAngle={4} dataKey="value" animationDuration={600}>
+                      {genderData.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                    </Pie>
+                    <Tooltip content={<MiniTooltip />} />
+                    <Legend iconType="circle" iconSize={8} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-3 mb-4 print:hidden">
         <Select value={annee} onValueChange={setAnnee}>

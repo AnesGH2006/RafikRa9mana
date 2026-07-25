@@ -21,6 +21,8 @@ export interface SchoolInfo {
   annee: string;
   directeur?: string | null;
   phone?: string | null;
+  smsGatewayUrl?: string | null;
+  smsGatewayApiKey?: string | null;
 }
 
 export type Niveau = "1AM" | "2AM" | "3AM" | "4AM";

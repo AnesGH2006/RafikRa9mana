@@ -1,9 +1,14 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Printer, Download, Users, Trophy, TrendingUp, Medal } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Printer, Users, Trophy, TrendingUp, Medal } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+} from "recharts";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
@@ -17,12 +22,26 @@ interface StudentResult {
 
 const LEVEL_LABELS: Record<string, string> = { "1AM": "1م", "2AM": "2م", "3AM": "3م", "4AM": "4م" };
 const LEVEL_COLORS: Record<string, string> = { "1AM": "#6366f1", "2AM": "#8b5cf6", "3AM": "#a855f7", "4AM": "#d946ef" };
+const LEVEL_COLOR_ARR = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
+const GENDER_COLORS = ["#3b82f6", "#ec4899"];
 
 function rankMedal(rank: number) {
   if (rank === 1) return <Trophy className="w-4 h-4 text-amber-400" />;
   if (rank === 2) return <Medal className="w-4 h-4 text-slate-400" />;
   if (rank === 3) return <Medal className="w-4 h-4 text-orange-500" />;
   return <span className="text-xs text-muted-foreground font-bold">{rank}</span>;
+}
+
+function MiniTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-background/95 border rounded-lg shadow-xl p-2.5 text-xs backdrop-blur-sm">
+      {label && <p className="font-bold mb-1">{label}</p>}
+      {payload.map((p: any, i: number) => (
+        <p key={i} style={{ color: p.color || p.fill }} className="font-semibold">{p.name}: {p.value}</p>
+      ))}
+    </div>
+  );
 }
 
 export default function YearEndPassed() {
@@ -50,6 +69,29 @@ export default function YearEndPassed() {
   const classes = [...new Set(results.map(r => r.student.classe))].sort();
   const males = passed.filter(r => r.student.sexe === "M").length;
   const females = passed.length - males;
+
+  // Chart data
+  const byLevel = ["1AM", "2AM", "3AM", "4AM"]
+    .map((niv, i) => ({
+      name: LEVEL_LABELS[niv] ?? niv,
+      ناجح: passed.filter(r => r.student.niveau === niv).length,
+      fill: LEVEL_COLOR_ARR[i],
+    }))
+    .filter(d => d.ناجح > 0);
+
+  const genderData = [
+    { name: "ذكور", value: males, fill: GENDER_COLORS[0] },
+    { name: "إناث", value: females, fill: GENDER_COLORS[1] },
+  ].filter(d => d.value > 0);
+
+  // Average distribution buckets
+  const avgBuckets = [
+    { name: "10-12", count: passed.filter(r => (r.annualAvg ?? 0) >= 10 && (r.annualAvg ?? 0) < 12).length, fill: "#10b981" },
+    { name: "12-14", count: passed.filter(r => (r.annualAvg ?? 0) >= 12 && (r.annualAvg ?? 0) < 14).length, fill: "#3b82f6" },
+    { name: "14-16", count: passed.filter(r => (r.annualAvg ?? 0) >= 14 && (r.annualAvg ?? 0) < 16).length, fill: "#8b5cf6" },
+    { name: "16-18", count: passed.filter(r => (r.annualAvg ?? 0) >= 16 && (r.annualAvg ?? 0) < 18).length, fill: "#f59e0b" },
+    { name: "18-20", count: passed.filter(r => (r.annualAvg ?? 0) >= 18).length, fill: "#ef4444" },
+  ];
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="p-6 max-w-7xl mx-auto">
@@ -79,11 +121,88 @@ export default function YearEndPassed() {
           { label: "إناث", value: females, color: "from-pink-500 to-rose-600", icon: TrendingUp },
         ].map(({ label, value, color, icon: Icon }) => (
           <div key={label} className={`rounded-xl p-4 bg-gradient-to-br ${color} text-white shadow-lg`}>
-            <p className="text-white/70 text-xs font-semibold">{label}</p>
-            <p className="text-3xl font-extrabold mt-1">{value}</p>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-white/70 text-xs font-semibold">{label}</p>
+              <Icon className="w-4 h-4 text-white/60" />
+            </div>
+            <p className="text-3xl font-extrabold">{value}</p>
           </div>
         ))}
       </div>
+
+      {/* Charts row */}
+      {passed.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 print:hidden">
+          {/* By level bar chart */}
+          {byLevel.length > 0 && (
+            <Card className="border-0 bg-card/80 shadow-md col-span-1">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-violet-500" />الناجحون حسب المستوى
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={byLevel} barSize={28}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip content={<MiniTooltip />} />
+                    <Bar dataKey="ناجح" radius={[6, 6, 0, 0]}>
+                      {byLevel.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Gender pie */}
+          {genderData.length > 0 && (
+            <Card className="border-0 bg-card/80 shadow-md col-span-1">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />توزيع الجنس
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie data={genderData} cx="50%" cy="50%" innerRadius={42} outerRadius={64}
+                      paddingAngle={4} dataKey="value" animationDuration={600}>
+                      {genderData.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                    </Pie>
+                    <Tooltip content={<MiniTooltip />} />
+                    <Legend iconType="circle" iconSize={8} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Average distribution */}
+          <Card className="border-0 bg-card/80 shadow-md col-span-1">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />توزيع المعدلات
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={avgBuckets} barSize={24}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip content={<MiniTooltip />} />
+                  <Bar dataKey="count" name="عدد التلاميذ" radius={[4, 4, 0, 0]}>
+                    {avgBuckets.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 print:hidden">

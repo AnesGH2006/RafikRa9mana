@@ -39,6 +39,8 @@ export const schoolInfoTable = pgTable("school_info", {
   annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
   directeur: varchar("directeur", { length: 255 }).default(""),
   phone: varchar("phone", { length: 30 }).default(""),
+  smsGatewayUrl: varchar("sms_gateway_url", { length: 500 }).default(""),
+  smsGatewayApiKey: varchar("sms_gateway_api_key", { length: 500 }).default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -4,18 +4,16 @@
  * Sends an official SMS to a student's parent/guardian.
  *
  * Dispatch priority:
- *   1. HTTP SMS Gateway   — if SMS_GATEWAY_URL is set (any REST gateway: Twilio, Vonage, local server…)
- *   2. Socket modem event — emits `sms:send` to the connected Desktop Agent which
- *                           controls a local USB GSM modem / Android SMS app.
- *   3. Queued log only    — if neither is available, logs the message as "queued"
- *                           so it can be retried later.
+ *   1. HTTP SMS Gateway (env)  — if SMS_GATEWAY_URL is set
+ *   2. HTTP SMS Gateway (DB)   — if school record has smsGatewayUrl configured
+ *   3. Queued log only         — logs the message as "queued" for manual retry
  *
- * In all cases the dispatch is recorded in smsLogsTable.
+ * The desktop-agent modem path has been removed. Parents receive a plain SMS
+ * on their phone — they do not need to install any app.
  */
 
-import { db, studentsTable, smsLogsTable } from "../../../shared/db.js";
+import { db, studentsTable, smsLogsTable, schoolInfoTable } from "../../../shared/db.js";
 import { eq, and } from "drizzle-orm";
-import { sendDesktopCommand } from "../../socket/agentHandler.js";
 import { logger } from "../logger.js";
 
 export interface SendSmsAlertInput {
@@ -34,12 +32,11 @@ async function sendViaGateway(
   to: string,
   message: string,
   senderId: string,
+  gatewayUrl: string,
+  apiKey: string,
 ): Promise<{ ok: boolean; ref?: string; error?: string }> {
-  const url = process.env.SMS_GATEWAY_URL!;
-  const apiKey = process.env.SMS_GATEWAY_API_KEY ?? "";
-
   try {
-    const res = await fetch(url, {
+    const res = await fetch(gatewayUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -55,35 +52,10 @@ async function sendViaGateway(
       return { ok: false, error: `Gateway ${res.status}: ${JSON.stringify(body)}` };
     }
 
-    // Common gateway response fields
     const ref = String(
       body.messageId ?? body.message_id ?? body.id ?? body.sid ?? body.msgid ?? ""
     );
     return { ok: true, ref: ref || undefined };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
-}
-
-// ── Agent modem helper ─────────────────────────────────────────────────────────
-async function sendViaModem(
-  userId: string,
-  to: string,
-  message: string,
-): Promise<{ ok: boolean; ref?: string; error?: string }> {
-  try {
-    const result = await sendDesktopCommand(
-      userId,
-      "send_sms",
-      { to, message },
-      30_000,
-    ) as Record<string, unknown>;
-
-    return {
-      ok: result?.status === "sent" || result?.ok === true,
-      ref: result?.ref ? String(result.ref) : undefined,
-      error: result?.error ? String(result.error) : undefined,
-    };
   } catch (err: any) {
     return { ok: false, error: err.message };
   }
@@ -127,25 +99,49 @@ export async function sendSmsAlertTool(
     return {
       success: false,
       student: studentName,
-      message: `⚠️ لا يوجد رقم هاتف مسجّل لولي أمر "${studentName}". استخدم fetch_parent_contacts_tool لاسترداد الأرقام المفقودة.`,
+      message: `⚠️ لا يوجد رقم هاتف مسجّل لولي أمر "${studentName}".`,
     };
   }
 
-  // ── 3. Dispatch ────────────────────────────────────────────────────────────
-  const hasGateway = !!process.env.SMS_GATEWAY_URL;
-  let channel: "gateway" | "modem" | "socket" = "socket";
-  let dispatchResult: { ok: boolean; ref?: string; error?: string };
+  // ── 3. Resolve gateway (env → school DB → none) ────────────────────────────
+  let gatewayUrl = process.env.SMS_GATEWAY_URL ?? "";
+  let gatewayKey = process.env.SMS_GATEWAY_API_KEY ?? "";
 
-  if (hasGateway) {
-    channel = "gateway";
-    dispatchResult = await sendViaGateway(phone, input.message, senderId);
-  } else {
-    // Try the desktop agent modem
-    channel = "modem";
-    dispatchResult = await sendViaModem(userId, phone, input.message);
+  if (!gatewayUrl) {
+    // Fall back to the school record's configured gateway
+    const [schoolRow] = await db
+      .select({ smsGatewayUrl: schoolInfoTable.smsGatewayUrl, smsGatewayApiKey: schoolInfoTable.smsGatewayApiKey })
+      .from(schoolInfoTable)
+      .where(eq(schoolInfoTable.userId, userId))
+      .limit(1);
+    gatewayUrl = schoolRow?.smsGatewayUrl ?? "";
+    gatewayKey = schoolRow?.smsGatewayApiKey ?? "";
   }
 
-  // ── 4. Log result ──────────────────────────────────────────────────────────
+  // ── 4. Dispatch ────────────────────────────────────────────────────────────
+  let dispatchResult: { ok: boolean; ref?: string; error?: string };
+  const channel: "gateway" | "modem" | "socket" = "gateway";
+
+  if (gatewayUrl) {
+    dispatchResult = await sendViaGateway(phone, input.message, senderId, gatewayUrl, gatewayKey);
+  } else {
+    // No gateway configured — log as queued
+    await db.insert(smsLogsTable).values({
+      userId,
+      studentId: input.student_id,
+      phone,
+      message: input.message,
+      status: "queued",
+    });
+    return {
+      success: false,
+      student: studentName,
+      phone,
+      message: `⚠️ لم يتم إرسال الرسالة إلى "${studentName}": لا توجد بوابة SMS مضبوطة. أدخل رابط بوابة SMS في إعدادات المتوسطة.`,
+    };
+  }
+
+  // ── 5. Log result ──────────────────────────────────────────────────────────
   const status = dispatchResult.ok ? "sent" : "failed";
 
   try {
@@ -172,19 +168,16 @@ export async function sendSmsAlertTool(
       student: studentName,
       phone,
       ref: dispatchResult.ref,
-      message: `✅ تم إرسال رسالة SMS إلى ولي أمر "${studentName}" على الرقم ${phone} عبر ${channel === "gateway" ? "بوابة SMS" : "المودم المحلي"}.`,
+      message: `✅ تم إرسال رسالة SMS إلى ولي أمر "${studentName}" على الرقم ${phone} عبر بوابة SMS.`,
     };
   }
 
-  // Dispatch failed — log as queued for retry
   return {
     success: false,
     channel,
     student: studentName,
     phone,
     error: dispatchResult.error,
-    message: hasGateway
-      ? `❌ فشل إرسال SMS عبر البوابة: ${dispatchResult.error}. تحقق من إعداد SMS_GATEWAY_URL و SMS_GATEWAY_API_KEY.`
-      : `❌ فشل إرسال SMS عبر المودم المحلي: ${dispatchResult.error}. تحقق من اتصال وكيل سطح المكتب.`,
+    message: `❌ فشل إرسال SMS عبر البوابة: ${dispatchResult.error}. تحقق من رابط البوابة في إعدادات المتوسطة.`,
   };
 }

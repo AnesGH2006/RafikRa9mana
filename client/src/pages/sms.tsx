@@ -4,6 +4,7 @@ import {
   MessageSquare, Phone, AlertCircle, TrendingDown, TrendingUp,
   Clock, CheckCheck, Copy, Send, Save, RefreshCw,
   Filter, ChevronLeft, X, Edit3, Search, Loader2,
+  Settings, Globe, Key, ChevronDown, ChevronUp, Wifi, WifiOff,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL;
@@ -90,6 +91,14 @@ export default function SmsPage() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [search, setSearch] = useState("");
 
+  // Gateway config state
+  const [gatewayOpen, setGatewayOpen] = useState(false);
+  const [gatewayUrl, setGatewayUrl]   = useState("");
+  const [gatewayKey, setGatewayKey]   = useState("");
+  const [gatewaySaving, setGatewaySaving] = useState(false);
+  const [gatewaySaved,  setGatewaySaved]  = useState(false);
+  const [gatewayConfigured, setGatewayConfigured] = useState<boolean | null>(null);
+
   // Selected student + compose panel
   const [selected, setSelected] = useState<AlertStudent | null>(null);
   const [activeReason, setActiveReason] = useState<AlertReason | null>(null);
@@ -104,6 +113,53 @@ export default function SmsPage() {
   const [phoneEdit, setPhoneEdit] = useState<Record<string, string>>({});
   const [phoneSaving, setPhoneSaving] = useState<Record<string, boolean>>({});
   const [phoneSaved, setPhoneSaved] = useState<Record<string, boolean>>({});
+
+  // ── Fetch school / gateway config ────────────────────────────────────────────
+  useEffect(() => {
+    fetch(`${BASE}api/school`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then((d: any) => {
+        if (d) {
+          setGatewayUrl(d.smsGatewayUrl ?? "");
+          setGatewayKey(d.smsGatewayApiKey ?? "");
+          setGatewayConfigured(!!(d.smsGatewayUrl));
+        } else {
+          setGatewayConfigured(false);
+        }
+      })
+      .catch(() => setGatewayConfigured(false));
+  }, []);
+
+  const saveGateway = async () => {
+    setGatewaySaving(true);
+    try {
+      // First fetch current school info, then update with gateway fields
+      const schoolRes = await fetch(`${BASE}api/school`, { credentials: "include" });
+      const school = schoolRes.ok ? await schoolRes.json() : null;
+      const body = {
+        nom: school?.nom || "المتوسطة",
+        wilaya: school?.wilaya || "—",
+        commune: school?.commune || "—",
+        annee: school?.annee || "2025-2026",
+        directeur: school?.directeur || "",
+        phone: school?.phone || "",
+        smsGatewayUrl: gatewayUrl.trim(),
+        smsGatewayApiKey: gatewayKey.trim(),
+      };
+      const res = await fetch(`${BASE}api/school`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        setGatewayConfigured(!!gatewayUrl.trim());
+        setGatewaySaved(true);
+        setTimeout(() => setGatewaySaved(false), 2500);
+      }
+    } finally {
+      setGatewaySaving(false);
+    }
+  };
 
   // ── Fetch alerts ────────────────────────────────────────────────────────────
   const fetchAlerts = async () => {
@@ -243,6 +299,89 @@ export default function SmsPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background" dir="rtl">
+
+      {/* ── Gateway config banner ─────────────────────────────────────────── */}
+      <div className={`border-b px-6 py-3 text-sm transition-colors ${
+        gatewayConfigured === false
+          ? "bg-amber-500/5 border-amber-500/20"
+          : gatewayConfigured === true
+          ? "bg-emerald-500/5 border-emerald-500/20"
+          : "bg-muted/30 border-border"
+      }`}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            {gatewayConfigured === true
+              ? <Wifi className="h-4 w-4 text-emerald-400 shrink-0" />
+              : <WifiOff className="h-4 w-4 text-amber-400 shrink-0" />}
+            <span className={gatewayConfigured === true ? "text-emerald-400 font-medium" : "text-amber-400 font-medium"}>
+              {gatewayConfigured === true
+                ? "بوابة SMS مضبوطة — الإرسال يعمل عبر الإنترنت مباشرةً (لا حاجة لتثبيت أي تطبيق)"
+                : "لم تُضبط بوابة SMS — أدخل رابط البوابة أدناه لتفعيل الإرسال"}
+            </span>
+          </div>
+          <button
+            onClick={() => setGatewayOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
+          >
+            <Settings className="h-3.5 w-3.5" />
+            إعداد البوابة
+            {gatewayOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+        </div>
+
+        <AnimatePresence>
+          {gatewayOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-3 p-4 rounded-xl border border-border bg-background space-y-3">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  أدخل رابط أي بوابة SMS متوافقة مع REST API (مثل Twilio أو Vonage أو أي بوابة محلية).
+                  ولي أمر التلميذ يستقبل رسائل SMS عادية على هاتفه دون الحاجة لتثبيت أي تطبيق.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex-1 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                    <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <input
+                      type="url"
+                      value={gatewayUrl}
+                      onChange={e => setGatewayUrl(e.target.value)}
+                      placeholder="https://api.example.com/sms/send"
+                      className="flex-1 bg-transparent text-xs font-mono outline-none placeholder:text-muted-foreground/50"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div className="flex-1 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                    <Key className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <input
+                      type="password"
+                      value={gatewayKey}
+                      onChange={e => setGatewayKey(e.target.value)}
+                      placeholder="API Key (اختياري)"
+                      className="flex-1 bg-transparent text-xs font-mono outline-none placeholder:text-muted-foreground/50"
+                      dir="ltr"
+                    />
+                  </div>
+                  <button
+                    onClick={saveGateway}
+                    disabled={gatewaySaving}
+                    className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs text-white font-semibold hover:bg-emerald-700 disabled:opacity-50 shrink-0"
+                  >
+                    {gatewaySaved
+                      ? <><CheckCheck className="h-3.5 w-3.5" /> تم الحفظ</>
+                      : gatewaySaving
+                      ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      : <><Save className="h-3.5 w-3.5" /> حفظ</>}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="border-b border-border bg-card/50 px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -561,7 +700,7 @@ export default function SmsPage() {
 
               {/* Tip */}
               <p className="text-xs text-muted-foreground text-center">
-                يتم إرسال الرسالة مباشرةً عبر السيرفر (بوابة SMS أو وكيل سطح المكتب) — لا حاجة لهاتف
+                يتم إرسال الرسالة عبر بوابة SMS المضبوطة — لا حاجة لأي تطبيق لدى ولي الأمر
               </p>
             </div>
           )}

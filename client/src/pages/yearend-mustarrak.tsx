@@ -3,7 +3,12 @@ import { motion } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Printer, RefreshCw } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Printer, RefreshCw, Users, TrendingUp } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+} from "recharts";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
@@ -17,6 +22,19 @@ interface StudentResult {
 
 const LEVEL_LABELS: Record<string, string> = { "1AM": "1م", "2AM": "2م", "3AM": "3م", "4AM": "4م" };
 const LEVEL_COLORS: Record<string, string> = { "1AM": "#6366f1", "2AM": "#8b5cf6", "3AM": "#a855f7", "4AM": "#d946ef" };
+const LEVEL_COLOR_ARR = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
+
+function MiniTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-background/95 border rounded-lg shadow-xl p-2.5 text-xs backdrop-blur-sm">
+      {label && <p className="font-bold mb-1">{label}</p>}
+      {payload.map((p: any, i: number) => (
+        <p key={i} style={{ color: p.color || p.fill }} className="font-semibold">{p.name}: {p.value}</p>
+      ))}
+    </div>
+  );
+}
 
 export default function YearEndMustarrak() {
   const [results, setResults] = useState<StudentResult[]>([]);
@@ -43,10 +61,34 @@ export default function YearEndMustarrak() {
 
   const classes = [...new Set(results.map(r => r.student.classe))].sort();
 
-  // Gap to passing per student
   const avgGap = mustarrak.length > 0
     ? (mustarrak.reduce((s, r) => s + (10 - (r.annualAvg ?? 0)), 0) / mustarrak.length).toFixed(2)
     : null;
+
+  const males   = mustarrak.filter(r => r.student.sexe === "M").length;
+  const females = mustarrak.length - males;
+
+  // Charts
+  const byLevel = ["1AM","2AM","3AM","4AM"]
+    .map((niv, i) => ({
+      name: LEVEL_LABELS[niv] ?? niv,
+      مستدرك: mustarrak.filter(r => r.student.niveau === niv).length,
+      fill: LEVEL_COLOR_ARR[i],
+    }))
+    .filter(d => d.مستدرك > 0);
+
+  const genderData = [
+    { name: "ذكور", value: males, fill: "#3b82f6" },
+    { name: "إناث", value: females, fill: "#ec4899" },
+  ].filter(d => d.value > 0);
+
+  // Gap distribution
+  const gapBuckets = [
+    { name: "0.01-0.25", count: mustarrak.filter(r => (10-(r.annualAvg??0)) <= 0.25).length, fill: "#f59e0b" },
+    { name: "0.25-0.5",  count: mustarrak.filter(r => (10-(r.annualAvg??0)) > 0.25 && (10-(r.annualAvg??0)) <= 0.5).length, fill: "#f97316" },
+    { name: "0.5-0.75",  count: mustarrak.filter(r => (10-(r.annualAvg??0)) > 0.5  && (10-(r.annualAvg??0)) <= 0.75).length, fill: "#ef4444" },
+    { name: "0.75-1",    count: mustarrak.filter(r => (10-(r.annualAvg??0)) > 0.75).length, fill: "#dc2626" },
+  ];
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="p-6 max-w-7xl mx-auto">
@@ -67,16 +109,90 @@ export default function YearEndMustarrak() {
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: "إجمالي المستدركين", value: mustarrak.length, color: "from-amber-500 to-orange-600" },
-          { label: "ذكور", value: mustarrak.filter(r => r.student.sexe === "M").length, color: "from-blue-500 to-blue-600" },
-          { label: "متوسط الفجوة عن النجاح", value: avgGap ? `${avgGap} نقطة` : "—", color: "from-slate-500 to-slate-600" },
-        ].map(({ label, value, color }) => (
+          { label: "إجمالي المستدركين", value: mustarrak.length, color: "from-amber-500 to-orange-600", icon: Users },
+          { label: "ذكور", value: males, color: "from-blue-500 to-blue-600", icon: TrendingUp },
+          { label: "متوسط الفجوة عن 10", value: avgGap ? `${avgGap} نقطة` : "—", color: "from-slate-500 to-slate-600", icon: RefreshCw },
+        ].map(({ label, value, color, icon: Icon }) => (
           <div key={label} className={`rounded-xl p-4 bg-gradient-to-br ${color} text-white shadow-lg`}>
-            <p className="text-white/70 text-xs font-semibold">{label}</p>
-            <p className="text-3xl font-extrabold mt-1">{value}</p>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-white/70 text-xs font-semibold">{label}</p>
+              <Icon className="w-4 h-4 text-white/60" />
+            </div>
+            <p className="text-3xl font-extrabold">{value}</p>
           </div>
         ))}
       </div>
+
+      {/* Charts */}
+      {mustarrak.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 print:hidden">
+          {byLevel.length > 0 && (
+            <Card className="border-0 bg-card/80 shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />المستدركون حسب المستوى
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={byLevel} barSize={28}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip content={<MiniTooltip />} />
+                    <Bar dataKey="مستدرك" radius={[6, 6, 0, 0]}>
+                      {byLevel.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {genderData.length > 0 && (
+            <Card className="border-0 bg-card/80 shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />توزيع الجنس
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie data={genderData} cx="50%" cy="50%" innerRadius={42} outerRadius={64}
+                      paddingAngle={4} dataKey="value" animationDuration={600}>
+                      {genderData.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                    </Pie>
+                    <Tooltip content={<MiniTooltip />} />
+                    <Legend iconType="circle" iconSize={8} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="border-0 bg-card/80 shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-orange-500" />توزيع الفجوة عن 10
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={gapBuckets} barSize={24}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
+                  <XAxis dataKey="name" tick={{ fontSize: 9 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip content={<MiniTooltip />} />
+                  <Bar dataKey="count" name="تلاميذ" radius={[4, 4, 0, 0]}>
+                    {gapBuckets.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="flex gap-3 mb-4 print:hidden">
         <Select value={annee} onValueChange={setAnnee}>
@@ -134,13 +250,13 @@ export default function YearEndMustarrak() {
                       {a !== null ? a.toFixed(2) : "—"}
                     </td>
                   ))}
-                  <td className="px-3 py-2.5 font-bold font-mono text-amber-600 dark:text-amber-400 text-base">
-                    {r.annualAvg?.toFixed(2)}
+                  <td className="px-3 py-2.5">
+                    <span className="font-bold font-mono text-amber-500 text-base">{r.annualAvg?.toFixed(2)}</span>
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">
+                    <Badge variant="outline" className="text-xs font-mono border-amber-500/40 text-amber-500">
                       -{gap}
-                    </span>
+                    </Badge>
                   </td>
                 </motion.tr>
               );
@@ -148,7 +264,9 @@ export default function YearEndMustarrak() {
           </tbody>
         </table>
       </div>
-      {mustarrak.length > 0 && <p className="text-xs text-muted-foreground mt-3 text-end">إجمالي: {mustarrak.length} تلميذ مستدرك</p>}
+      {mustarrak.length > 0 && (
+        <p className="text-xs text-muted-foreground mt-3 text-end">إجمالي: {mustarrak.length} تلميذ مستدرك</p>
+      )}
     </motion.div>
   );
 }

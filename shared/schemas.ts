@@ -38,6 +38,8 @@ export const SchoolInfoSchema = zod.object({
   annee: zod.string(),
   directeur: zod.string().nullable().optional(),
   phone: zod.string().nullable().optional(),
+  smsGatewayUrl: zod.string().nullable().optional(),
+  smsGatewayApiKey: zod.string().nullable().optional(),
 });
 
 export const UpsertSchoolInfoBody = zod.object({
@@ -47,6 +49,8 @@ export const UpsertSchoolInfoBody = zod.object({
   annee: zod.string().min(1),
   directeur: zod.string().optional(),
   phone: zod.string().optional(),
+  smsGatewayUrl: zod.string().optional(),
+  smsGatewayApiKey: zod.string().optional(),
 });
 
 export const NiveauEnum = zod.enum(["1AM", "2AM", "3AM", "4AM"]);

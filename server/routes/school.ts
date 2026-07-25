@@ -14,15 +14,21 @@ router.get("/school", async (req, res): Promise<void> => {
 });
 
 router.put("/school", async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Invalid data", details: [] }); return; }
   const parsed = UpsertSchoolInfoBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid data", details: parsed.error.issues }); return; }
 
   const userId = req.user!.id;
-  const { nom, wilaya, commune, annee, directeur, phone } = parsed.data;
+  const { nom, wilaya, commune, annee, directeur, phone, smsGatewayUrl, smsGatewayApiKey } = parsed.data;
   const [existing] = await db.select().from(schoolInfoTable).where(eq(schoolInfoTable.userId, userId));
 
-  const vals = { nom, wilaya, commune, annee, directeur: directeur ?? "", phone: phone ?? "" };
+  const vals = {
+    nom, wilaya, commune, annee,
+    directeur: directeur ?? "",
+    phone: phone ?? "",
+    smsGatewayUrl: smsGatewayUrl ?? "",
+    smsGatewayApiKey: smsGatewayApiKey ?? "",
+  };
 
   if (existing) {
     const [updated] = await db.update(schoolInfoTable)
