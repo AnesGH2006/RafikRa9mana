@@ -9,7 +9,7 @@ import {
   ClipboardList, GraduationCap, Compass, Database, Settings,
   ChevronDown, FileSpreadsheet, BarChart3, UserX, List, CheckSquare,
   User, BarChart2, CalendarOff, UserCheck, RefreshCw, AlertCircle,
-  TrendingUp, Star, CreditCard, Upload, FileText, Archive,
+  TrendingUp, Star, CreditCard, Upload, FileText, Archive, MessageSquare,
   CircleArrowRight, CircleDot, Trophy, FileBarChart, Bot, Download,
 } from "lucide-react";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
@@ -29,6 +29,7 @@ import YearEndGuides from "@/pages/yearend-guides";
 import YearEndFinal from "@/pages/yearend-final";
 import ImportPage from "@/pages/import";
 import ArchivePage from "@/pages/archive";
+import SmsPage from "@/pages/sms";
 import SettingsPage from "@/pages/settings";
 import BEMPage from "@/pages/bem";
 import ExamResultsPage from "@/pages/exam-results";
@@ -141,6 +142,7 @@ const SECTIONS: SectionDef[] = [
     items: [
       { href: "/import",   icon: FileSpreadsheet, labelKey: "nav.import"   },
       { href: "/archive",  icon: Archive,          labelKey: "nav.archive"  },
+      { href: "/sms",      icon: MessageSquare,    labelKey: "nav.sms"      },
       { href: "/agent",    icon: Bot,              labelKey: "nav.agent"    },
     ],
   },
@@ -558,6 +560,7 @@ function AppLayout() {
               <Route path="/assistant"           component={AssistantPage} />
               <Route path="/import"              component={ImportPage} />
               <Route path="/archive"            component={ArchivePage} />
+              <Route path="/sms"                component={SmsPage} />
               <Route path="/agent"               component={AgentSetupPage} />
               <Route path="/settings"            component={SettingsPage} />
               <Route path="/account">{() => <SettingsPage />}</Route>
