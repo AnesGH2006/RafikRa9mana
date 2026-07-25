@@ -76,7 +76,7 @@ router.get("/sms/alerts", async (req, res): Promise<void> => {
     if (byTrim && byTrim.size > 0) {
       const trimAvgs: number[] = [];
       for (const [, gradeMap] of byTrim) {
-        const avg = calcWeightedAvg(gradeMap, s.niveau as Niveau);
+        const avg = calcWeightedAvg(gradeMap, getSubjectsForLevel(s.niveau as Niveau));
         if (avg !== null) trimAvgs.push(avg);
       }
       if (trimAvgs.length > 0) {
