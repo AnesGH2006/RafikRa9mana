@@ -270,68 +270,57 @@ function SidebarSection({ section, loc, onItemClick }: {
   );
 }
 
-// ── Sidebar ───────────────────────────────────────────────────────────────────
-function Sidebar({ onClose }: { onClose?: () => void }) {
+// ── Mobile Sidebar Content (drawer) ──────────────────────────────────────────
+function MobileSidebarContent({ onClose }: { onClose: () => void }) {
   const { user, logout } = useAuth();
   const { t } = useLanguage();
   const [loc] = useLocation();
+  const [importOpen, setImportOpen] = useState(false);
 
   return (
     <div className="flex flex-col h-full sidebar-mesh text-white overflow-hidden">
-      {/* Logo */}
-      <motion.div className="px-4 py-3.5 border-b border-white/[0.06] flex items-center justify-between shrink-0"
-        initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-        <div className="flex items-center gap-3">
-          <motion.div
-            className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0"
-            style={{ boxShadow: "0 0 16px 2px rgba(79,120,255,0.45), 0 4px 12px rgba(0,0,0,0.35)" }}
-            whileHover={{ rotate: 8, scale: 1.08 }} transition={{ type: "spring", stiffness: 300 }}
-          >
-            <BookOpen className="w-4 h-4 text-white" />
-          </motion.div>
-          <div>
-            <p className="font-extrabold text-[13px] leading-tight bg-gradient-to-r from-blue-300 via-indigo-200 to-sky-300 bg-clip-text text-transparent">
-              {t("appName")}
-            </p>
-            <p className="text-[9px] text-slate-500 leading-tight mt-0.5">إدارة المتوسطة</p>
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center"
+            style={{ boxShadow: "0 0 12px 2px rgba(79,120,255,0.4)" }}>
+            <BookOpen className="w-3.5 h-3.5 text-white" />
           </div>
+          <span className="font-extrabold text-[13px] bg-gradient-to-r from-blue-300 via-indigo-200 to-sky-300 bg-clip-text text-transparent">
+            {t("appName")}
+          </span>
         </div>
-        {onClose && (
-          <motion.button onClick={onClose} className="text-slate-500 hover:text-slate-200 transition-colors" whileTap={{ scale: 0.9 }}>
-            <X className="w-4 h-4" />
-          </motion.button>
-        )}
-      </motion.div>
-
+        <motion.button onClick={onClose} className="text-slate-500 hover:text-slate-200 transition-colors" whileTap={{ scale: 0.9 }}>
+          <X className="w-4 h-4" />
+        </motion.button>
+      </div>
+      {/* Mobile import */}
+      <div className="px-3 py-2 border-b border-white/[0.06]">
+        <Button size="sm" onClick={() => { setImportOpen(true); onClose(); }}
+          className="w-full gap-1.5 h-8 text-xs font-semibold bg-gradient-to-r from-sky-500 to-blue-600 text-white border-0">
+          <Upload className="w-3.5 h-3.5" />
+          استيراد
+        </Button>
+      </div>
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-2.5 space-y-px scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
         {SECTIONS.map((section, i) => (
           <motion.div key={section.id}
             initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.035, duration: 0.28 }}>
+            transition={{ delay: i * 0.03, duration: 0.25 }}>
             <SidebarSection section={section} loc={loc} onItemClick={onClose} />
           </motion.div>
         ))}
       </nav>
-
-      {/* PWA Install button */}
       <PwaInstallButton />
-
       {/* Upgrade banner */}
-      <motion.div
-        className="mx-2 mb-2 rounded-xl overflow-hidden"
-        style={{ boxShadow: "0 4px 20px rgba(109,40,217,0.30)" }}
-        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
-      >
-        <Link href="/subscription">
+      <div className="mx-2 mb-2 rounded-xl overflow-hidden" style={{ boxShadow: "0 4px 20px rgba(109,40,217,0.30)" }}>
+        <Link href="/subscription" onClick={onClose}>
           <motion.div
             className="bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-700 p-3 cursor-pointer relative overflow-hidden"
-            style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15)" }}
             whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 300 }}
           >
             <div className="absolute -top-6 -end-6 w-20 h-20 rounded-full bg-white/10 blur-2xl" />
-            <div className="absolute bottom-0 start-0 w-full h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
             <div className="flex items-center gap-2.5 relative">
               <div className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
                 <Star className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
@@ -343,34 +332,30 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
             </div>
           </motion.div>
         </Link>
-      </motion.div>
-
+      </div>
       {/* User footer */}
-      <motion.div className="px-2 pb-3 pt-2 border-t border-white/[0.06] shrink-0"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+      <div className="px-2 pb-3 pt-2 border-t border-white/[0.06] shrink-0">
         {user && (
           <div className="flex items-center gap-2 px-3 py-2 mb-1 rounded-lg bg-white/[0.04]">
-            <motion.div whileHover={{ scale: 1.1 }} className="shrink-0">
-              {user.profileImageUrl ? (
-                <img src={user.profileImageUrl} className="w-6 h-6 rounded-full ring-1 ring-white/20" alt="" />
-              ) : (
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-bold"
-                  style={{ boxShadow: "0 0 8px rgba(79,120,255,0.4)" }}>
-                  {(user.firstName?.[0] || user.email?.[0] || "?").toUpperCase()}
-                </div>
-              )}
-            </motion.div>
+            {user.profileImageUrl ? (
+              <img src={user.profileImageUrl} className="w-6 h-6 rounded-full ring-1 ring-white/20" alt="" />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-bold">
+                {(user.firstName?.[0] || user.email?.[0] || "?").toUpperCase()}
+              </div>
+            )}
             <p className="text-[11px] text-slate-400 truncate flex-1">
               {user.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : user.email}
             </p>
           </div>
         )}
-        <motion.button onClick={logout} whileHover={{ x: 2 }} whileTap={{ scale: 0.97 }}
+        <motion.button onClick={() => { logout(); onClose(); }} whileTap={{ scale: 0.97 }}
           className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-slate-500 hover:bg-red-500/10 hover:text-red-400 transition-colors text-[12px]">
           <LogOut className="w-3.5 h-3.5 shrink-0" />
           {t("nav.logout")}
         </motion.button>
-      </motion.div>
+      </div>
+      <QuickImportDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   );
 }
@@ -442,39 +427,179 @@ function ThemeButton() {
   );
 }
 
-// ── Mobile bar ────────────────────────────────────────────────────────────────
-function MobileBar() {
-  const [open, setOpen] = useState(false);
+// ── Top Navigation Bar ────────────────────────────────────────────────────────
+function TopNav() {
+  const { user, logout } = useAuth();
+  const { t } = useLanguage();
+  const [loc] = useLocation();
+  const [openSection, setOpenSection] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+
+  // Auto-open section containing active route
+  useEffect(() => {
+    const active = SECTIONS.find(s => sectionHasActive(s, loc));
+    if (active) setOpenSection(active.id);
+  }, [loc]);
+
+  const activeSection = SECTIONS.find(s => s.id === openSection);
+
   return (
     <>
-      <header className="h-12 border-b bg-background flex items-center justify-between px-4 lg:hidden">
-        <motion.button onClick={() => setOpen(true)} whileTap={{ scale: 0.9 }}>
-          <Menu className="w-5 h-5" />
-        </motion.button>
-        <div className="flex items-center gap-2">
-          <motion.button
-            onClick={() => setImportOpen(true)}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-sky-500 to-blue-600 text-white text-xs font-semibold"
-            whileTap={{ scale: 0.92 }}
-            data-testid="button-mobile-import"
+      {/* Primary nav bar */}
+      <motion.header
+        className="h-12 border-b bg-background/95 backdrop-blur-xl flex items-center gap-0 px-3 shrink-0 z-30 relative"
+        style={{ boxShadow: "0 1px 0 rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)" }}
+        initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+      >
+        {/* Logo */}
+        <Link href="/">
+          <motion.div
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer shrink-0 me-2"
+            whileTap={{ scale: 0.97 }}
           >
-            <Upload className="w-3 h-3" />
-            استيراد
+            <motion.div
+              className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0"
+              style={{ boxShadow: "0 0 12px 2px rgba(79,120,255,0.35)" }}
+              whileHover={{ rotate: 8, scale: 1.08 }} transition={{ type: "spring", stiffness: 300 }}
+            >
+              <BookOpen className="w-3.5 h-3.5 text-white" />
+            </motion.div>
+            <span className="font-extrabold text-[13px] bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent hidden sm:block whitespace-nowrap">
+              {t("appName")}
+            </span>
+          </motion.div>
+        </Link>
+
+        {/* Section buttons — scrollable, desktop only */}
+        <nav className="hidden lg:flex items-center gap-0.5 overflow-x-auto flex-1 scrollbar-none px-1 min-w-0">
+          {SECTIONS.map(section => {
+            const hasActive = sectionHasActive(section, loc);
+            const isOpen = openSection === section.id;
+            return (
+              <motion.button
+                key={section.id}
+                onClick={() => setOpenSection(isOpen ? null : section.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all shrink-0 ${
+                  isOpen || hasActive
+                    ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                }`}
+                whileTap={{ scale: 0.96 }}
+              >
+                <section.icon className={`w-3.5 h-3.5 ${hasActive || isOpen ? section.color : ""}`} />
+                {t(section.labelKey)}
+                <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </motion.div>
+              </motion.button>
+            );
+          })}
+        </nav>
+
+        {/* Right actions */}
+        <div className="flex items-center gap-1.5 ms-auto shrink-0">
+          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} className="hidden sm:block">
+            <Button
+              size="sm"
+              onClick={() => setImportOpen(true)}
+              className="gap-1.5 h-7 text-xs font-semibold bg-gradient-to-r from-sky-500 to-blue-600 text-white border-0 shadow-sm shadow-sky-500/20 hover:from-sky-600 hover:to-blue-700"
+              data-testid="button-header-import"
+            >
+              <Upload className="w-3 h-3" />
+              استيراد
+            </Button>
+          </motion.div>
+          <LangButtons />
+          <ThemeButton />
+          {/* Desktop user avatar + logout */}
+          {user && (
+            <div className="hidden lg:flex items-center gap-1 ms-1">
+              {user.profileImageUrl ? (
+                <img src={user.profileImageUrl} className="w-6 h-6 rounded-full ring-1 ring-border" alt="" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                  {(user.firstName?.[0] || user.email?.[0] || "?").toUpperCase()}
+                </div>
+              )}
+              <motion.button
+                onClick={logout}
+                whileTap={{ scale: 0.97 }}
+                title="تسجيل الخروج"
+                className="p-1 rounded text-muted-foreground hover:text-red-500 transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </motion.button>
+            </div>
+          )}
+          {/* Mobile hamburger */}
+          <motion.button
+            onClick={() => setMobileOpen(true)}
+            className="lg:hidden flex items-center justify-center w-8 h-8 rounded-lg hover:bg-muted/60 transition-colors"
+            whileTap={{ scale: 0.9 }}
+          >
+            <Menu className="w-4 h-4" />
           </motion.button>
-          <LangButtons /><ThemeButton />
         </div>
-      </header>
-      <QuickImportDialog open={importOpen} onOpenChange={setImportOpen} />
+        <QuickImportDialog open={importOpen} onOpenChange={setImportOpen} />
+      </motion.header>
+
+      {/* Secondary nav — sub-items of open section (desktop) */}
       <AnimatePresence>
-        {open && (
+        {activeSection && (
+          <motion.div
+            key={activeSection.id}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18 }}
+            className="hidden lg:block border-b bg-card/70 backdrop-blur shrink-0 z-20 relative overflow-hidden"
+          >
+            <div className="flex items-center gap-0.5 px-4 py-1.5 overflow-x-auto scrollbar-none">
+              {activeSection.items.map(item => {
+                const active = isActive(item.href, loc);
+                return (
+                  <Link key={item.href} href={item.href}>
+                    <motion.div
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap cursor-pointer shrink-0 transition-all ${
+                        active
+                          ? "bg-gradient-to-r from-blue-500/15 to-indigo-500/10 text-blue-700 dark:text-blue-300 font-semibold"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      }`}
+                      whileHover={{ y: -1 }}
+                      whileTap={{ scale: 0.96 }}
+                    >
+                      <item.icon className={`w-3 h-3 shrink-0 ${active ? "text-blue-500" : ""}`} />
+                      {t(item.labelKey)}
+                      {item.badge && (
+                        <span className="text-[9px] px-1 py-0.5 rounded font-bold bg-gradient-to-r from-violet-500 to-purple-600 text-white">
+                          {item.badge}
+                        </span>
+                      )}
+                    </motion.div>
+                  </Link>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Mobile drawer */}
+      <AnimatePresence>
+        {mobileOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden" onClick={() => setOpen(false)} />
-            <motion.div initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }}
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+              onClick={() => setMobileOpen(false)}
+            />
+            <motion.div
+              initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 260 }}
-              className="fixed inset-y-0 start-0 w-64 z-50 lg:hidden shadow-2xl">
-              <Sidebar onClose={() => setOpen(false)} />
+              className="fixed inset-y-0 start-0 w-64 z-50 lg:hidden shadow-2xl"
+            >
+              <MobileSidebarContent onClose={() => setMobileOpen(false)} />
             </motion.div>
           </>
         )}
@@ -501,35 +626,10 @@ function ComingSoon({ title }: { title: string }) {
 // ── App layout ────────────────────────────────────────────────────────────────
 function AppLayout() {
   const [loc] = useLocation();
-  const [importOpen, setImportOpen] = useState(false);
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <aside className="hidden lg:flex w-56 xl:w-60 shrink-0 flex-col border-e border-white/[0.06]"
-        style={{ boxShadow: "2px 0 20px rgba(0,0,0,0.08)" }}>
-        <Sidebar />
-      </aside>
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <MobileBar />
-        {/* Desktop header bar */}
-        <motion.div
-          className="hidden lg:flex items-center justify-end gap-2 px-5 py-2 border-b border-border/60 bg-card/80 backdrop-blur-xl"
-          style={{ boxShadow: "0 1px 0 rgba(255,255,255,0.6), 0 2px 8px rgba(0,0,0,0.04)" }}
-          initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-          <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
-            <Button
-              size="sm"
-              onClick={() => setImportOpen(true)}
-              className="gap-1.5 h-8 text-xs font-semibold bg-gradient-to-r from-sky-500 to-blue-600 text-white border-0 shadow-md shadow-sky-500/30 hover:from-sky-600 hover:to-blue-700"
-              data-testid="button-header-import"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              استيراد
-            </Button>
-          </motion.div>
-          <LangButtons /><ThemeButton />
-        </motion.div>
-        <QuickImportDialog open={importOpen} onOpenChange={setImportOpen} />
-        <main className="flex-1 overflow-y-auto bg-dot-grid">
+    <div className="flex flex-col h-screen overflow-hidden bg-background">
+      <TopNav />
+      <main className="flex-1 overflow-y-auto bg-dot-grid">
           <AnimatePresence mode="wait" initial={false}>
             <Switch key={loc}>
               <Route path="/"                    component={Dashboard} />
@@ -574,8 +674,7 @@ function AppLayout() {
               <Route component={NotFound} />
             </Switch>
           </AnimatePresence>
-        </main>
-      </div>
+      </main>
     </div>
   );
 }

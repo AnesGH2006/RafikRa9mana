@@ -3,7 +3,7 @@ type TranslationMap = {
 };
 
 export const translations: TranslationMap = {
-  appName: { en: "CEM Manager", ar: "مدير المتوسطة", fr: "Gestionnaire CEM" },
+  appName: { en: "رفيق الرقمنة", ar: "رفيق الرقمنة", fr: "رفيق الرقمنة" },
 
   // Sidebar sections
   "nav.students_section": { en: "Students", ar: "التلاميذ", fr: "Élèves" },

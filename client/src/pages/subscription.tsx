@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/language-provider";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, Zap, Star, Crown, Calendar } from "lucide-react";
+import { Check, Zap, Star, Crown, Calendar, Leaf, Building2 } from "lucide-react";
 
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
@@ -13,54 +13,96 @@ const pageVariants = {
 
 export default function SubscriptionPage() {
   const { t } = useLanguage();
-  const [premiumBilling, setPremiumBilling] = useState<"year" | "quarter">("year");
 
   const plans = [
     {
       key: "free",
-      name: t("sub.free"),
+      name: "مجاني",
       price: "0",
       priceNote: null,
       period: null,
-      icon: Star,
+      icon: Leaf,
       gradient: "from-slate-500 to-slate-700",
       shadow: "shadow-slate-400/20",
       glow: "hover:shadow-slate-400/30",
-      features: [t("sub.f1"), t("sub.f2"), t("sub.f3"), t("sub.f4")],
-      cta: t("sub.current"),
+      features: [
+        "50 تلميذ كحد أقصى",
+        "استيراد Excel",
+        "لوحة التحكم الأساسية",
+        "إحصائيات محدودة",
+      ],
+      cta: "الخطة الحالية",
       ctaVariant: "outline" as const,
       current: true,
       popular: false,
     },
     {
-      key: "pro",
-      name: t("sub.pro"),
-      price: "3 000",
+      key: "basic",
+      name: "أساسي",
+      price: "6 000",
       priceNote: null,
-      period: t("sub.year"),
+      period: "سنة",
+      icon: Star,
+      gradient: "from-emerald-500 to-teal-600",
+      shadow: "shadow-emerald-400/20",
+      glow: "hover:shadow-emerald-400/40",
+      features: [
+        "300 تلميذ",
+        "كل ميزات المجاني",
+        "طباعة القوائم PDF",
+        "رموز QR للتلاميذ",
+        "إرسال رسائل SMS (50/شهر)",
+        "أعمال نهاية السنة",
+      ],
+      cta: "ترقية إلى أساسي",
+      ctaVariant: "default" as const,
+      current: false,
+      popular: false,
+    },
+    {
+      key: "pro",
+      name: "Pro",
+      price: "12 000",
+      priceNote: null,
+      period: "سنة",
       icon: Zap,
       gradient: "from-violet-600 to-indigo-700",
       shadow: "shadow-violet-500/30",
       glow: "hover:shadow-violet-500/50",
-      features: [t("sub.p1"), t("sub.p2"), t("sub.p3"), t("sub.p4"), t("sub.p5")],
-      cta: t("sub.upgrade"),
+      features: [
+        "1 000 تلميذ",
+        "كل ميزات الأساسي",
+        "تحليلات وإحصائيات متقدمة",
+        "رفع درجات بالـ OCR",
+        "نتائج شهادة BEM",
+        "التوجيه المسبق",
+        "المساعد الذكي",
+      ],
+      cta: "ترقية إلى Pro",
       ctaVariant: "default" as const,
       current: false,
       popular: true,
     },
     {
-      key: "premium",
-      name: t("sub.premium"),
-      // price is dynamic — handled inline
-      price: premiumBilling === "year" ? "6 000" : "2 000",
-      priceNote: premiumBilling === "quarter" ? "≈ 8 000 DA/سنة" : null,
-      period: premiumBilling === "year" ? t("sub.year") : "3 أشهر",
+      key: "institution",
+      name: "مؤسسي",
+      price: "تواصل",
+      priceNote: "للمدارس المتعددة",
+      period: null,
       icon: Crown,
       gradient: "from-amber-500 to-orange-600",
       shadow: "shadow-amber-500/30",
       glow: "hover:shadow-amber-500/50",
-      features: [t("sub.pr1"), t("sub.pr2"), t("sub.pr3"), t("sub.pr4"), t("sub.pr5")],
-      cta: t("sub.contact"),
+      features: [
+        "تلاميذ غير محدود",
+        "كل ميزات Pro",
+        "إدارة متعدد المدارس",
+        "تقارير مخصصة كاملة",
+        "وكيل سطح المكتب (Windows)",
+        "SMS غير محدود",
+        "دعم أولوية 24/7",
+      ],
+      cta: "تواصل معنا",
       ctaVariant: "default" as const,
       current: false,
       popular: false,
@@ -70,7 +112,7 @@ export default function SubscriptionPage() {
   return (
     <motion.div
       variants={pageVariants} initial="initial" animate="animate" exit="exit"
-      className="p-6 max-w-5xl mx-auto space-y-8"
+      className="p-6 max-w-6xl mx-auto space-y-8"
     >
       {/* Header */}
       <motion.div
@@ -79,12 +121,12 @@ export default function SubscriptionPage() {
       >
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 text-xs font-bold mb-2">
           <Zap className="w-3.5 h-3.5" />
-          {t("sub.title")}
+          باقات الاشتراك
         </div>
         <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
-          {t("sub.title")}
+          اختر الباقة المناسبة
         </h1>
-        <p className="text-muted-foreground text-base max-w-md mx-auto">{t("sub.subtitle")}</p>
+        <p className="text-muted-foreground text-base max-w-md mx-auto">كل باقة مصممة لاحتياجات مختلفة — من مدرسة صغيرة إلى شبكة مؤسسات</p>
 
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}
@@ -96,13 +138,13 @@ export default function SubscriptionPage() {
       </motion.div>
 
       {/* Plans */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
         {plans.map((plan, i) => (
           <motion.div
             key={plan.key}
             initial={{ opacity: 0, y: 32, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ delay: i * 0.1, duration: 0.45, type: "spring", stiffness: 240, damping: 22 }}
+            transition={{ delay: i * 0.08, duration: 0.45, type: "spring", stiffness: 240, damping: 22 }}
             whileHover={{ y: -6, scale: 1.02 }}
             className="relative"
           >
@@ -113,86 +155,62 @@ export default function SubscriptionPage() {
               >
                 <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[10px] font-extrabold uppercase tracking-wider shadow-lg">
                   <Star className="w-3 h-3 fill-white" />
-                  {t("sub.popular")}
+                  الأكثر طلبًا
                 </span>
               </motion.div>
             )}
 
             <Card className={`relative overflow-hidden border-0 h-full shadow-xl ${plan.shadow} transition-shadow duration-300 ${plan.glow} ${plan.popular ? "ring-2 ring-violet-500/60" : ""}`}>
               {/* Gradient header */}
-              <div className={`bg-gradient-to-br ${plan.gradient} p-6 relative overflow-hidden`}>
+              <div className={`bg-gradient-to-br ${plan.gradient} p-5 relative overflow-hidden`}>
                 <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-white/10 blur-xl" />
                 <div className="absolute -bottom-6 -left-6 w-16 h-16 rounded-full bg-white/10 blur-xl" />
 
                 <motion.div
-                  className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center mb-4 relative"
+                  className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center mb-3 relative"
                   whileHover={{ rotate: 12, scale: 1.1 }} transition={{ type: "spring", stiffness: 300 }}
                 >
-                  <plan.icon className="w-6 h-6 text-white" />
+                  <plan.icon className="w-5 h-5 text-white" />
                 </motion.div>
 
-                <h2 className="text-xl font-extrabold text-white mb-1">{plan.name}</h2>
+                <h2 className="text-lg font-extrabold text-white mb-1">{plan.name}</h2>
 
                 {/* Price */}
                 <div className="flex items-end gap-1">
-                  <span className="text-4xl font-black text-white">{plan.price === "0" ? "0" : plan.price}</span>
+                  <span className="text-3xl font-black text-white">{plan.price}</span>
                   {plan.price !== "0" && plan.period ? (
-                    <div className="mb-1.5">
-                      <span className="text-white/70 text-sm"> DA</span>
-                      <span className="text-white/70 text-xs block leading-none">{plan.period}</span>
+                    <div className="mb-1">
+                      <span className="text-white/70 text-xs"> دج</span>
+                      <span className="text-white/70 text-[11px] block leading-none">/{plan.period}</span>
                     </div>
-                  ) : (
-                    <span className="text-white/70 text-sm mb-1.5"> DA</span>
-                  )}
+                  ) : plan.price === "0" ? (
+                    <span className="text-white/70 text-sm mb-1"> دج</span>
+                  ) : null}
                 </div>
 
-                {/* Equivalent note for quarterly */}
                 {plan.priceNote && (
-                  <p className="text-white/60 text-[11px] mt-0.5">{plan.priceNote}</p>
+                  <p className="text-white/70 text-[11px] mt-0.5">{plan.priceNote}</p>
                 )}
 
-                {/* Billing toggle — premium card only */}
-                {plan.key === "premium" && (
-                  <motion.div
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
-                    className="mt-3 inline-flex rounded-xl bg-white/15 p-0.5 gap-0.5"
-                  >
-                    {(["year", "quarter"] as const).map(opt => (
-                      <button
-                        key={opt}
-                        onClick={() => setPremiumBilling(opt)}
-                        className={`px-3 py-1 rounded-[10px] text-[11px] font-bold transition-all ${
-                          premiumBilling === opt
-                            ? "bg-white text-orange-600 shadow"
-                            : "text-white/80 hover:text-white"
-                        }`}
-                      >
-                        {opt === "year" ? "سنوي" : "3 أشهر"}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-
-                {/* Badge for non-premium paid plans */}
-                {plan.price !== "0" && plan.key !== "premium" && (
+                {plan.price !== "0" && plan.period && (
                   <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15 text-white/90 text-[10px] font-semibold">
                     <Calendar className="w-3 h-3" />
-                    اشتراك سنوي
+                    سنوي
                   </div>
                 )}
               </div>
 
-              <CardContent className="p-5 space-y-4 flex flex-col">
-                <ul className="space-y-3 flex-1">
+              <CardContent className="p-4 space-y-4 flex flex-col">
+                <ul className="space-y-2.5 flex-1">
                   {plan.features.map((f, j) => (
                     <motion.li
                       key={j}
                       initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.1 + j * 0.05 + 0.3 }}
-                      className="flex items-start gap-2.5 text-sm text-foreground"
+                      transition={{ delay: i * 0.08 + j * 0.04 + 0.3 }}
+                      className="flex items-start gap-2 text-xs text-foreground"
                     >
-                      <span className={`mt-0.5 w-5 h-5 rounded-full bg-gradient-to-br ${plan.gradient} flex items-center justify-center shrink-0 shadow-sm`}>
-                        <Check className="w-3 h-3 text-white" />
+                      <span className={`mt-0.5 w-4 h-4 rounded-full bg-gradient-to-br ${plan.gradient} flex items-center justify-center shrink-0 shadow-sm`}>
+                        <Check className="w-2.5 h-2.5 text-white" />
                       </span>
                       {f}
                     </motion.li>
@@ -204,14 +222,16 @@ export default function SubscriptionPage() {
                   <Button
                     variant={plan.ctaVariant}
                     disabled={plan.current}
-                    className={`w-full py-5 font-bold text-sm rounded-xl shadow-md transition-all ${
+                    className={`w-full py-4 font-bold text-xs rounded-xl shadow-md transition-all ${
                       plan.current
                         ? "opacity-70 cursor-default"
-                        : plan.key === "pro"
-                          ? "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white border-0 shadow-lg shadow-violet-500/30"
-                          : plan.key === "premium"
-                            ? "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white border-0 shadow-lg shadow-amber-500/30"
-                            : ""
+                        : plan.key === "basic"
+                          ? "bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white border-0"
+                          : plan.key === "pro"
+                            ? "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white border-0 shadow-lg shadow-violet-500/30"
+                            : plan.key === "institution"
+                              ? "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white border-0 shadow-lg shadow-amber-500/30"
+                              : ""
                     }`}
                   >
                     {plan.current ? `✓ ${plan.cta}` : plan.cta}
@@ -223,61 +243,75 @@ export default function SubscriptionPage() {
         ))}
       </div>
 
-      {/* Pricing clarity note */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
-        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
-      >
-        <div className="rounded-xl border bg-violet-50/50 dark:bg-violet-950/20 border-violet-200/50 dark:border-violet-800/50 px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center shrink-0">
-            <Zap className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-violet-700 dark:text-violet-300">Pro — 3 000 DA / سنة</p>
-            <p className="text-xs text-muted-foreground">250 DA / شهر — الأنسب للمدارس المتوسطة</p>
-          </div>
-        </div>
-        <div className="rounded-xl border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-800/50 px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center shrink-0">
-            <Crown className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Premium — 6 000 DA / سنة أو 2 000 DA / 3 أشهر</p>
-            <p className="text-xs text-muted-foreground">خيار الفصول الدراسية للمرونة القصوى</p>
-          </div>
-        </div>
-      </motion.div>
-
       {/* Comparison table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
         className="rounded-2xl border overflow-hidden shadow-sm"
       >
-        <div className="bg-muted/50 px-5 py-3 grid grid-cols-4 text-xs font-bold text-muted-foreground">
+        <div className="bg-muted/50 px-5 py-3 grid grid-cols-5 text-xs font-bold text-muted-foreground">
           <span>الميزة</span>
           <span className="text-center">مجاني</span>
+          <span className="text-center text-emerald-600">أساسي</span>
           <span className="text-center text-violet-600">Pro</span>
-          <span className="text-center text-amber-600">Premium</span>
+          <span className="text-center text-amber-600">مؤسسي</span>
         </div>
         <div className="divide-y">
           {[
-            { label: "عدد التلاميذ",          free: "200",        pro: "غير محدود", prem: "غير محدود" },
-            { label: "استيراد Excel",          free: "✓",          pro: "✓",         prem: "✓"         },
-            { label: "التحليلات المتقدمة",     free: "—",          pro: "✓",         prem: "✓"         },
-            { label: "طباعة PDF",              free: "—",          pro: "✓",         prem: "✓"         },
-            { label: "مقارنة السنوات",         free: "—",          pro: "✓",         prem: "✓"         },
-            { label: "تقارير شاملة",           free: "—",          pro: "✓",         prem: "✓"         },
-            { label: "خيار 3 أشهر",            free: "—",          pro: "—",         prem: "✓"         },
-            { label: "إدارة متعدد المدارس",    free: "—",          pro: "—",         prem: "✓"         },
-            { label: "تقارير مخصصة",           free: "—",          pro: "—",         prem: "✓"         },
+            { label: "عدد التلاميذ",        free: "50",         bas: "300",        pro: "1 000",     inst: "∞"         },
+            { label: "استيراد Excel",        free: "✓",          bas: "✓",          pro: "✓",         inst: "✓"         },
+            { label: "طباعة PDF",            free: "—",          bas: "✓",          pro: "✓",         inst: "✓"         },
+            { label: "رموز QR",             free: "—",          bas: "✓",          pro: "✓",         inst: "✓"         },
+            { label: "رسائل SMS",            free: "—",          bas: "50/شهر",     pro: "200/شهر",   inst: "∞"         },
+            { label: "تحليلات متقدمة",       free: "—",          bas: "—",          pro: "✓",         inst: "✓"         },
+            { label: "OCR رفع الدرجات",      free: "—",          bas: "—",          pro: "✓",         inst: "✓"         },
+            { label: "نتائج BEM",            free: "—",          bas: "—",          pro: "✓",         inst: "✓"         },
+            { label: "المساعد الذكي",        free: "—",          bas: "—",          pro: "✓",         inst: "✓"         },
+            { label: "متعدد المدارس",        free: "—",          bas: "—",          pro: "—",         inst: "✓"         },
+            { label: "وكيل سطح المكتب",      free: "—",          bas: "—",          pro: "—",         inst: "✓"         },
+            { label: "دعم أولوية 24/7",      free: "—",          bas: "—",          pro: "—",         inst: "✓"         },
           ].map((row, i) => (
-            <div key={i} className="grid grid-cols-4 px-5 py-2.5 text-sm hover:bg-muted/20 transition-colors">
-              <span className="text-muted-foreground font-medium">{row.label}</span>
-              <span className={`text-center font-semibold ${row.free === "✓" ? "text-emerald-600" : row.free === "—" ? "text-muted-foreground/40" : "text-foreground"}`}>{row.free}</span>
-              <span className={`text-center font-semibold ${row.pro  === "✓" ? "text-violet-600"  : row.pro  === "—" ? "text-muted-foreground/40" : "text-violet-600"}`}>{row.pro}</span>
-              <span className={`text-center font-semibold ${row.prem === "✓" ? "text-amber-600"   : row.prem === "—" ? "text-muted-foreground/40" : "text-amber-600"}`}>{row.prem}</span>
+            <div key={i} className="grid grid-cols-5 px-5 py-2.5 text-sm hover:bg-muted/20 transition-colors">
+              <span className="text-muted-foreground font-medium text-xs">{row.label}</span>
+              <span className={`text-center font-semibold text-xs ${row.free === "✓" ? "text-emerald-600" : row.free === "—" ? "text-muted-foreground/40" : "text-foreground"}`}>{row.free}</span>
+              <span className={`text-center font-semibold text-xs ${row.bas  === "✓" ? "text-emerald-600"  : row.bas  === "—" ? "text-muted-foreground/40" : "text-emerald-600"}`}>{row.bas}</span>
+              <span className={`text-center font-semibold text-xs ${row.pro  === "✓" ? "text-violet-600"   : row.pro  === "—" ? "text-muted-foreground/40" : "text-violet-600"}`}>{row.pro}</span>
+              <span className={`text-center font-semibold text-xs ${row.inst === "✓" ? "text-amber-600"    : row.inst === "—" ? "text-muted-foreground/40" : "text-amber-600"}`}>{row.inst}</span>
             </div>
           ))}
+        </div>
+      </motion.div>
+
+      {/* Price summary row */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}
+        className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+      >
+        <div className="rounded-xl border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/50 px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
+            <Star className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">أساسي — 6 000 دج / سنة</p>
+            <p className="text-xs text-muted-foreground">500 دج / شهر</p>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-violet-50/50 dark:bg-violet-950/20 border-violet-200/50 dark:border-violet-800/50 px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center shrink-0">
+            <Zap className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-violet-700 dark:text-violet-300">Pro — 12 000 دج / سنة</p>
+            <p className="text-xs text-muted-foreground">1 000 دج / شهر — الأنسب للمتوسطات</p>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-800/50 px-4 py-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center shrink-0">
+            <Building2 className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-amber-700 dark:text-amber-300">مؤسسي — تواصل معنا</p>
+            <p className="text-xs text-muted-foreground">للشبكات والمديريات التربوية</p>
+          </div>
         </div>
       </motion.div>
 
@@ -288,7 +322,7 @@ export default function SubscriptionPage() {
       >
         <p className="text-sm text-muted-foreground">
           📧 &nbsp;
-          <span className="font-semibold text-foreground">contact@cem-manager.dz</span>
+          <span className="font-semibold text-foreground">contact@rafiq-raqamna.dz</span>
           &nbsp; — &nbsp; للاستفسارات والاشتراكات تواصل معنا عبر البريد الإلكتروني
         </p>
       </motion.div>

@@ -358,6 +358,24 @@ function processRows(
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
+// Single student lookup (used by QR scan page)
+router.get("/students/:id", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  try {
+    const rows = await db.select().from(studentsTable)
+      .where(and(eq(studentsTable.id, req.params.id), eq(studentsTable.userId, userId)))
+      .limit(1);
+    if (!rows.length) {
+      res.status(404).json({ error: "التلميذ غير موجود" });
+      return;
+    }
+    res.json(rows[0]);
+  } catch {
+    res.status(500).json({ error: "خطأ في الخادم" });
+  }
+});
+
 router.get("/students", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;

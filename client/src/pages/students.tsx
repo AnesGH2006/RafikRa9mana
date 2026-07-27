@@ -573,7 +573,7 @@ export default function Students() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/60 sticky top-0 z-10">
                   <tr>
-                    {[t("col.name"), t("col.birth"), t("col.level"), t("col.class"), t("col.gender"), t("col.status"), t("col.result", "QR")].map(h => (
+                    {[t("col.name"), t("col.birth"), t("col.level"), t("col.class"), t("col.gender"), t("col.status"), t("col.result")].map(h => (
                       <th key={h} className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>

@@ -1,24 +1,66 @@
 import { motion } from "framer-motion";
-import { BookOpen, Lock, Phone, Mail, CheckCircle2, Clock, Shield } from "lucide-react";
+import { BookOpen, Lock, Phone, Mail, CheckCircle2, Clock, Shield, Zap, Crown, Star, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 
 const plans = [
   {
-    name: "Pro",
-    price: "1500",
-    period: "شهر",
-    features: ["جميع ميزات الإدارة", "استيراد غير محدود", "إحصائيات تفصيلية", "طباعة القوائم", "دعم فني"],
-    gradient: "from-violet-600 to-indigo-700",
-    glow: "shadow-violet-500/30",
+    name: "أساسي",
+    nameEn: "Basic",
+    price: "6 000",
+    period: "سنة",
+    perMonth: "500 دج/شهر",
+    features: [
+      "300 تلميذ",
+      "استيراد Excel",
+      "لوحة التحكم والإحصائيات",
+      "طباعة القوائم PDF",
+      "رموز QR للتلاميذ",
+      "إرسال رسائل SMS (محدود)",
+    ],
+    gradient: "from-emerald-500 to-teal-600",
+    glow: "shadow-emerald-500/30",
+    icon: Star,
+    popular: false,
   },
   {
-    name: "Premium",
-    price: "4000",
-    period: "شهر",
-    features: ["كل ميزات Pro", "تحليلات متقدمة", "نسخ احتياطي تلقائي", "تقارير PDF", "دعم أولوية 24/7"],
+    name: "Pro",
+    nameEn: "Pro",
+    price: "12 000",
+    period: "سنة",
+    perMonth: "1 000 دج/شهر",
+    features: [
+      "1 000 تلميذ",
+      "كل ميزات الأساسي",
+      "تحليلات متقدمة",
+      "رفع درجات بالـ OCR",
+      "نتائج شهادة BEM",
+      "أعمال نهاية السنة",
+      "المساعد الذكي",
+    ],
+    gradient: "from-violet-600 to-indigo-700",
+    glow: "shadow-violet-500/30",
+    icon: Zap,
+    popular: true,
+  },
+  {
+    name: "مؤسسي",
+    nameEn: "Institution",
+    price: "تواصل",
+    period: "",
+    perMonth: "للمدارس المتعددة",
+    features: [
+      "تلاميذ غير محدود",
+      "كل ميزات Pro",
+      "إدارة متعدد المدارس",
+      "تقارير مخصصة",
+      "وكيل سطح المكتب",
+      "دعم أولوية 24/7",
+    ],
     gradient: "from-amber-500 to-orange-600",
     glow: "shadow-amber-500/30",
+    icon: Crown,
+    popular: false,
   },
 ];
 
@@ -48,7 +90,7 @@ export default function PaywallScreen() {
             <BookOpen className="w-4 h-4 text-white" />
           </div>
           <span className="font-extrabold text-sm bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">
-            مدير المتوسطة
+            رفيق الرقمنة
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -63,7 +105,7 @@ export default function PaywallScreen() {
         </div>
       </div>
 
-      <div className="relative z-10 w-full max-w-4xl mx-auto px-4 py-10 space-y-10">
+      <div className="relative z-10 w-full max-w-5xl mx-auto px-4 py-10 space-y-10">
         {/* Hero */}
         <motion.div className="text-center space-y-4"
           initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
@@ -78,38 +120,51 @@ export default function PaywallScreen() {
             اختر باقتك وابدأ الآن
           </h1>
           <p className="text-muted-foreground text-base max-w-lg mx-auto">
-            حسابك مسجّل بنجاح. فعّل اشتراكك للوصول إلى جميع ميزات مدير المتوسطة.
+            حسابك مسجّل بنجاح. فعّل اشتراكك للوصول إلى جميع ميزات رفيق الرقمنة.
           </p>
         </motion.div>
 
         {/* Plans */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {plans.map((plan, i) => (
-            <motion.div key={plan.name}
-              initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: i * 0.1 }}
-              whileHover={{ y: -4, scale: 1.02 }}
-              className={`rounded-2xl bg-gradient-to-br ${plan.gradient} p-0.5 shadow-xl ${plan.glow}`}
-            >
-              <div className="bg-card rounded-[14px] p-6 h-full flex flex-col">
-                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${plan.gradient} text-white text-sm font-bold w-fit mb-4`}>
-                  {plan.name}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {plans.map((plan, i) => {
+            const Icon = plan.icon;
+            return (
+              <motion.div key={plan.name}
+                initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: i * 0.1 }}
+                whileHover={{ y: -5, scale: 1.02 }}
+                className={`relative rounded-2xl bg-gradient-to-br ${plan.gradient} p-0.5 shadow-xl ${plan.glow}`}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-3.5 inset-x-0 flex justify-center z-10">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[10px] font-extrabold uppercase tracking-wider shadow-lg">
+                      <Sparkles className="w-3 h-3 fill-white" />
+                      الأكثر طلبًا
+                    </span>
+                  </div>
+                )}
+                <div className="bg-card rounded-[14px] p-6 h-full flex flex-col">
+                  <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${plan.gradient} text-white text-sm font-bold w-fit mb-4`}>
+                    <Icon className="w-3.5 h-3.5" />
+                    {plan.name}
+                  </div>
+                  <div className="flex items-baseline gap-1 mb-1">
+                    <span className="text-4xl font-extrabold text-foreground">{plan.price}</span>
+                    {plan.period && <span className="text-muted-foreground text-sm">دج / {plan.period}</span>}
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-5">{plan.perMonth}</p>
+                  <ul className="space-y-2.5 flex-1">
+                    {plan.features.map((f, fi) => (
+                      <li key={fi} className="flex items-center gap-2 text-sm text-foreground/80">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <div className="flex items-baseline gap-1 mb-5">
-                  <span className="text-4xl font-extrabold text-foreground">{plan.price}</span>
-                  <span className="text-muted-foreground text-sm">دج / {plan.period}</span>
-                </div>
-                <ul className="space-y-2.5 flex-1">
-                  {plan.features.map((f, fi) => (
-                    <li key={fi} className="flex items-center gap-2 text-sm text-foreground/80">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </div>
 
         {/* How to subscribe */}
@@ -143,10 +198,10 @@ export default function PaywallScreen() {
             <p className="text-white/70 text-sm">سيتم تفعيل حسابك خلال ساعات قليلة بعد الدفع</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
-            <a href="mailto:contact@cem-manager.dz"
+            <a href="mailto:contact@rafiq-raqamna.dz"
               className="flex items-center gap-2 px-4 py-2 bg-white/15 hover:bg-white/25 rounded-xl text-sm font-semibold transition-colors">
               <Mail className="w-4 h-4" />
-              contact@cem-manager.dz
+              contact@rafiq-raqamna.dz
             </a>
             <a href="tel:+213"
               className="flex items-center gap-2 px-4 py-2 bg-white/15 hover:bg-white/25 rounded-xl text-sm font-semibold transition-colors">

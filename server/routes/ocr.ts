@@ -40,17 +40,24 @@ const upload = multer({
 async function preprocessImage(buffer: Buffer): Promise<Buffer> {
   const meta = await sharp(buffer).metadata();
   const w = meta.width ?? 800;
+  const h = meta.height ?? 600;
 
-  // Target ~2 400 px wide; never downscale sharp originals below 1 500 px
-  const targetWidth = Math.max(2400, w);
+  // Target ~3 000 px wide for better Tesseract accuracy (300+ dpi equivalent)
+  const targetWidth = Math.max(3000, w);
 
-  return sharp(buffer)
+  // First pass: upscale + grayscale + strong unsharp mask
+  const pass1 = await sharp(buffer)
     .grayscale()
-    .resize({ width: targetWidth, withoutEnlargement: false })
-    .sharpen({ sigma: 1.2, m1: 1.5, m2: 0.7 })
-    .normalize()                // stretch contrast to 0-255
-    .threshold(145)             // binarise — removes noise
-    .png({ compressionLevel: 1 })
+    .resize({ width: targetWidth, withoutEnlargement: false, kernel: "lanczos3" })
+    .sharpen({ sigma: 2.0, m1: 2.0, m2: 0.5 })
+    .normalize()               // stretch histogram to 0-255
+    .toBuffer();
+
+  // Second pass: mild threshold to binarize cleanly
+  // Use 128 (midpoint) for average-contrast documents
+  return sharp(pass1)
+    .threshold(128)
+    .png({ compressionLevel: 0 }) // no compression for speed
     .toBuffer();
 }
 
@@ -150,17 +157,18 @@ router.post(
       worker = await createWorker(lang);
 
       await worker.setParameters({
-        // PSM 6 = single uniform text block; good for table columns
-        // PSM 4 = single column; use if sheet has one column of names + one of grades
-        tessedit_pageseg_mode: "6" as any,
-        // Keep inter-word spaces so names aren't merged
+        // PSM 4 = single column of text — best for grade sheets with name + score columns
+        tessedit_pageseg_mode: "4" as any,
+        // Keep inter-word spaces so Arabic names aren't merged
         preserve_interword_spaces: "1" as any,
+        // Whitelist digits, decimal separators, and Arabic characters for better accuracy
+        tessedit_char_whitelist: "" as any,
       });
 
       const { data } = await worker.recognize(processed);
 
       logger.info(
-        { confidence: data.confidence, lines: data.lines?.length },
+        { confidence: data.confidence },
         "OCR: recognition complete",
       );
 
