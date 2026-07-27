@@ -12,7 +12,9 @@ import {
   Pencil, ClipboardList, Search, Upload, CheckCircle2, AlertCircle,
   X, FileSpreadsheet, Loader2, Printer, Trophy, TrendingUp, TrendingDown,
   BarChart3, Users, Target, GraduationCap, XCircle, ArrowUpDown, Star,
+  MessageSquare,
 } from "lucide-react";
+import { SmsNoticeModal, type SmsRecipient } from "@/components/sms-notice-modal";
 import { getSubjectsForLevel, calcWeightedAvg } from "@shared/subjects";
 import type { StudentResult } from "@shared/types";
 import type { Niveau } from "@shared/types";
@@ -2765,6 +2767,7 @@ export default function Results() {
   const [selected, setSelected]       = useState<StudentResult | null>(null);
   const [subjectDetail, setSubjectDetail] = useState<StudentResult | null>(null);
   const [showImport, setShowImport]   = useState(false);
+  const [smsOpen,    setSmsOpen]      = useState(false);
   const [annee, setAnnee]             = useState(DEFAULT_YEAR);
   const [filters, setFilters]         = useState({ niveau: "", classe: "", sexe: "", q: "" });
   const [listKey, setListKey]         = useState(0);
@@ -2810,10 +2813,20 @@ export default function Results() {
           <Button variant="outline" className="gap-2" onClick={handlePrint} disabled={results.length === 0}>
             <Printer className="w-4 h-4" /> طباعة
           </Button>
-          <Button variant="outline"
+          <Button
+            variant="outline"
             className="gap-2 border-emerald-500/40 text-emerald-600 hover:bg-emerald-50/10 hover:border-emerald-500"
             onClick={() => setShowImport(true)}>
             <FileSpreadsheet className="w-4 h-4" /> استيراد Excel
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2 border-amber-500/40 text-amber-600 hover:bg-amber-50/10 hover:border-amber-500"
+            onClick={() => setSmsOpen(true)}
+            disabled={results.filter(r => (r.annualAvg ?? 0) < 10).length === 0}
+          >
+            <MessageSquare className="w-4 h-4" />
+            إشعار SMS الراسبين ({results.filter(r => (r.annualAvg ?? 0) < 10).length})
           </Button>
         </motion.div>
       </div>
@@ -2970,6 +2983,21 @@ export default function Results() {
       {selected      && <GradeModal result={selected} annee={annee} onClose={() => setSelected(null)} onSaved={fetchResults} />}
       {subjectDetail && <SubjectBreakdownModal result={subjectDetail} onClose={() => setSubjectDetail(null)} />}
       {showImport    && <ImportModal annee={annee} onClose={() => setShowImport(false)} onDone={fetchResults} />}
+
+      {/* SMS Notice Modal — failing students */}
+      <SmsNoticeModal
+        open={smsOpen}
+        onOpenChange={setSmsOpen}
+        title="إشعار SMS — التلاميذ الراسبون"
+        defaultMessage="إشعار: لم يتمكن ابنكم/ابنتكم من الحصول على المعدل السنوي (أقل من 10). يرجى التواصل مع الأستاذ المربي لمناقشة الوضعية."
+        recipients={results
+          .filter(r => (r.annualAvg ?? 0) < 10)
+          .map(r => ({
+            id:    r.student.id,
+            name:  r.student.nomPrenom,
+            phone: (r.student as any).parentPhone ?? null,
+          } as SmsRecipient))}
+      />
     </motion.div>
   );
 }

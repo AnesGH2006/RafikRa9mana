@@ -26,6 +26,8 @@ export const translations: TranslationMap = {
   "nav.passed_list":      { en: "Passed List",          ar: "قوائم التلاميذ الناجحين",    fr: "Liste des admis" },
   "nav.failed_list":      { en: "Failed List",          ar: "قوائم التلاميذ الراسبين",    fr: "Liste des non admis" },
   "nav.sms":              { en: "Send SMS",              ar: "إرسال رسائل SMS",            fr: "Envoyer SMS" },
+  "nav.scan_qr":          { en: "Scan QR Code",          ar: "مسح رمز QR",                fr: "Scanner QR" },
+  "nav.ocr_upload":       { en: "OCR Grade Upload",      ar: "رفع درجات OCR",             fr: "Import OCR" },
   "nav.mustarrak_list":   { en: "Remediation List",     ar: "قوائم التلاميذ المستدركين",  fr: "Liste des rattrapages" },
   "nav.recovery_results": { en: "Recovery Results",     ar: "نتائج الاستدراك",            fr: "Résultats de rattrapage" },
   "nav.guides_list":      { en: "Guides / Orientation", ar: "قوائم الموجهين",             fr: "Listes des orientés" },

@@ -11,6 +11,7 @@ import {
   User, BarChart2, CalendarOff, UserCheck, RefreshCw, AlertCircle,
   TrendingUp, Star, CreditCard, Upload, FileText, Archive, MessageSquare,
   CircleArrowRight, CircleDot, Trophy, FileBarChart, Bot, Download,
+  QrCode, ScanLine,
 } from "lucide-react";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { QuickImportDialog } from "@/components/quick-import";
@@ -52,6 +53,8 @@ import AssistantPage from "@/pages/assistant";
 import AgentSetupPage from "@/pages/agent-setup";
 import PaywallScreen from "@/pages/paywall";
 import NotFound from "@/pages/not-found";
+import ScanQrPage from "@/pages/scan-qr";
+import UploadGradesOcrPage from "@/pages/upload-grades-ocr";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface NavItemDef {
@@ -78,6 +81,7 @@ const SECTIONS: SectionDef[] = [
     items: [
       { href: "/",         icon: LayoutDashboard, labelKey: "nav.dashboard" },
       { href: "/students", icon: List,            labelKey: "nav.students"  },
+      { href: "/scan-qr",  icon: QrCode,          labelKey: "nav.scan_qr"  },
     ],
   },
   {
@@ -140,8 +144,9 @@ const SECTIONS: SectionDef[] = [
     id: "data", icon: Database, labelKey: "nav.data_section",
     color: "text-sky-400", gradient: "from-sky-500 to-cyan-700",
     items: [
-      { href: "/import",   icon: FileSpreadsheet, labelKey: "nav.import"   },
-      { href: "/archive",  icon: Archive,          labelKey: "nav.archive"  },
+      { href: "/import",            icon: FileSpreadsheet, labelKey: "nav.import"       },
+      { href: "/upload-grades-ocr", icon: ScanLine,        labelKey: "nav.ocr_upload"  },
+      { href: "/archive",           icon: Archive,          labelKey: "nav.archive"     },
       { href: "/sms",      icon: MessageSquare,    labelKey: "nav.sms"      },
       { href: "/agent",    icon: Bot,              labelKey: "nav.agent"    },
     ],
@@ -561,6 +566,8 @@ function AppLayout() {
               <Route path="/import"              component={ImportPage} />
               <Route path="/archive"            component={ArchivePage} />
               <Route path="/sms"                component={SmsPage} />
+              <Route path="/scan-qr"            component={ScanQrPage} />
+              <Route path="/upload-grades-ocr"  component={UploadGradesOcrPage} />
               <Route path="/agent"               component={AgentSetupPage} />
               <Route path="/settings"            component={SettingsPage} />
               <Route path="/account">{() => <SettingsPage />}</Route>

@@ -15,6 +15,8 @@ import substitutionRouter from "./substitution.js";
 import classBalancerRouter from "./classBalancer.js";
 import qrRouter from "./qr.js";
 import smsRouter from "./sms.js";
+import notificationsRouter from "./notifications.js";
+import ocrRouter from "./ocr.js";
 
 const router: IRouter = Router();
 
@@ -34,5 +36,7 @@ router.use(substitutionRouter);
 router.use(classBalancerRouter);
 router.use(qrRouter);
 router.use(smsRouter);
+router.use(notificationsRouter);
+router.use(ocrRouter);
 
 export default router;
