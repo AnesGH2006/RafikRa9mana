@@ -1,19 +1,21 @@
 /**
- * OCR Grade Sheet Processing
+ * OCR Grade Sheet Processing  (v2 — Sharp preprocessing)
  *
  * POST /api/ocr/parse-grades
  *   Accepts an uploaded image of a printed grade sheet.
- *   Returns: [{ rowNumber, studentName, grade, confidence, lowConfidence }]
+ *   Pipeline: Sharp preprocess → Tesseract (ara+fra) → grade-line parser
+ *   Returns: { rows, totalLines, overallConfidence, rawText }
  */
 import { Router } from "express";
 import multer from "multer";
 import { createWorker } from "tesseract.js";
+import sharp from "sharp";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
+  limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
       cb(new Error("يجب أن يكون الملف صورة (JPEG, PNG, WebP, …)"));
@@ -23,11 +25,41 @@ const upload = multer({
   },
 });
 
-// ── Grade line parser ─────────────────────────────────────────────────────────
-// A grade-sheet row typically looks like:
-//   [name part]   [score 0–20, possibly with decimal]
-// We search for the first float in [0, 20] range.
+// ── Image preprocessing ────────────────────────────────────────────────────────
+/**
+ * Converts the uploaded image to a high-contrast greyscale PNG that Tesseract
+ * reads much more reliably than a raw photo.
+ *
+ * Steps:
+ *  1. Greyscale
+ *  2. Upscale to at least 2 400 px wide (Tesseract prefers >300 dpi)
+ *  3. Sharpen edges
+ *  4. Normalize contrast (stretch histogram)
+ *  5. Adaptive threshold — turns the result B&W
+ */
+async function preprocessImage(buffer: Buffer): Promise<Buffer> {
+  const meta = await sharp(buffer).metadata();
+  const w = meta.width ?? 800;
 
+  // Target ~2 400 px wide; never downscale sharp originals below 1 500 px
+  const targetWidth = Math.max(2400, w);
+
+  return sharp(buffer)
+    .grayscale()
+    .resize({ width: targetWidth, withoutEnlargement: false })
+    .sharpen({ sigma: 1.2, m1: 1.5, m2: 0.7 })
+    .normalize()                // stretch contrast to 0-255
+    .threshold(145)             // binarise — removes noise
+    .png({ compressionLevel: 1 })
+    .toBuffer();
+}
+
+// ── Grade line parser ──────────────────────────────────────────────────────────
+/**
+ * Looks for lines that contain a grade value (0–20, with optional decimal).
+ * Handles both "Name .... 14.50" and "14.50 .... Name" layouts.
+ * Arabic grade sheets usually have the score at the END of the row.
+ */
 interface ParsedRow {
   rowNumber: number;
   studentName: string;
@@ -36,37 +68,51 @@ interface ParsedRow {
   lowConfidence: boolean;
 }
 
-function parseGradeLines(
-  words: Awaited<ReturnType<typeof createWorker>>[""],
-  rawText: string,
-): ParsedRow[] {
+const GRADE_RE = /\b(20(?:[.,]0{1,2})?|1[0-9](?:[.,]\d{1,2})?|[0-9](?:[.,]\d{1,2})?)\b/g;
+
+function extractGrade(line: string): { grade: number; rest: string } | null {
+  const matches = [...line.matchAll(GRADE_RE)];
+  if (!matches.length) return null;
+
+  // Prefer the LAST match (grade is usually at the right in Arabic sheets)
+  const m = matches[matches.length - 1];
+  const gradeStr = m[0].replace(",", ".");
+  const grade = parseFloat(gradeStr);
+  if (isNaN(grade) || grade < 0 || grade > 20) return null;
+
+  const rest = (line.slice(0, m.index!) + line.slice(m.index! + m[0].length))
+    .replace(/[|_\-–—=]+/g, " ")  // strip table borders
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return { grade, rest };
+}
+
+function parseGradeLines(rawText: string): ParsedRow[] {
   const lines = rawText
     .split("\n")
     .map(l => l.trim())
-    .filter(l => l.length > 1);
+    .filter(l => l.length > 2);
 
   const results: ParsedRow[] = [];
-  let globalRow = 0;
+  let rowNum = 0;
 
   for (const line of lines) {
-    globalRow++;
-    // Match numbers 0–20 (with optional decimal)
-    const gradeMatch = line.match(/\b(20|1[0-9]|[0-9])([.,]\d{1,2})?\b/);
-    if (!gradeMatch) continue;
+    rowNum++;
+    const extracted = extractGrade(line);
+    if (!extracted) continue;
 
-    const gradeStr = gradeMatch[0].replace(",", ".");
-    const grade = parseFloat(gradeStr);
-    if (isNaN(grade) || grade < 0 || grade > 20) continue;
+    const { grade, rest } = extracted;
 
-    // Remove the grade token — what remains is the student name
-    const nameRaw = line.replace(gradeMatch[0], "").replace(/\s+/g, " ").trim();
-    if (nameRaw.length < 2) continue;
+    // Remove leading row numbers / indices ("1." "2-" etc.)
+    const name = rest.replace(/^\d+[\s.,\-–)]+/, "").trim();
+    if (name.length < 2) continue;
 
     results.push({
-      rowNumber: globalRow,
-      studentName: nameRaw,
+      rowNumber: rowNum,
+      studentName: name,
       grade,
-      confidence: 100, // word-level confidence added below if possible
+      confidence: 100,
       lowConfidence: false,
     });
   }
@@ -74,8 +120,7 @@ function parseGradeLines(
   return results;
 }
 
-// ── Route ─────────────────────────────────────────────────────────────────────
-
+// ── Route ──────────────────────────────────────────────────────────────────────
 router.post(
   "/ocr/parse-grades",
   upload.single("image"),
@@ -90,40 +135,58 @@ router.post(
       return;
     }
 
-    // Optional hint about languages — default: Arabic + French
     const lang = typeof req.query.lang === "string" ? req.query.lang : "ara+fra";
-
     let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
 
     try {
-      logger.info({ size: req.file.size, lang }, "OCR: starting recognition");
+      logger.info({ size: req.file.size, lang }, "OCR: preprocessing image");
 
+      // ── Step 1: preprocess ──────────────────────────────────────────────────
+      const processed = await preprocessImage(req.file.buffer);
+
+      logger.info({ processedSize: processed.length }, "OCR: starting Tesseract");
+
+      // ── Step 2: Tesseract with optimal settings ─────────────────────────────
       worker = await createWorker(lang);
-      const { data } = await worker.recognize(req.file.buffer);
 
-      logger.info({ confidence: data.confidence, lines: data.lines?.length }, "OCR: recognition complete");
+      await worker.setParameters({
+        // PSM 6 = single uniform text block; good for table columns
+        // PSM 4 = single column; use if sheet has one column of names + one of grades
+        tessedit_pageseg_mode: "6" as any,
+        // Keep inter-word spaces so names aren't merged
+        preserve_interword_spaces: "1" as any,
+      });
 
-      // Build word-level confidence map (word text → avg confidence)
+      const { data } = await worker.recognize(processed);
+
+      logger.info(
+        { confidence: data.confidence, lines: data.lines?.length },
+        "OCR: recognition complete",
+      );
+
+      // ── Step 3: build word-confidence map ───────────────────────────────────
       const wordConfMap: Record<string, number> = {};
       for (const block of data.blocks ?? []) {
         for (const para of block.paragraphs ?? []) {
           for (const line of para.lines ?? []) {
             for (const word of line.words ?? []) {
-              wordConfMap[word.text] = word.confidence;
+              if (word.text) wordConfMap[word.text] = Math.max(wordConfMap[word.text] ?? 0, word.confidence);
             }
           }
         }
       }
 
-      const rows = parseGradeLines(null as any, data.text);
+      // ── Step 4: parse grade lines ────────────────────────────────────────────
+      const rows = parseGradeLines(data.text);
 
-      // Annotate confidence per row
+      // Annotate per-row confidence from word map
+      const LOW_CONF_THRESHOLD = 70;
       for (const row of rows) {
         const words = row.studentName.split(/\s+/);
         const confs = words.map(w => wordConfMap[w] ?? data.confidence);
         const avg = confs.reduce((a, b) => a + b, 0) / (confs.length || 1);
         row.confidence = Math.round(avg);
-        row.lowConfidence = row.confidence < 70;
+        row.lowConfidence = row.confidence < LOW_CONF_THRESHOLD;
       }
 
       res.json({

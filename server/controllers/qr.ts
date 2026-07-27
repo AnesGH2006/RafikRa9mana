@@ -40,6 +40,11 @@ function signPayload(raw: Omit<QrPayload, "sig">): string {
   return createHmac("sha256", SECRET).update(data).digest("hex").slice(0, 16);
 }
 
+/** Short HMAC used inside the scannable URL so it can't be forged. */
+export function signStudentId(studentId: string): string {
+  return createHmac("sha256", SECRET).update(studentId).digest("hex").slice(0, 16);
+}
+
 export function buildQrPayload(student: {
   id: string;
   nomPrenom: string;
@@ -56,6 +61,16 @@ export function buildQrPayload(student: {
     iat:    Math.floor(Date.now() / 1000),
   };
   return { ...raw, sig: signPayload(raw) };
+}
+
+/**
+ * Builds the string that gets encoded INTO the QR image.
+ * A plain HTTPS URL so any phone camera can tap-to-open it.
+ *   https://<host>/scan-qr?sid=<id>&sig=<hmac>
+ */
+export function buildQrContent(student: { id: string }, baseUrl: string): string {
+  const sig = signStudentId(student.id);
+  return `${baseUrl}/scan-qr?sid=${encodeURIComponent(student.id)}&sig=${encodeURIComponent(sig)}`;
 }
 
 // ── Controller ────────────────────────────────────────────────────────────────
@@ -101,17 +116,21 @@ export async function generateStudentQr(req: Request, res: Response): Promise<vo
     return;
   }
 
+  // ── Build the scannable content ──────────────────────────────────────────
+  // Encode a real HTTPS URL so any phone camera can tap-to-open it directly.
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const qrContent = buildQrContent(student, baseUrl);
+  // Also keep the full payload for the JSON format
   const payload = buildQrPayload(student);
-  const payloadStr = JSON.stringify(payload);
 
   try {
     if (format === "json") {
-      res.json({ studentId: student.id, student: student.nomPrenom, payload });
+      res.json({ studentId: student.id, student: student.nomPrenom, qrContent, payload });
       return;
     }
 
     if (format === "svg") {
-      const svg = await QRCode.toString(payloadStr, {
+      const svg = await QRCode.toString(qrContent, {
         type: "svg",
         margin: 2,
         color: { dark: "#0f172a", light: "#ffffff" },
@@ -127,26 +146,15 @@ export async function generateStudentQr(req: Request, res: Response): Promise<vo
 
     // Default: PNG as base64 data URL or raw buffer
     const wantBuffer = req.query.raw === "1";
+    const qrOpts = { margin: 2, color: { dark: "#0f172a", light: "#ffffff" } };
+
     if (wantBuffer) {
-      const buf = await QRCode.toBuffer(payloadStr, {
-        type: "png",
-        width: size,
-        margin: 2,
-        color: { dark: "#0f172a", light: "#ffffff" },
-      });
+      const buf = await QRCode.toBuffer(qrContent, { type: "png", width: size, ...qrOpts });
       res.setHeader("Content-Type", "image/png");
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename="qr-${student.id}.png"`,
-      );
+      res.setHeader("Content-Disposition", `inline; filename="qr-${student.id}.png"`);
       res.send(buf);
     } else {
-      const dataUrl = await QRCode.toDataURL(payloadStr, {
-        type: "image/png",
-        width: size,
-        margin: 2,
-        color: { dark: "#0f172a", light: "#ffffff" },
-      });
+      const dataUrl = await QRCode.toDataURL(qrContent, { type: "image/png", width: size, ...qrOpts });
       res.json({
         studentId:  student.id,
         student:    student.nomPrenom,
@@ -156,6 +164,7 @@ export async function generateStudentQr(req: Request, res: Response): Promise<vo
         format:     "png",
         width:      size,
         dataUrl,
+        qrContent,
         payload,
       });
     }
