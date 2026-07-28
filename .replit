@@ -4,11 +4,6 @@ modules = ["nodejs-20", "web", "python-3.12"]
 router = "application"
 deploymentTarget = "autoscale"
 run = ["node", "--enable-source-maps", "dist/server/index.js"]
-build = ["pnpm", "run", "build"]
-
-[deployment.postBuild]
-args = ["pnpm", "store", "prune"]
-env = { "CI" = "true" }
 
 [workflows]
 runButton = "Project"
