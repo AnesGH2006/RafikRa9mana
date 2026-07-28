@@ -118,22 +118,27 @@ router.get("/dev-login", async (req: Request, res: Response) => {
     role: "admin" as const,
     subscriptionStatus: "active" as const,
   };
-  // Upsert test user in DB — do NOT include id in the set clause (PG forbids updating PK)
-  await db.insert(usersTable).values(testUser)
-    .onConflictDoUpdate({
-      target: usersTable.id,
-      set: { role: "admin", subscriptionStatus: "active", updatedAt: new Date() },
-    });
-  const now = Math.floor(Date.now() / 1000);
-  const sessionData: SessionData = {
-    user: testUser,
-    access_token: "dev-token",
-    expires_at: now + SESSION_TTL / 1000,
-  };
-  const sid = await createSession(sessionData);
-  setSessionCookie(res, sid);
-  // Redirect to the same origin the request came from (works for both dev and prod)
-  res.redirect(`${getOrigin(req)}/`);
+  try {
+    // Upsert test user in DB — do NOT include id in the set clause (PG forbids updating PK)
+    await db.insert(usersTable).values(testUser)
+      .onConflictDoUpdate({
+        target: usersTable.id,
+        set: { role: "admin", subscriptionStatus: "active", updatedAt: new Date() },
+      });
+    const now = Math.floor(Date.now() / 1000);
+    const sessionData: SessionData = {
+      user: testUser,
+      access_token: "dev-token",
+      expires_at: now + SESSION_TTL / 1000,
+    };
+    const sid = await createSession(sessionData);
+    setSessionCookie(res, sid);
+    // Redirect to the same origin the request came from (works for both dev and prod)
+    res.redirect(`${getOrigin(req)}/`);
+  } catch (err) {
+    req.log.error({ err }, "Dev login failed — database unavailable");
+    res.status(503).json({ error: "Database unavailable — cannot create dev session" });
+  }
 });
 
 router.get("/auth/user", (req: Request, res: Response) => {
@@ -189,7 +194,14 @@ router.get("/callback", async (req: Request, res: Response) => {
   res.clearCookie("return_to", { path: "/" });
   const claims = tokens.claims();
   if (!claims) { res.redirect("/api/login"); return; }
-  const dbUser = await upsertUser(claims as unknown as Record<string, unknown>);
+  let dbUser;
+  try {
+    dbUser = await upsertUser(claims as unknown as Record<string, unknown>);
+  } catch (err) {
+    req.log.error({ err }, "Database error during user upsert in callback — DB may be unavailable");
+    res.redirect("/?auth_error=db_unavailable");
+    return;
+  }
   const now = Math.floor(Date.now() / 1000);
   const sessionData: SessionData = {
     user: {
@@ -206,7 +218,14 @@ router.get("/callback", async (req: Request, res: Response) => {
     refresh_token: tokens.refresh_token,
     expires_at: tokens.expiresIn() ? now + tokens.expiresIn()! : claims.exp,
   };
-  const sid = await createSession(sessionData);
+  let sid;
+  try {
+    sid = await createSession(sessionData);
+  } catch (err) {
+    req.log.error({ err }, "Database error during session creation — DB may be unavailable");
+    res.redirect("/?auth_error=db_unavailable");
+    return;
+  }
   setSessionCookie(res, sid);
   res.redirect(returnTo);
 });
