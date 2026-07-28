@@ -683,6 +683,7 @@ function AppLayout() {
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   config_error: "تعذّر الاتصال بخدمة تسجيل الدخول. يرجى التحقق من إعدادات الخادم والمحاولة لاحقاً.",
   callback_failed: "فشلت عملية تسجيل الدخول. يرجى المحاولة مرة أخرى.",
+  db_unavailable: "قاعدة البيانات غير متاحة حالياً. يرجى المحاولة لاحقاً أو التواصل مع المسؤول.",
 };
 
 function LoginScreen() {
