@@ -246,6 +246,42 @@ export const translations: TranslationMap = {
 
   toggleTheme: { en: "Toggle Theme", ar: "تبديل المظهر", fr: "Changer de thème" },
 
+  // RBAC — Members management
+  "nav.members":         { en: "Members",           ar: "الأعضاء",              fr: "Membres" },
+  "nav.my_child":        { en: "My Child",           ar: "ابني / ابنتي",         fr: "Mon enfant" },
+  "nav.teacher_grades":  { en: "Enter Grades",       ar: "إدخال الدرجات",         fr: "Saisir les notes" },
+  "members.title":       { en: "School Members",     ar: "أعضاء المدرسة",         fr: "Membres de l'école" },
+  "members.subtitle":    { en: "Manage teacher & parent accounts", ar: "إدارة حسابات الأساتذة والأولياء", fr: "Gérer les comptes enseignants & parents" },
+  "members.add":         { en: "Add Member",         ar: "إضافة عضو",             fr: "Ajouter un membre" },
+  "members.teacher":     { en: "Teacher",            ar: "أستاذ",                fr: "Enseignant" },
+  "members.parent":      { en: "Parent",             ar: "ولي الأمر",             fr: "Parent" },
+  "members.name":        { en: "Full Name",          ar: "الاسم الكامل",          fr: "Nom complet" },
+  "members.email":       { en: "Email",              ar: "البريد الإلكتروني",      fr: "E-mail" },
+  "members.phone":       { en: "Phone",              ar: "الهاتف",                fr: "Téléphone" },
+  "members.classes":     { en: "Assigned Classes",   ar: "الأقسام المخصصة",       fr: "Classes assignées" },
+  "members.student":     { en: "Linked Student",     ar: "التلميذ المرتبط",        fr: "Élève lié" },
+  "members.role":        { en: "Role",               ar: "الدور",                fr: "Rôle" },
+  "members.none":        { en: "No members yet",     ar: "لا يوجد أعضاء بعد",     fr: "Aucun membre" },
+  "members.delete_confirm": { en: "Remove this member?", ar: "حذف هذا العضو؟",   fr: "Supprimer ce membre ?" },
+  "members.linked_hint": { en: "They log in with their Replit account. Link them by entering their email.", ar: "يسجلون الدخول بحساب Replit الخاص بهم. اربطهم بإدخال بريدهم الإلكتروني.", fr: "Ils se connectent avec leur compte Replit. Liez-les en entrant leur e-mail." },
+  "members.class_hint":  { en: "Separate class names with commas, e.g. 1A, 2B", ar: "افصل بين أسماء الأقسام بفاصلة مثل: 1أ، 2ب", fr: "Séparez par virgule, ex. 1A, 2B" },
+  "members.saved":       { en: "Member saved",       ar: "تم حفظ العضو",          fr: "Membre enregistré" },
+  "members.deleted":     { en: "Member removed",     ar: "تم حذف العضو",          fr: "Membre supprimé" },
+  "members.status_linked": { en: "Linked ✓",         ar: "مرتبط ✓",               fr: "Lié ✓" },
+  "members.status_pending": { en: "Pending login",   ar: "في انتظار الدخول",      fr: "En attente" },
+
+  // QR public view
+  "qr.title":            { en: "Student Profile",    ar: "ملف التلميذ",            fr: "Profil de l'élève" },
+  "qr.grades":           { en: "Grades",             ar: "الدرجات",                fr: "Notes" },
+  "qr.averages":         { en: "Averages",           ar: "المعدلات",               fr: "Moyennes" },
+  "qr.absences":         { en: "Absences",           ar: "الغيابات",               fr: "Absences" },
+  "qr.invalid":          { en: "Invalid QR code",    ar: "رمز QR غير صالح",        fr: "QR code invalide" },
+  "qr.trimester":        { en: "Trimester",          ar: "الفصل",                  fr: "Trimestre" },
+  "qr.annual":           { en: "Annual Average",     ar: "المعدل السنوي",          fr: "Moyenne annuelle" },
+  "qr.hours":            { en: "hrs",                ar: "ساعة",                   fr: "h" },
+  "qr.justified":        { en: "Justified",          ar: "مبررة",                  fr: "Justifiées" },
+  "qr.unjustified":      { en: "Unjustified",        ar: "غير مبررة",               fr: "Non justifiées" },
+
   // Reports
   "nav.reports":         { en: "Reports",           ar: "التقارير",              fr: "Rapports" },
   "nav.reports_section": { en: "Reports & Print",   ar: "التقارير والطباعة",     fr: "Rapports & Impression" },

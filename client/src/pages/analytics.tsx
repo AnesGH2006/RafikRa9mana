@@ -221,11 +221,11 @@ function ComparisonSection({ yearA, yearB }: { yearA: string; yearB: string }) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={levelCompare} barSize={20} barGap={4}>
+              <ResponsiveContainer width="100%" height={360}>
+                <BarChart data={levelCompare} barSize={28} barGap={4}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 11 }} width={30} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend iconType="circle" iconSize={8} />
                   <Bar dataKey={yearA} fill={YEAR_A_COLOR} radius={[4, 4, 0, 0]} />
@@ -248,11 +248,11 @@ function ComparisonSection({ yearA, yearB }: { yearA: string; yearB: string }) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={successCompare} barSize={20} barGap={4}>
+              <ResponsiveContainer width="100%" height={360}>
+                <BarChart data={successCompare} barSize={28} barGap={4}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} unit="%" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} unit="%" width={36} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend iconType="circle" iconSize={8} />
                   <Bar dataKey={yearA} fill={YEAR_A_COLOR} radius={[4, 4, 0, 0]} />

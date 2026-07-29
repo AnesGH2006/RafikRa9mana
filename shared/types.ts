@@ -1,5 +1,17 @@
 export type SubscriptionStatus = "pending" | "active" | "suspended";
 export type UserRole = "user" | "admin";
+export type MemberRole = "teacher" | "parent";
+
+export interface MemberContext {
+  memberId: string;
+  schoolUserId: string;
+  role: MemberRole;
+  /** Teachers: classes they may enter grades for. Parents: empty. */
+  assignedClasses: string[];
+  /** Parents: the student they can view. Teachers: null. */
+  linkedStudentId: string | null;
+  name: string;
+}
 
 export interface AuthUser {
   id: string;
@@ -10,6 +22,8 @@ export interface AuthUser {
   role: UserRole;
   subscriptionStatus: SubscriptionStatus;
   subscriptionExpiresAt?: string | null;
+  /** Present when this user is a teacher or parent sub-account */
+  memberContext?: MemberContext | null;
 }
 
 export interface SchoolInfo {

@@ -6,8 +6,8 @@ import {
   ExchangeMobileAuthorizationCodeResponse,
   LogoutMobileSessionResponse,
 } from "../../shared/schemas.js";
-import { db, usersTable } from "../../shared/db.js";
-import { eq } from "drizzle-orm";
+import { db, usersTable, schoolMembersTable } from "../../shared/db.js";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   clearSession,
   getOidcConfig,
@@ -146,7 +146,8 @@ router.get("/auth/user", (req: Request, res: Response) => {
     res.json(GetCurrentAuthUserResponse.parse({ user: null }));
     return;
   }
-  res.json(GetCurrentAuthUserResponse.parse({ user: req.user }));
+  const userWithContext = { ...req.user, memberContext: req.memberContext ?? null };
+  res.json(GetCurrentAuthUserResponse.parse({ user: userWithContext }));
 });
 
 router.get("/login", async (req: Request, res: Response) => {
@@ -201,6 +202,17 @@ router.get("/callback", async (req: Request, res: Response) => {
     req.log.error({ err }, "Database error during user upsert in callback — DB may be unavailable");
     res.redirect("/?auth_error=db_unavailable");
     return;
+  }
+  // Link any unlinked school_members records that match this user's email
+  if (dbUser.email) {
+    try {
+      await db.update(schoolMembersTable)
+        .set({ memberUserId: dbUser.id })
+        .where(and(
+          eq(schoolMembersTable.email, dbUser.email),
+          isNull(schoolMembersTable.memberUserId),
+        ));
+    } catch { /* non-fatal */ }
   }
   const now = Math.floor(Date.now() / 1000);
   const sessionData: SessionData = {

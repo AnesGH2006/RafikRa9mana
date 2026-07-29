@@ -55,6 +55,9 @@ import PaywallScreen from "@/pages/paywall";
 import NotFound from "@/pages/not-found";
 import ScanQrPage from "@/pages/scan-qr";
 import UploadGradesOcrPage from "@/pages/upload-grades-ocr";
+import MembersPage from "@/pages/members";
+import MyChildPage from "@/pages/my-child";
+import StudentQrViewPage from "@/pages/student-qr-view";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface NavItemDef {
@@ -158,10 +161,57 @@ const SECTIONS: SectionDef[] = [
       { href: "/settings",      icon: Settings,    labelKey: "nav.settings"     },
       { href: "/account",       icon: User,        labelKey: "nav.account"      },
       { href: "/subscription",  icon: CreditCard,  labelKey: "nav.subscription", badge: "PRO" },
+      { href: "/members",       icon: Users,       labelKey: "nav.members"      },
       { href: "/admin",         icon: Star,        labelKey: "nav.admin"        },
     ],
   },
 ];
+
+// Nav sections shown to TEACHER sub-accounts (minimal view)
+const TEACHER_SECTIONS: SectionDef[] = [
+  {
+    id: "grades", icon: BookOpen, labelKey: "nav.results_section",
+    color: "text-violet-400", gradient: "from-violet-500 to-purple-700",
+    items: [
+      { href: "/",        icon: LayoutDashboard, labelKey: "nav.dashboard"      },
+      { href: "/results", icon: ClipboardList,   labelKey: "nav.results"        },
+      { href: "/subjects",icon: BarChart3,        labelKey: "nav.subjects"       },
+    ],
+  },
+  {
+    id: "more_t", icon: Settings, labelKey: "nav.more_section",
+    color: "text-slate-400", gradient: "from-slate-500 to-slate-700",
+    items: [
+      { href: "/settings", icon: Settings, labelKey: "nav.settings" },
+    ],
+  },
+];
+
+// Nav sections shown to PARENT sub-accounts (read-only child view)
+const PARENT_SECTIONS: SectionDef[] = [
+  {
+    id: "child", icon: User, labelKey: "nav.my_child",
+    color: "text-emerald-400", gradient: "from-emerald-500 to-green-700",
+    items: [
+      { href: "/my-child", icon: GraduationCap, labelKey: "nav.my_child" },
+    ],
+  },
+  {
+    id: "more_p", icon: Settings, labelKey: "nav.more_section",
+    color: "text-slate-400", gradient: "from-slate-500 to-slate-700",
+    items: [
+      { href: "/settings", icon: Settings, labelKey: "nav.settings" },
+    ],
+  },
+];
+
+/** Choose the nav sections to display based on the logged-in user's role. */
+function getNavSections(user: import("@/hooks/use-auth").AuthUser | null): SectionDef[] {
+  const role = user?.memberContext?.role;
+  if (role === "teacher") return TEACHER_SECTIONS;
+  if (role === "parent")  return PARENT_SECTIONS;
+  return SECTIONS;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function isActive(href: string, loc: string): boolean {
@@ -304,7 +354,7 @@ function MobileSidebarContent({ onClose }: { onClose: () => void }) {
       </div>
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-2.5 space-y-px scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
-        {SECTIONS.map((section, i) => (
+        {getNavSections(user).map((section, i) => (
           <motion.div key={section.id}
             initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.03, duration: 0.25 }}>
@@ -436,13 +486,15 @@ function TopNav() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
+  const sections = getNavSections(user);
+
   // Auto-open section containing active route
   useEffect(() => {
-    const active = SECTIONS.find(s => sectionHasActive(s, loc));
+    const active = sections.find(s => sectionHasActive(s, loc));
     if (active) setOpenSection(active.id);
   }, [loc]);
 
-  const activeSection = SECTIONS.find(s => s.id === openSection);
+  const activeSection = sections.find(s => s.id === openSection);
 
   return (
     <>
@@ -473,7 +525,7 @@ function TopNav() {
 
         {/* Section buttons — scrollable, desktop only */}
         <nav className="hidden lg:flex items-center gap-0.5 overflow-x-auto flex-1 scrollbar-none px-1 min-w-0">
-          {SECTIONS.map(section => {
+          {sections.map(section => {
             const hasActive = sectionHasActive(section, loc);
             const isOpen = openSection === section.id;
             return (
@@ -671,6 +723,8 @@ function AppLayout() {
               <Route path="/agent"               component={AgentSetupPage} />
               <Route path="/settings"            component={SettingsPage} />
               <Route path="/account">{() => <SettingsPage />}</Route>
+              <Route path="/members"             component={MembersPage} />
+              <Route path="/my-child"            component={MyChildPage} />
               <Route component={NotFound} />
             </Switch>
           </AnimatePresence>
@@ -834,7 +888,10 @@ function AuthGate() {
     </div>
   );
 
-  const isSubscribed = user?.subscriptionStatus === "active";
+  // Teachers/parents are sub-accounts — they bypass the subscription paywall
+  // (the head admin's subscription covers them).
+  const isMember = !!user?.memberContext;
+  const isSubscribed = user?.subscriptionStatus === "active" || isMember;
 
   return (
     <AnimatePresence mode="wait">
@@ -852,7 +909,13 @@ export default function App() {
   return (
     <ThemeProvider defaultTheme="light" storageKey="ui-theme">
       <LanguageProvider defaultLang="ar">
-        <AuthGate />
+        {/* Public QR scan route — no auth required */}
+        <Switch>
+          <Route path="/schools/:schoolId/students/:studentId/qr" component={StudentQrViewPage} />
+          <Route>
+            <AuthGate />
+          </Route>
+        </Switch>
         <Toaster />
         <PwaInstallPromptLazy />
         <AgentInstallPromptLazy />

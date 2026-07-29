@@ -2,6 +2,15 @@ import * as zod from "zod";
 
 export const HealthCheckResponse = zod.object({ status: zod.string() });
 
+const MemberContextSchema = zod.object({
+  memberId: zod.string(),
+  schoolUserId: zod.string(),
+  role: zod.enum(["teacher", "parent"]),
+  assignedClasses: zod.array(zod.string()),
+  linkedStudentId: zod.string().nullable(),
+  name: zod.string(),
+});
+
 export const GetCurrentAuthUserResponse = zod.object({
   user: zod.union([
     zod.object({
@@ -13,6 +22,7 @@ export const GetCurrentAuthUserResponse = zod.object({
       role: zod.enum(["user", "admin"]),
       subscriptionStatus: zod.enum(["pending", "active", "suspended"]),
       subscriptionExpiresAt: zod.string().nullable().optional(),
+      memberContext: MemberContextSchema.nullable().optional(),
     }),
     zod.null(),
   ]),

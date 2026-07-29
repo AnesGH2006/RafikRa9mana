@@ -142,11 +142,11 @@ export default function YearEndPassed() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={byLevel} barSize={28}>
+                <ResponsiveContainer width="100%" height={360}>
+                  <BarChart data={byLevel} barSize={36}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="name" tick={{ fontSize: 13 }} />
+                    <YAxis tick={{ fontSize: 11 }} width={30} />
                     <Tooltip content={<MiniTooltip />} />
                     <Bar dataKey="ناجح" radius={[6, 6, 0, 0]}>
                       {byLevel.map((e, i) => <Cell key={i} fill={e.fill} />)}
@@ -188,11 +188,11 @@ export default function YearEndPassed() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={avgBuckets} barSize={24}>
+              <ResponsiveContainer width="100%" height={360}>
+                <BarChart data={avgBuckets} barSize={32}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 11 }} width={30} />
                   <Tooltip content={<MiniTooltip />} />
                   <Bar dataKey="count" name="عدد التلاميذ" radius={[4, 4, 0, 0]}>
                     {avgBuckets.map((e, i) => <Cell key={i} fill={e.fill} />)}

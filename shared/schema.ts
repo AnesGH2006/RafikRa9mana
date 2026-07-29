@@ -236,3 +236,26 @@ export const smsLogsTable = pgTable("sms_logs", {
 
 export type SmsLog       = typeof smsLogsTable.$inferSelect;
 export type InsertSmsLog = typeof smsLogsTable.$inferInsert;
+
+// ─── School Members (RBAC) ────────────────────────────────────────────────────
+export const schoolMemberRoleEnum = pgEnum("school_member_role", ["teacher", "parent"]);
+
+export const schoolMembersTable = pgTable("school_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** The head-admin (owner) of the school — references users.id */
+  schoolUserId: varchar("school_user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  /** Set when the invited person first logs in via Replit OIDC */
+  memberUserId: varchar("member_user_id").references(() => usersTable.id, { onDelete: "set null" }),
+  role: schoolMemberRoleEnum("role").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 30 }),
+  /** For teachers: list of class names they can enter grades for */
+  assignedClasses: jsonb("assigned_classes").$type<string[]>().default([]),
+  /** For parents: the student they are the guardian of */
+  linkedStudentId: varchar("linked_student_id", { length: 64 }).references(() => studentsTable.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type SchoolMember       = typeof schoolMembersTable.$inferSelect;
+export type InsertSchoolMember = typeof schoolMembersTable.$inferInsert;

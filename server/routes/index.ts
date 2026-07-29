@@ -17,6 +17,7 @@ import qrRouter from "./qr.js";
 import smsRouter from "./sms.js";
 import notificationsRouter from "./notifications.js";
 import ocrRouter from "./ocr.js";
+import membersRouter from "./members.js";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(qrRouter);
 router.use(smsRouter);
 router.use(notificationsRouter);
 router.use(ocrRouter);
+router.use(membersRouter);
 
 export default router;
