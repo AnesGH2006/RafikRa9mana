@@ -1,9 +1,10 @@
 /**
  * Members Page — Head-Admin only
- * Manage teacher and parent sub-accounts for the school.
+ * Manage STAFF accounts (teachers, supervisors, counselors).
+ * Parents self-register via /parent-register using the school join code.
  */
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/language-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -21,16 +22,20 @@ import {
 } from "@/components/ui/select";
 import {
   Users, UserPlus, Trash2, Pencil, GraduationCap,
-  UserCheck, AlertCircle, BookOpen, Link2,
+  UserCheck, AlertCircle, BookOpen, Copy, Check,
+  ShieldCheck, MessageSquare, ExternalLink,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL;
+
+type StaffRole   = "teacher" | "supervisor" | "counselor";
+type MemberRole  = StaffRole | "parent";
 
 interface Member {
   id: string;
   schoolUserId: string;
   memberUserId: string | null;
-  role: "teacher" | "parent";
+  role: MemberRole;
   name: string;
   email: string | null;
   phone: string | null;
@@ -51,36 +56,46 @@ const pageVariants = {
   animate: { opacity: 1, y: 0, transition: { duration: 0.4 } },
 };
 
-const EMPTY_FORM = {
-  role: "teacher" as "teacher" | "parent",
+const EMPTY_FORM: { role: StaffRole; name: string; email: string; phone: string; assignedClasses: string } = {
+  role: "teacher",
   name: "",
   email: "",
   phone: "",
   assignedClasses: "",
-  linkedStudentId: "",
+};
+
+const ROLE_META: Record<MemberRole, { label: string; arLabel: string; color: string; bg: string; icon: React.ElementType }> = {
+  teacher:    { label: "Teacher",     arLabel: "أستاذ",      color: "text-violet-600 dark:text-violet-400",  bg: "bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800/40",  icon: GraduationCap   },
+  supervisor: { label: "Supervisor",  arLabel: "مشرف",       color: "text-blue-600 dark:text-blue-400",      bg: "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800/40",            icon: ShieldCheck     },
+  counselor:  { label: "Counselor",   arLabel: "مستشار",     color: "text-amber-600 dark:text-amber-400",    bg: "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/40",        icon: MessageSquare   },
+  parent:     { label: "Parent",      arLabel: "ولي الأمر",   color: "text-emerald-600 dark:text-emerald-400",bg: "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/40",icon: UserCheck       },
 };
 
 export default function MembersPage() {
   const { t } = useLanguage();
   const { toast } = useToast();
 
-  const [members, setMembers] = useState<Member[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [members,    setMembers]    = useState<Member[]>([]);
+  const [students,   setStudents]   = useState<Student[]>([]);
+  const [joinCode,   setJoinCode]   = useState<string>("");
+  const [loading,    setLoading]    = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Member | null>(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editing,    setEditing]    = useState<Member | null>(null);
+  const [form,       setForm]       = useState(EMPTY_FORM);
+  const [saving,     setSaving]     = useState(false);
+  const [deleteId,   setDeleteId]   = useState<string | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
 
-  // Load members + students
+  // Load members + students + school join code
   useEffect(() => {
     Promise.all([
-      fetch(`${BASE}api/members`, { credentials: "include" }).then(r => r.json()),
+      fetch(`${BASE}api/members`,            { credentials: "include" }).then(r => r.json()),
       fetch(`${BASE}api/students?limit=500`, { credentials: "include" }).then(r => r.json()),
-    ]).then(([mem, stu]) => {
+      fetch(`${BASE}api/school`,             { credentials: "include" }).then(r => r.json()),
+    ]).then(([mem, stu, school]) => {
       setMembers(Array.isArray(mem) ? mem : []);
       setStudents(Array.isArray(stu?.students) ? stu.students : Array.isArray(stu) ? stu : []);
+      if (school?.joinCode) setJoinCode(school.joinCode);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -92,14 +107,14 @@ export default function MembersPage() {
   }
 
   function openEdit(m: Member) {
+    if (m.role === "parent") return; // parents are read-only
     setEditing(m);
     setForm({
-      role: m.role,
+      role: m.role as StaffRole,
       name: m.name,
       email: m.email ?? "",
       phone: m.phone ?? "",
       assignedClasses: (m.assignedClasses ?? []).join(", "),
-      linkedStudentId: m.linkedStudentId ?? "",
     });
     setDialogOpen(true);
   }
@@ -115,12 +130,11 @@ export default function MembersPage() {
       assignedClasses: form.role === "teacher"
         ? form.assignedClasses.split(",").map(s => s.trim()).filter(Boolean)
         : [],
-      linkedStudentId: form.role === "parent" ? (form.linkedStudentId || null) : null,
     };
     try {
-      const url = editing ? `${BASE}api/members/${editing.id}` : `${BASE}api/members`;
+      const url    = editing ? `${BASE}api/members/${editing.id}` : `${BASE}api/members`;
       const method = editing ? "PATCH" : "POST";
-      const res = await fetch(url, {
+      const res    = await fetch(url, {
         method,
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -158,13 +172,27 @@ export default function MembersPage() {
     }
   }
 
-  const teachers = members.filter(m => m.role === "teacher");
-  const parents  = members.filter(m => m.role === "parent");
+  function copyCode() {
+    if (!joinCode) return;
+    navigator.clipboard.writeText(joinCode).then(() => {
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    });
+  }
+
+  const staffMembers  = members.filter(m => m.role !== "parent");
+  const parentMembers = members.filter(m => m.role === "parent");
 
   function studentName(id: string | null) {
     if (!id) return "—";
     return students.find(s => s.id === id)?.nomPrenom ?? id;
   }
+
+  const STAFF_GROUPS: { role: StaffRole; list: Member[] }[] = [
+    { role: "teacher",    list: staffMembers.filter(m => m.role === "teacher")    },
+    { role: "supervisor", list: staffMembers.filter(m => m.role === "supervisor") },
+    { role: "counselor",  list: staffMembers.filter(m => m.role === "counselor")  },
+  ];
 
   return (
     <motion.div
@@ -172,7 +200,7 @@ export default function MembersPage() {
       className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto"
     >
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow">
@@ -188,65 +216,114 @@ export default function MembersPage() {
         </Button>
       </div>
 
-      {/* Info banner */}
-      <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800/40 p-3 text-xs text-blue-700 dark:text-blue-400">
-        <Link2 className="w-4 h-4 mt-0.5 shrink-0" />
-        <span>{t("members.linked_hint")}</span>
-      </div>
+      {/* School Join Code card */}
+      {joinCode && (
+        <Card className="border-0 bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/30 dark:to-blue-950/20 border border-indigo-200/60 dark:border-indigo-800/30 shadow-sm">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
+                  {t("members.join_code")}
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-3xl font-black tracking-[0.25em] text-indigo-700 dark:text-indigo-300 select-all">
+                    {joinCode}
+                  </span>
+                  <Button size="sm" variant="outline" onClick={copyCode}
+                    className="gap-1.5 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300">
+                    {codeCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {codeCopied ? "تم النسخ" : "نسخ"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">{t("members.join_code_hint")}</p>
+              </div>
+              <a
+                href="/parent-register"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                {`/parent-register`}
+              </a>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-16 text-muted-foreground text-sm">جارٍ التحميل...</div>
       ) : (
         <div className="space-y-6">
-          {/* Teachers */}
-          <Section
-            icon={<GraduationCap className="w-4 h-4 text-violet-500" />}
-            title={`${t("members.teacher")}s (${teachers.length})`}
-            color="border-violet-200 bg-violet-50/40 dark:bg-violet-950/20"
-          >
-            {teachers.length === 0 ? (
-              <EmptyState label={t("members.none")} />
-            ) : (
-              teachers.map(m => (
-                <MemberCard
-                  key={m.id}
-                  member={m}
-                  extra={m.assignedClasses?.length
-                    ? `${t("members.classes")}: ${m.assignedClasses.join(" · ")}`
-                    : undefined}
-                  onEdit={() => openEdit(m)}
-                  onDelete={() => setDeleteId(m.id)}
-                />
-              ))
-            )}
-          </Section>
+          {/* Staff groups */}
+          {STAFF_GROUPS.map(({ role, list }) => {
+            const meta = ROLE_META[role];
+            const Icon = meta.icon;
+            return (
+              <Card key={role} className={`border shadow-sm ${meta.bg}`}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Icon className={`w-4 h-4 ${meta.color}`} />
+                    <span>{meta.arLabel}s ({list.length})</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {list.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-3">{t("members.none")}</p>
+                  ) : (
+                    list.map(m => (
+                      <MemberCard
+                        key={m.id}
+                        member={m}
+                        meta={meta}
+                        extra={m.assignedClasses?.length
+                          ? `${t("members.classes")}: ${m.assignedClasses.join(" · ")}`
+                          : undefined}
+                        onEdit={() => openEdit(m)}
+                        onDelete={() => setDeleteId(m.id)}
+                      />
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
 
-          {/* Parents */}
-          <Section
-            icon={<UserCheck className="w-4 h-4 text-emerald-500" />}
-            title={`${t("members.parent")}s (${parents.length})`}
-            color="border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20"
-          >
-            {parents.length === 0 ? (
-              <EmptyState label={t("members.none")} />
-            ) : (
-              parents.map(m => (
-                <MemberCard
-                  key={m.id}
-                  member={m}
-                  extra={m.linkedStudentId
-                    ? `${t("members.student")}: ${studentName(m.linkedStudentId)}`
-                    : undefined}
-                  onEdit={() => openEdit(m)}
-                  onDelete={() => setDeleteId(m.id)}
-                />
-              ))
-            )}
-          </Section>
+          {/* Parents section (read-only — self-registered) */}
+          <Card className="border shadow-sm bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-emerald-500" />
+                {t("members.parents_section")} ({parentMembers.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-start gap-2 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-100/60 dark:bg-emerald-900/20 rounded-lg p-2.5 mb-3">
+                <BookOpen className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                {t("members.parent_hint")}
+              </div>
+              {parentMembers.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-3">{t("members.none")}</p>
+              ) : (
+                parentMembers.map(m => (
+                  <MemberCard
+                    key={m.id}
+                    member={m}
+                    meta={ROLE_META.parent}
+                    extra={m.linkedStudentId
+                      ? `${t("members.student")}: ${studentName(m.linkedStudentId)}`
+                      : undefined}
+                    readOnly
+                    onDelete={() => setDeleteId(m.id)}
+                  />
+                ))
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 
-      {/* Add / Edit dialog */}
+      {/* Add / Edit dialog — staff only */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -259,14 +336,26 @@ export default function MembersPage() {
             {!editing && (
               <div className="space-y-1.5">
                 <Label>{t("members.role")}</Label>
-                <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v as any }))}>
+                <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v as StaffRole }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="teacher">
-                      <span className="flex items-center gap-2"><GraduationCap className="w-4 h-4 text-violet-500" />{t("members.teacher")}</span>
+                      <span className="flex items-center gap-2">
+                        <GraduationCap className="w-4 h-4 text-violet-500" />
+                        {t("members.teacher")}
+                      </span>
                     </SelectItem>
-                    <SelectItem value="parent">
-                      <span className="flex items-center gap-2"><UserCheck className="w-4 h-4 text-emerald-500" />{t("members.parent")}</span>
+                    <SelectItem value="supervisor">
+                      <span className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-blue-500" />
+                        {t("members.supervisor")}
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="counselor">
+                      <span className="flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-amber-500" />
+                        {t("members.counselor")}
+                      </span>
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -276,20 +365,35 @@ export default function MembersPage() {
             {/* Name */}
             <div className="space-y-1.5">
               <Label>{t("members.name")} *</Label>
-              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="…" />
+              <Input
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="…"
+              />
             </div>
 
             {/* Email */}
             <div className="space-y-1.5">
               <Label>{t("members.email")}</Label>
-              <Input value={form.email} type="email" onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" dir="ltr" />
+              <Input
+                value={form.email}
+                type="email"
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="email@example.com"
+                dir="ltr"
+              />
               <p className="text-xs text-muted-foreground">{t("members.linked_hint")}</p>
             </div>
 
             {/* Phone */}
             <div className="space-y-1.5">
               <Label>{t("members.phone")}</Label>
-              <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="05xxxxxxxx" dir="ltr" />
+              <Input
+                value={form.phone}
+                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="05xxxxxxxx"
+                dir="ltr"
+              />
             </div>
 
             {/* Teacher: assigned classes */}
@@ -303,26 +407,6 @@ export default function MembersPage() {
                   dir="ltr"
                 />
                 <p className="text-xs text-muted-foreground">{t("members.class_hint")}</p>
-              </div>
-            )}
-
-            {/* Parent: linked student */}
-            {form.role === "parent" && (
-              <div className="space-y-1.5">
-                <Label>{t("members.student")}</Label>
-                <Select value={form.linkedStudentId} onValueChange={v => setForm(f => ({ ...f, linkedStudentId: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر التلميذ…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">—</SelectItem>
-                    {students.map(s => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.nomPrenom} — {s.niveau} {s.classe}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             )}
           </div>
@@ -354,45 +438,27 @@ export default function MembersPage() {
   );
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-function Section({ icon, title, color, children }: {
-  icon: React.ReactNode;
-  title: string;
-  color: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card className={`border shadow-sm ${color}`}>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          {icon}{title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">{children}</CardContent>
-    </Card>
-  );
-}
-
-function EmptyState({ label }: { label: string }) {
-  return (
-    <p className="text-sm text-muted-foreground text-center py-4">{label}</p>
-  );
-}
-
-function MemberCard({ member, extra, onEdit, onDelete }: {
+// ── MemberCard ────────────────────────────────────────────────────────────────
+function MemberCard({ member, meta, extra, readOnly, onEdit, onDelete }: {
   member: Member;
+  meta: typeof ROLE_META[MemberRole];
   extra?: string;
-  onEdit: () => void;
+  readOnly?: boolean;
+  onEdit?: () => void;
   onDelete: () => void;
 }) {
   const { t } = useLanguage();
+  const Icon = meta.icon;
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border bg-background/60 px-3 py-2.5">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
+          <Icon className={`w-3.5 h-3.5 shrink-0 ${meta.color}`} />
           <span className="font-medium text-sm truncate">{member.name}</span>
-          <Badge variant="outline" className="text-xs shrink-0">
+          <Badge
+            variant="outline"
+            className={`text-[10px] shrink-0 ${member.memberUserId ? "border-emerald-400 text-emerald-600 dark:text-emerald-400" : "border-amber-400 text-amber-600 dark:text-amber-400"}`}
+          >
             {member.memberUserId ? t("members.status_linked") : t("members.status_pending")}
           </Badge>
         </div>
@@ -404,10 +470,12 @@ function MemberCard({ member, extra, onEdit, onDelete }: {
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
-          <Pencil className="w-3.5 h-3.5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={onDelete}>
+        {!readOnly && onEdit && (
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={onEdit}>
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+        )}
+        <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-red-500" onClick={onDelete}>
           <Trash2 className="w-3.5 h-3.5" />
         </Button>
       </div>

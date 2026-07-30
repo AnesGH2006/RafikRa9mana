@@ -5,7 +5,7 @@ export const HealthCheckResponse = zod.object({ status: zod.string() });
 const MemberContextSchema = zod.object({
   memberId: zod.string(),
   schoolUserId: zod.string(),
-  role: zod.enum(["teacher", "parent"]),
+  role: zod.enum(["teacher", "parent", "supervisor", "counselor"]),
   assignedClasses: zod.array(zod.string()),
   linkedStudentId: zod.string().nullable(),
   name: zod.string(),

@@ -3,14 +3,17 @@
  *
  * HEAD-ADMIN routes — all require an authenticated head-admin session.
  *
- * GET    /api/members           — list all teachers & parents for this school
- * POST   /api/members           — create a teacher or parent record
- * PATCH  /api/members/:id       — update name, email, assignedClasses, linkedStudentId
+ * GET    /api/members           — list all staff members for this school
+ * POST   /api/members           — create a staff member (teacher/supervisor/counselor)
+ * PATCH  /api/members/:id       — update name, email, assignedClasses
  * DELETE /api/members/:id       — remove a member
+ *
+ * Self-registration routes (authenticated user, no admin needed)
+ * POST   /api/parent-register   — parent claims their child using school join code + student national ID
  */
 import { Router, type Request, type Response } from "express";
-import { and, eq } from "drizzle-orm";
-import { db, schoolMembersTable, studentsTable, gradesTable, absencesTable } from "../../shared/db.js";
+import { and, eq, inArray } from "drizzle-orm";
+import { db, schoolMembersTable, studentsTable, gradesTable, absencesTable, schoolInfoTable } from "../../shared/db.js";
 
 const router = Router();
 
@@ -38,34 +41,22 @@ router.post("/members", async (req: Request, res: Response): Promise<void> => {
   if (!isHeadAdmin(req)) { res.status(403).json({ error: "Forbidden" }); return; }
   const schoolUserId = req.user!.id;
 
-  const { role, name, email, phone, assignedClasses, linkedStudentId } = req.body as {
-    role: "teacher" | "parent";
+  const { role, name, email, phone, assignedClasses } = req.body as {
+    role: "teacher" | "supervisor" | "counselor";
     name: string;
     email?: string;
     phone?: string;
     assignedClasses?: string[];
-    linkedStudentId?: string | null;
   };
 
-  if (!role || !["teacher", "parent"].includes(role)) {
-    res.status(400).json({ error: "role must be 'teacher' or 'parent'" });
+  // Admin can only create staff roles — parents self-register via /api/parent-register
+  if (!role || !["teacher", "supervisor", "counselor"].includes(role)) {
+    res.status(400).json({ error: "role must be 'teacher', 'supervisor', or 'counselor'" });
     return;
   }
   if (!name?.trim()) {
     res.status(400).json({ error: "name is required" });
     return;
-  }
-  if (role === "parent" && linkedStudentId) {
-    // Verify student belongs to this school
-    const [student] = await db
-      .select({ id: studentsTable.id })
-      .from(studentsTable)
-      .where(and(eq(studentsTable.id, linkedStudentId), eq(studentsTable.userId, schoolUserId)))
-      .limit(1);
-    if (!student) {
-      res.status(400).json({ error: "التلميذ غير موجود" });
-      return;
-    }
   }
 
   const [created] = await db
@@ -77,7 +68,7 @@ router.post("/members", async (req: Request, res: Response): Promise<void> => {
       email: email?.trim() || null,
       phone: phone?.trim() || null,
       assignedClasses: assignedClasses ?? [],
-      linkedStudentId: role === "parent" ? (linkedStudentId ?? null) : null,
+      linkedStudentId: null,
     })
     .returning();
 
@@ -185,7 +176,6 @@ router.get("/teacher/students", async (req: Request, res: Response): Promise<voi
 
   if (!assignedClasses.length) { res.json([]); return; }
 
-  const { inArray } = await import("drizzle-orm");
   const students = await db
     .select()
     .from(studentsTable)
@@ -233,7 +223,7 @@ router.post("/teacher/grades", async (req: Request, res: Response): Promise<void
     return;
   }
 
-  const crypto = await import("crypto");
+  const crypto = (await import("crypto")).default;
   const upserts = Object.entries(gradeMap).map(([subject, score]) => ({
     id: crypto.randomUUID(),
     userId: schoolUserId,
@@ -245,22 +235,104 @@ router.post("/teacher/grades", async (req: Request, res: Response): Promise<void
   }));
 
   if (upserts.length > 0) {
-    const { gradesTable: gt } = await import("../../shared/db.js");
-    const { sql: drizzleSql } = await import("drizzle-orm");
     for (const row of upserts) {
-      await db.insert(gradesTable)
-        .values(row as any)
-        .onConflictDoUpdate({
-          target: [gradesTable.studentId, gradesTable.annee, gradesTable.trimestre, gradesTable.subject],
-          set: { score: drizzleSql`excluded.score` },
-        }).catch(() => {
-          // If no unique constraint, just insert
-          return db.insert(gradesTable).values(row as any).onConflictDoNothing();
-        });
+      await db.insert(gradesTable).values(row as any).onConflictDoNothing();
     }
   }
 
   res.json({ success: true, count: upserts.length });
+});
+
+// ── POST /api/parent-register ─────────────────────────────────────────────────
+// Any authenticated user can call this to register as a parent linked to a student.
+// They supply the school join code + student national ID to prove they belong to the school.
+router.post("/parent-register", async (req: Request, res: Response): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  // A user who is already a member cannot self-register again
+  if (req.memberContext) {
+    res.status(409).json({ error: "Already a school member", memberContext: req.memberContext });
+    return;
+  }
+
+  const { joinCode, nationalId, parentName } = req.body as {
+    joinCode: string;
+    nationalId: string;
+    parentName?: string;
+  };
+
+  if (!joinCode?.trim() || !nationalId?.trim()) {
+    res.status(400).json({ error: "joinCode and nationalId are required" });
+    return;
+  }
+
+  // Look up school by join code
+  const [school] = await db
+    .select({ userId: schoolInfoTable.userId, nom: schoolInfoTable.nom })
+    .from(schoolInfoTable)
+    .where(eq(schoolInfoTable.joinCode, joinCode.toUpperCase().trim()))
+    .limit(1);
+
+  if (!school) {
+    res.status(404).json({ error: "رمز المدرسة غير صحيح. تحقق من الرمز مع مدير المدرسة." });
+    return;
+  }
+
+  // Find student by raqm (registration number) in that school
+  // raqm is the "رقم التسجيل" field used in Algeria (integer)
+  const raqmInt = parseInt(nationalId.trim(), 10);
+  if (isNaN(raqmInt)) {
+    res.status(400).json({ error: "رقم التسجيل يجب أن يكون رقمًا صحيحًا." });
+    return;
+  }
+  const [student] = await db
+    .select({ id: studentsTable.id, nomPrenom: studentsTable.nomPrenom, niveau: studentsTable.niveau, classe: studentsTable.classe })
+    .from(studentsTable)
+    .where(and(eq(studentsTable.userId, school.userId), eq(studentsTable.raqm, raqmInt)))
+    .limit(1);
+
+  if (!student) {
+    res.status(404).json({ error: "رقم التسجيل غير موجود في سجلات المدرسة. تحقق من الرقم أو تواصل مع مدير المدرسة." });
+    return;
+  }
+
+  // Check if this user already has a parent record for this school
+  const [existing] = await db
+    .select({ id: schoolMembersTable.id })
+    .from(schoolMembersTable)
+    .where(and(
+      eq(schoolMembersTable.schoolUserId, school.userId),
+      eq(schoolMembersTable.memberUserId, req.user!.id),
+    ))
+    .limit(1);
+
+  if (existing) {
+    res.status(409).json({ error: "أنت مسجّل بالفعل في هذه المدرسة." });
+    return;
+  }
+
+  const name = parentName?.trim() || req.user!.firstName || req.user!.email || "ولي الأمر";
+
+  const [created] = await db
+    .insert(schoolMembersTable)
+    .values({
+      schoolUserId: school.userId,
+      memberUserId: req.user!.id,
+      role: "parent",
+      name,
+      email: req.user!.email ?? null,
+      phone: null,
+      assignedClasses: [],
+      linkedStudentId: student.id,
+    })
+    .returning();
+
+  res.status(201).json({
+    success: true,
+    member: created,
+    student: { id: student.id, nomPrenom: student.nomPrenom, niveau: student.niveau, classe: student.classe },
+    school: { nom: school.nom },
+  });
 });
 
 export default router;

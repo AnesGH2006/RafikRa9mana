@@ -58,6 +58,7 @@ import UploadGradesOcrPage from "@/pages/upload-grades-ocr";
 import MembersPage from "@/pages/members";
 import MyChildPage from "@/pages/my-child";
 import StudentQrViewPage from "@/pages/student-qr-view";
+import ParentRegisterPage from "@/pages/parent-register";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface NavItemDef {
@@ -909,9 +910,10 @@ export default function App() {
   return (
     <ThemeProvider defaultTheme="light" storageKey="ui-theme">
       <LanguageProvider defaultLang="ar">
-        {/* Public QR scan route — no auth required */}
+        {/* Public routes — no auth required */}
         <Switch>
           <Route path="/schools/:schoolId/students/:studentId/qr" component={StudentQrViewPage} />
+          <Route path="/parent-register" component={ParentRegisterPage} />
           <Route>
             <AuthGate />
           </Route>

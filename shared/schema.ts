@@ -41,6 +41,8 @@ export const schoolInfoTable = pgTable("school_info", {
   phone: varchar("phone", { length: 30 }).default(""),
   smsGatewayUrl: varchar("sms_gateway_url", { length: 500 }).default(""),
   smsGatewayApiKey: varchar("sms_gateway_api_key", { length: 500 }).default(""),
+  /** Short join code shared with parents for self-registration (e.g. "A3X7K9") */
+  joinCode: varchar("join_code", { length: 10 }).unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -238,7 +240,7 @@ export type SmsLog       = typeof smsLogsTable.$inferSelect;
 export type InsertSmsLog = typeof smsLogsTable.$inferInsert;
 
 // ─── School Members (RBAC) ────────────────────────────────────────────────────
-export const schoolMemberRoleEnum = pgEnum("school_member_role", ["teacher", "parent"]);
+export const schoolMemberRoleEnum = pgEnum("school_member_role", ["teacher", "parent", "supervisor", "counselor"]);
 
 export const schoolMembersTable = pgTable("school_members", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

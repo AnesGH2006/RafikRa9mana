@@ -1,6 +1,6 @@
 export type SubscriptionStatus = "pending" | "active" | "suspended";
 export type UserRole = "user" | "admin";
-export type MemberRole = "teacher" | "parent";
+export type MemberRole = "teacher" | "parent" | "supervisor" | "counselor";
 
 export interface MemberContext {
   memberId: string;
