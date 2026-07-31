@@ -221,11 +221,11 @@ function ComparisonSection({ yearA, yearB }: { yearA: string; yearB: string }) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={360}>
-                <BarChart data={levelCompare} barSize={28} barGap={4}>
+              <ResponsiveContainer width="100%" height={460}>
+                <BarChart data={levelCompare} barSize={40} barGap={6}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 11 }} width={30} />
+                  <XAxis dataKey="name" tick={{ fontSize: 14, fontWeight: "bold" }} />
+                  <YAxis tick={{ fontSize: 14, fontWeight: "bold" }} width={38} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend iconType="circle" iconSize={8} />
                   <Bar dataKey={yearA} fill={YEAR_A_COLOR} radius={[4, 4, 0, 0]} />
@@ -248,11 +248,11 @@ function ComparisonSection({ yearA, yearB }: { yearA: string; yearB: string }) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={360}>
-                <BarChart data={successCompare} barSize={28} barGap={4}>
+              <ResponsiveContainer width="100%" height={460}>
+                <BarChart data={successCompare} barSize={40} barGap={6}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} unit="%" width={36} />
+                  <XAxis dataKey="name" tick={{ fontSize: 14, fontWeight: "bold" }} />
+                  <YAxis tick={{ fontSize: 14, fontWeight: "bold" }} domain={[0, 100]} unit="%" width={44} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend iconType="circle" iconSize={8} />
                   <Bar dataKey={yearA} fill={YEAR_A_COLOR} radius={[4, 4, 0, 0]} />
@@ -275,12 +275,12 @@ function ComparisonSection({ yearA, yearB }: { yearA: string; yearB: string }) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={420}>
+              <ResponsiveContainer width="100%" height={480}>
                 <LineChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
-                  <XAxis dataKey="year" tick={{ fontSize: 13 }} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 12 }} width={32} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} domain={[0, 100]} unit="%" width={40} />
+                  <XAxis dataKey="year" tick={{ fontSize: 14, fontWeight: "bold" }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 14, fontWeight: "bold" }} width={38} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 14, fontWeight: "bold" }} domain={[0, 100]} unit="%" width={44} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend iconType="circle" iconSize={8} />
                   <Line yAxisId="left" type="monotone" dataKey="total" name="إجمالي التلاميذ"
@@ -516,9 +516,9 @@ export default function AnalyticsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={380}>
+                  <ResponsiveContainer width="100%" height={460}>
                     <PieChart>
-                      <Pie data={genderData} cx="50%" cy="50%" innerRadius={75} outerRadius={110}
+                      <Pie data={genderData} cx="50%" cy="50%" innerRadius={95} outerRadius={135}
                         paddingAngle={4} dataKey="value" animationDuration={800}>
                         {genderData.map((_, i) => (
                           <Cell key={i} fill={GENDER_COLORS[i % GENDER_COLORS.length]} />
@@ -580,11 +580,11 @@ export default function AnalyticsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={levelData} barSize={32}>
+                  <ResponsiveContainer width="100%" height={460}>
+                    <BarChart data={levelData} barSize={40}>
                       <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
+                      <XAxis dataKey="name" tick={{ fontSize: 14, fontWeight: "bold" }} />
+                      <YAxis tick={{ fontSize: 14, fontWeight: "bold" }} width={36} />
                       <Tooltip content={<CustomTooltip />} />
                       <Bar dataKey={t("analytics.boys")} fill="#3b82f6" radius={[4, 4, 0, 0]} />
                       <Bar dataKey={t("analytics.girls")} fill="#ec4899" radius={[4, 4, 0, 0]} />
@@ -606,11 +606,11 @@ export default function AnalyticsPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ResponsiveContainer width="100%" height={400}>
-                      <BarChart data={successData} barSize={36}>
+                    <ResponsiveContainer width="100%" height={460}>
+                      <BarChart data={successData} barSize={44}>
                         <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                        <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: "bold" }} />
-                        <YAxis tick={{ fontSize: 12 }} width={30} />
+                        <XAxis dataKey="name" tick={{ fontSize: 14, fontWeight: "bold" }} />
+                        <YAxis tick={{ fontSize: 14, fontWeight: "bold" }} width={36} />
                         <Tooltip content={<CustomTooltip />} />
                         <Legend iconType="circle" iconSize={8} />
                         <Bar dataKey={t("analytics.passed")} fill={SUCCESS_COLORS.pass} radius={[6, 6, 0, 0]} />
@@ -751,9 +751,9 @@ export default function AnalyticsPage() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <ResponsiveContainer width="100%" height={360}>
+                        <ResponsiveContainer width="100%" height={460}>
                           <PieChart>
-                            <Pie data={repeaterData} cx="50%" cy="50%" innerRadius={55} outerRadius={80}
+                            <Pie data={repeaterData} cx="50%" cy="50%" innerRadius={80} outerRadius={115}
                               paddingAngle={4} dataKey="value" animationDuration={800}>
                               {repeaterData.map((d, i) => <Cell key={i} fill={d.fill} />)}
                             </Pie>
@@ -776,11 +776,11 @@ export default function AnalyticsPage() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <ResponsiveContainer width="100%" height={360}>
-                          <BarChart data={repeaterByLevel} barSize={28} barGap={4}>
+                        <ResponsiveContainer width="100%" height={460}>
+                          <BarChart data={repeaterByLevel} barSize={40} barGap={6}>
                             <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
-                            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                            <YAxis tick={{ fontSize: 10 }} />
+                            <XAxis dataKey="name" tick={{ fontSize: 14, fontWeight: "bold" }} />
+                            <YAxis tick={{ fontSize: 14, fontWeight: "bold" }} width={36} />
                             <Tooltip content={<CustomTooltip />} />
                             <Legend iconType="circle" iconSize={8} />
                             <Bar dataKey="جدد" fill="#6366f1" radius={[4, 4, 0, 0]} />
@@ -857,11 +857,11 @@ export default function AnalyticsPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={400}>
-                        <BarChart data={genderSuccessData} barSize={32} barGap={6}>
+                      <ResponsiveContainer width="100%" height={460}>
+                        <BarChart data={genderSuccessData} barSize={44} barGap={6}>
                           <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
-                          <XAxis dataKey="name" tick={{ fontSize: 13 }} />
-                          <YAxis tick={{ fontSize: 12 }} domain={[0, 100]} unit="%" width={40} />
+                          <XAxis dataKey="name" tick={{ fontSize: 14, fontWeight: "bold" }} />
+                          <YAxis tick={{ fontSize: 14, fontWeight: "bold" }} domain={[0, 100]} unit="%" width={44} />
                           <Tooltip content={<CustomTooltip />} />
                           <Legend iconType="circle" iconSize={8} />
                           <Bar dataKey="ذكور" fill="#3b82f6" radius={[5, 5, 0, 0]} />

@@ -378,11 +378,11 @@ export default function Dashboard() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="flex justify-center">
-                      <ResponsiveContainer width="100%" height={320}>
+                      <ResponsiveContainer width="100%" height={460}>
                         <PieChart>
                           <Pie
                             data={genderData} cx="50%" cy="50%"
-                            innerRadius={80} outerRadius={115}
+                            innerRadius={100} outerRadius={145}
                             paddingAngle={4} dataKey="value" animationDuration={800}
                           >
                             {genderData.map((_, i) => (
@@ -408,11 +408,11 @@ export default function Dashboard() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={320}>
-                        <BarChart data={levelData} barSize={28} barGap={4}>
+                      <ResponsiveContainer width="100%" height={460}>
+                        <BarChart data={levelData} barSize={40} barGap={6}>
                           <CartesianGrid strokeDasharray="3 3" opacity={0.12} />
-                          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                          <YAxis tick={{ fontSize: 11 }} width={28} />
+                          <XAxis dataKey="name" tick={{ fontSize: 14, fontWeight: "bold" }} />
+                          <YAxis tick={{ fontSize: 14, fontWeight: "bold" }} width={34} />
                           <Tooltip content={<CustomTooltip />} />
                           <Bar dataKey={t("stats.boys")} fill="#3b82f6" radius={[4, 4, 0, 0]} />
                           <Bar dataKey={t("stats.girls")} fill="#ec4899" radius={[4, 4, 0, 0]} />

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { QuickImportDialog } from "@/components/quick-import";
+import AiChatWidget from "@/components/ai-chat-widget";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
 import Dashboard from "@/pages/dashboard";
@@ -486,6 +487,7 @@ function TopNav() {
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const sections = getNavSections(user);
 
@@ -563,6 +565,19 @@ function TopNav() {
               استيراد
             </Button>
           </motion.div>
+          {/* AI Widget button */}
+          <motion.button
+            whileHover={{ scale: 1.07 }} whileTap={{ scale: 0.93 }}
+            onClick={() => setAiOpen(o => !o)}
+            aria-label="المساعد الذكي"
+            className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all ${
+              aiOpen
+                ? "bg-gradient-to-br from-fuchsia-500 to-indigo-600 text-white shadow-sm shadow-fuchsia-500/30"
+                : "text-muted-foreground hover:text-fuchsia-500 hover:bg-fuchsia-500/10"
+            }`}
+          >
+            <Bot className="w-4 h-4" />
+          </motion.button>
           <LangButtons />
           <ThemeButton />
           {/* Desktop user avatar + logout */}
@@ -657,6 +672,13 @@ function TopNav() {
           </>
         )}
       </AnimatePresence>
+
+      {/* AI Chat Widget */}
+      <AiChatWidget
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        role={user?.memberContext?.role ?? "admin"}
+      />
     </>
   );
 }
