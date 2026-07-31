@@ -66,6 +66,7 @@ export default function MyChildPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [annee, setAnnee] = useState("2025-2026");
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -114,8 +115,6 @@ export default function MyChildPage() {
   const totalUnjustified = absences.reduce((s, a) => s + (a.unjustifiedHours ?? 0), 0);
 
   const isPassed = annualAvg !== null ? annualAvg >= 10 : null;
-
-  const [leaving, setLeaving] = useState(false);
 
   async function leaveParentMode() {
     setLeaving(true);
