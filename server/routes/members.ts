@@ -106,6 +106,19 @@ router.patch("/members/:id", async (req: Request, res: Response): Promise<void> 
   res.json(updated);
 });
 
+// ── DELETE /api/members/self — remove own membership (dev escape / account recovery) ──
+// MUST be declared before /members/:id so Express doesn't swallow "self" as an :id param.
+router.delete("/members/self", async (req: Request, res: Response): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!req.memberContext) { res.status(404).json({ error: "Not a member" }); return; }
+
+  await db
+    .delete(schoolMembersTable)
+    .where(eq(schoolMembersTable.id, req.memberContext.memberId));
+
+  res.json({ success: true });
+});
+
 // ── DELETE /api/members/:id ───────────────────────────────────────────────────
 router.delete("/members/:id", async (req: Request, res: Response): Promise<void> => {
   if (!isHeadAdmin(req)) { res.status(403).json({ error: "Forbidden" }); return; }
@@ -118,18 +131,6 @@ router.delete("/members/:id", async (req: Request, res: Response): Promise<void>
     .returning();
 
   if (!deleted) { res.status(404).json({ error: "Member not found" }); return; }
-  res.json({ success: true });
-});
-
-// ── DELETE /api/members/self — remove own membership (dev escape / account recovery) ──
-router.delete("/members/self", async (req: Request, res: Response): Promise<void> => {
-  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
-  if (!req.memberContext) { res.status(404).json({ error: "Not a member" }); return; }
-
-  await db
-    .delete(schoolMembersTable)
-    .where(eq(schoolMembersTable.id, req.memberContext.memberId));
-
   res.json({ success: true });
 });
 
