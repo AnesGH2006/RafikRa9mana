@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   GraduationCap, BookOpen, Calendar, TrendingUp,
-  User, Award, AlertCircle,
+  User, Award, AlertCircle, LogOut,
 } from "lucide-react";
 import { getSubjectsForLevel, calcWeightedAvg } from "@shared/subjects";
 import type { Niveau } from "@shared/types";
@@ -115,10 +115,33 @@ export default function MyChildPage() {
 
   const isPassed = annualAvg !== null ? annualAvg >= 10 : null;
 
+  const [leaving, setLeaving] = useState(false);
+
+  async function leaveParentMode() {
+    setLeaving(true);
+    try {
+      await fetch(`${BASE}api/members/self`, { method: "DELETE", credentials: "include" });
+    } finally {
+      window.location.href = "/";
+    }
+  }
+
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate"
       className="p-4 md:p-6 space-y-6 max-w-2xl mx-auto"
     >
+      {/* Dev escape — removes this account from parent membership */}
+      <div className="flex justify-end">
+        <button
+          onClick={leaveParentMode}
+          disabled={leaving}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-dashed border-amber-400 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors disabled:opacity-50"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          {leaving ? "جارٍ الخروج…" : "خروج من وضع الوالدين ← الموقع الكامل"}
+        </button>
+      </div>
+
       {/* Student identity card */}
       <Card className="bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/20 border-violet-200 dark:border-violet-800/40 shadow-md">
         <CardContent className="pt-5 pb-4">

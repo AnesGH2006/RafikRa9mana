@@ -121,6 +121,18 @@ router.delete("/members/:id", async (req: Request, res: Response): Promise<void>
   res.json({ success: true });
 });
 
+// ── DELETE /api/members/self — remove own membership (dev escape / account recovery) ──
+router.delete("/members/self", async (req: Request, res: Response): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!req.memberContext) { res.status(404).json({ error: "Not a member" }); return; }
+
+  await db
+    .delete(schoolMembersTable)
+    .where(eq(schoolMembersTable.id, req.memberContext.memberId));
+
+  res.json({ success: true });
+});
+
 // ── GET /api/my-member-context ────────────────────────────────────────────────
 router.get("/my-member-context", (req: Request, res: Response): void => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
