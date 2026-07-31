@@ -142,6 +142,8 @@ router.get("/my-member-context", (req: Request, res: Response): void => {
 
 // ── GET /api/my-child ─────────────────────────────────────────────────────────
 // Parent: returns their linked student profile + grades + absences for the given year.
+// Averages are computed the same way as /api/results: prefer Ministry-stored __avg__
+// sentinel rows, fall back to weighted recalculation from individual subject grades.
 router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   if (req.memberContext?.role !== "parent") { res.status(403).json({ error: "Parents only" }); return; }
@@ -160,7 +162,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
 
   // Grades for the current year
-  const grades = await db
+  const allGrades = await db
     .select()
     .from(gradesTable)
     .where(and(eq(gradesTable.studentId, linkedStudentId), eq(gradesTable.annee, annee)));
@@ -171,10 +173,49 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
     .from(absencesTable)
     .where(and(eq(absencesTable.studentId, linkedStudentId), eq(absencesTable.annee, annee)));
 
+  // Separate Ministry-stored averages (__avg__ sentinel) from subject grades —
+  // same logic as /api/results so both pages show identical values.
+  const AVG_SUBJECT = "__avg__";
+  const storedAvgs: Record<string, number> = {};
+  const subjectGrades: Record<string, Record<string, number>> = {}; // trimestre → subject → score
+
+  for (const g of allGrades) {
+    const score = parseFloat(String(g.score));
+    const tr = String(g.trimestre);
+    if (g.subject === AVG_SUBJECT) {
+      storedAvgs[tr] = score;
+    } else {
+      subjectGrades[tr] ??= {};
+      subjectGrades[tr]![g.subject] = score;
+    }
+  }
+
+  const { getSubjectsForLevel, calcWeightedAvg } = await import("../../shared/subjects.js");
+  const subs = getSubjectsForLevel(student.niveau as import("../../shared/subjects.js").Niveau);
+
+  const t1Avg = storedAvgs["1"] ?? calcWeightedAvg(subjectGrades["1"] ?? {}, subs);
+  const t2Avg = storedAvgs["2"] ?? calcWeightedAvg(subjectGrades["2"] ?? {}, subs);
+  const t3Avg = storedAvgs["3"] ?? calcWeightedAvg(subjectGrades["3"] ?? {}, subs);
+
+  const avgs = [t1Avg, t2Avg, t3Avg].filter((v): v is number => v !== null);
+  const annualAvg = avgs.length > 0
+    ? Math.round((avgs.reduce((a, b) => a + b, 0) / avgs.length) * 100) / 100
+    : null;
+
+  // Return subject grades only (no __avg__ sentinels) so the client can show
+  // per-subject rows without confusion.
+  const grades = allGrades
+    .filter(g => g.subject !== AVG_SUBJECT)
+    .map(g => ({ ...g, score: parseFloat(String(g.score)) }));
+
   res.json({
     student,
-    grades: grades.map(g => ({ ...g, score: parseFloat(String(g.score)) })),
+    grades,
     absences,
+    t1Avg,
+    t2Avg,
+    t3Avg,
+    annualAvg,
   });
 });
 

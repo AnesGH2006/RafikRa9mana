@@ -30,6 +30,11 @@ interface StudentData {
   };
   grades: { id: string; studentId: string; annee: string; trimestre: number; subject: string; score: number }[];
   absences: { id: string; studentId: string; annee: string; trimestre: number; justifiedHours: number; unjustifiedHours: number }[];
+  /** Pre-computed by the server using the same logic as /api/results (Ministry averages take precedence). */
+  t1Avg: number | null;
+  t2Avg: number | null;
+  t3Avg: number | null;
+  annualAvg: number | null;
 }
 
 const TRIMESTRE_LABELS: Record<number, string> = {
