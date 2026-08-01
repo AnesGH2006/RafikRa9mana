@@ -18,6 +18,7 @@ import smsRouter from "./sms.js";
 import notificationsRouter from "./notifications.js";
 import ocrRouter from "./ocr.js";
 import membersRouter from "./members.js";
+import auditLogsRouter from "./audit-logs.js";
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use(smsRouter);
 router.use(notificationsRouter);
 router.use(ocrRouter);
 router.use(membersRouter);
+router.use(auditLogsRouter);
 
 export default router;

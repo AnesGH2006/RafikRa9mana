@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Router, type IRouter } from "express";
+import { logAudit } from "../lib/audit.js";
 import { eq, and, ilike } from "drizzle-orm";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -510,6 +511,18 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
   }
 
   req.log.info({ userId, imported: toInsert.length, skipped, errors: errors.slice(0,5) }, "Students imported");
+
+  logAudit({
+    userId,
+    actorId:  userId,
+    actorName: req.user!.firstName ?? req.user!.email ?? undefined,
+    action:      "student_import",
+    description: `استيراد ${toInsert.length} تلميذ من ملف Excel (${req.file!.originalname})`,
+    entity:      "student",
+    details:     { imported: toInsert.length, skipped, file: req.file!.originalname, annee },
+    req,
+  });
+
   res.json(ImportStudentsResponse.parse({ imported: toInsert.length, skipped, errors }));
 });
 

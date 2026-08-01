@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Router, type IRouter } from "express";
+import { logAudit } from "../lib/audit.js";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { db, gradesTable, absencesTable, studentsTable } from "../../shared/db.js";
 import { UpsertGradesBulkBody, UpsertAbsenceBody } from "../../shared/schemas.js";
@@ -118,6 +119,19 @@ router.post("/grades/bulk", async (req, res): Promise<void> => {
     { studentId: student.id, studentName: student.nomPrenom, trimestre, count: validGrades.length },
     "Grades saved"
   );
+
+  logAudit({
+    userId,
+    actorId:     req.memberContext?.memberUserId ?? userId,
+    actorName:   req.memberContext?.name ?? req.user!.firstName ?? req.user!.email ?? undefined,
+    action:      "grade_edit",
+    description: `تعديل درجات ${student.nomPrenom} — الفصل ${trimestre} (${validGrades.length} مادة)`,
+    entity:      "grade",
+    entityId:    student.id,
+    details:     { studentName: student.nomPrenom, trimestre, count: validGrades.length, annee },
+    req,
+  });
+
   res.json({ success: true, studentId: student.id, saved: validGrades.length });
 });
 

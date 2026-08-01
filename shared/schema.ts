@@ -261,3 +261,28 @@ export const schoolMembersTable = pgTable("school_members", {
 
 export type SchoolMember       = typeof schoolMembersTable.$inferSelect;
 export type InsertSchoolMember = typeof schoolMembersTable.$inferInsert;
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+// Records every critical action performed by the head-admin or any sub-account member.
+export const auditLogsTable = pgTable("audit_logs", {
+  id:          varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** The head-admin (school owner) whose data was affected */
+  userId:      varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  /** Who actually performed the action (could be a member / teacher / etc.) */
+  actorId:     varchar("actor_id"),
+  actorName:   varchar("actor_name",  { length: 255 }),
+  /** Short machine-readable action key, e.g. "grade_edit", "student_import" */
+  action:      varchar("action",      { length: 80  }).notNull(),
+  /** Human-readable Arabic description */
+  description: varchar("description", { length: 500 }),
+  /** Affected entity type: "student", "grade", "absence", "member", etc. */
+  entity:      varchar("entity",      { length: 60  }),
+  entityId:    varchar("entity_id",   { length: 64  }),
+  /** Extra structured details (old/new values, counts, etc.) */
+  details:     jsonb("details"),
+  ipAddress:   varchar("ip_address",  { length: 60  }),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AuditLog       = typeof auditLogsTable.$inferSelect;
+export type InsertAuditLog = typeof auditLogsTable.$inferInsert;

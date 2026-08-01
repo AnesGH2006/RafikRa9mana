@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Shield, CheckCircle2, XCircle, Clock, RefreshCw, Search } from "lucide-react";
+import { Shield, CheckCircle2, XCircle, Clock, RefreshCw, Search, FileSpreadsheet, Upload, Users, AlertCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -23,6 +25,92 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof
   pending:   { label: "معلّق",  color: "text-amber-500",   icon: Clock },
   suspended: { label: "موقوف", color: "text-red-500",     icon: XCircle },
 };
+
+// ── Bulk Import Card ──────────────────────────────────────────────────────────
+const YEARS = ["2023-2024", "2024-2025", "2025-2026", "2026-2027"];
+
+function BulkImportCard() {
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [year, setYear] = useState("2025-2026");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
+
+  const handleFile = async (file: File) => {
+    setBusy(true);
+    setResult(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch(`${BASE}api/students/import?annee=${encodeURIComponent(year)}`, {
+        method: "POST", credentials: "include", body: fd,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResult({ imported: data.imported, skipped: data.skipped });
+        toast({ title: "تم الاستيراد", description: `${data.imported} تلميذ تم إضافتهم` });
+      } else {
+        toast({ title: "خطأ", description: data.error ?? "فشل الاستيراد", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "خطأ", description: "تعذّر الاتصال بالخادم", variant: "destructive" });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Card className="border-0 shadow-md overflow-hidden">
+      <div className="bg-gradient-to-br from-sky-500 to-blue-700 p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <FileSpreadsheet className="w-5 h-5 text-white/80" />
+          <h2 className="text-white font-bold text-sm">استيراد التلاميذ من Excel</h2>
+        </div>
+        <p className="text-white/65 text-xs">ملفات المنظومة .xlsx / .xls / HTML — يُنشئ الأقسام والملفات تلقائياً</p>
+      </div>
+      <CardContent className="pt-4 pb-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted-foreground whitespace-nowrap">السنة الدراسية:</label>
+          <select
+            value={year} onChange={e => setYear(e.target.value)}
+            className="flex-1 text-xs px-2 py-1.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+          >
+            {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.html,.htm" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+        />
+
+        <motion.button
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          whileHover={{ scale: busy ? 1 : 1.02 }} whileTap={{ scale: busy ? 1 : 0.97 }}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 text-white text-sm font-semibold disabled:opacity-60 transition-all shadow-sm shadow-sky-500/20"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+          {busy ? "جارٍ الاستيراد…" : "اختر ملف Excel"}
+        </motion.button>
+
+        {result && (
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            <div className="text-xs">
+              <span className="font-bold text-emerald-700 dark:text-emerald-400">{result.imported} تلميذ</span>
+              <span className="text-muted-foreground"> تم إضافتهم</span>
+              {result.skipped > 0 && <span className="text-muted-foreground"> · {result.skipped} تم تخطيه</span>}
+            </div>
+          </motion.div>
+        )}
+
+        <p className="text-[10px] text-muted-foreground text-center">
+          للاستيراد الشامل متعدد الملفات:{" "}
+          <a href="/import" className="text-sky-500 hover:underline">صفحة الاستيراد الكاملة</a>
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function AdminPage() {
   const { user } = useAuth();
@@ -88,6 +176,32 @@ export default function AdminPage() {
         <Button variant="outline" size="sm" onClick={fetchUsers} className="gap-2">
           <RefreshCw className="w-3.5 h-3.5" /> تحديث
         </Button>
+      </div>
+
+      {/* Bulk Import + Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <BulkImportCard />
+        <Card className="border-0 shadow-md overflow-hidden">
+          <div className="bg-gradient-to-br from-rose-500 to-red-700 p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Shield className="w-5 h-5 text-white/80" />
+              <h2 className="text-white font-bold text-sm">سجل العمليات</h2>
+            </div>
+            <p className="text-white/65 text-xs">تتبع كل تعديل أُجري على البيانات مع التوقيت والجهة</p>
+          </div>
+          <CardContent className="pt-4 pb-4 space-y-3">
+            <p className="text-xs text-muted-foreground">يشمل: تعديل الدرجات، استيراد التلاميذ، سجل الغيابات، إضافة/حذف الأعضاء.</p>
+            <a href="/audit-log">
+              <motion.div
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 text-white text-sm font-semibold cursor-pointer shadow-sm shadow-rose-500/20"
+              >
+                <Shield className="w-4 h-4" />
+                فتح سجل العمليات
+              </motion.div>
+            </a>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Stats row */}

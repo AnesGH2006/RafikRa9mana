@@ -108,13 +108,17 @@ export default function MyChildPage() {
   const { student, grades, absences } = data;
   const subs = getSubjectsForLevel(student.niveau as Niveau);
 
-  const t1Avg = calcTrimAvg(grades, 1, student.niveau);
-  const t2Avg = calcTrimAvg(grades, 2, student.niveau);
-  const t3Avg = calcTrimAvg(grades, 3, student.niveau);
-  const annualAvg = [t1Avg, t2Avg, t3Avg].filter(v => v !== null).length > 0
-    ? ([t1Avg, t2Avg, t3Avg].filter(v => v !== null) as number[]).reduce((a, b) => a + b, 0)
-      / [t1Avg, t2Avg, t3Avg].filter(v => v !== null).length
-    : null;
+  // Use server-computed averages (Ministry-stored values take precedence over recalculation).
+  // Fall back to client-side recalculation only if the server didn't return them (older API).
+  const t1Avg    = data.t1Avg    ?? calcTrimAvg(grades, 1, student.niveau);
+  const t2Avg    = data.t2Avg    ?? calcTrimAvg(grades, 2, student.niveau);
+  const t3Avg    = data.t3Avg    ?? calcTrimAvg(grades, 3, student.niveau);
+  const annualAvg = data.annualAvg ?? (
+    [t1Avg, t2Avg, t3Avg].filter(v => v !== null).length > 0
+      ? ([t1Avg, t2Avg, t3Avg].filter(v => v !== null) as number[]).reduce((a, b) => a + b, 0)
+        / [t1Avg, t2Avg, t3Avg].filter(v => v !== null).length
+      : null
+  );
 
   const totalJustified   = absences.reduce((s, a) => s + (a.justifiedHours ?? 0), 0);
   const totalUnjustified = absences.reduce((s, a) => s + (a.unjustifiedHours ?? 0), 0);
