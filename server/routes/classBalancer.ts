@@ -32,7 +32,7 @@
  */
 
 import { Router } from "express";
-import { and, eq, avg as drizzleAvg } from "drizzle-orm";
+import { and, eq, avg as drizzleAvg, inArray } from "drizzle-orm";
 import { db, studentsTable, gradesTable } from "../../shared/db.js";
 import { balanceClasses, type StudentInput } from "../services/classBalancer.js";
 
@@ -159,6 +159,44 @@ router.post("/class-balancer/balance-niveau", async (req, res): Promise<void> =>
 
   const result = balanceClasses(students, { classCount, weights });
   res.json(result);
+});
+
+// ── POST /api/class-balancer/apply ────────────────────────────────────────────
+// Saves balanced result to DB — updates students.classe for each student.
+// Body: { assignments: { studentId: string, classe: string }[] }
+router.post("/class-balancer/apply", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const { assignments } = req.body as {
+    assignments?: { studentId: string; classe: string }[];
+  };
+  if (!Array.isArray(assignments) || assignments.length === 0) {
+    res.status(400).json({ error: "assignments must be a non-empty array" });
+    return;
+  }
+
+  // Verify all students belong to this user
+  const studentIds = assignments.map(a => a.studentId);
+  const ownedStudents = await db
+    .select({ id: studentsTable.id })
+    .from(studentsTable)
+    .where(and(
+      eq(studentsTable.userId, userId),
+      inArray(studentsTable.id, studentIds),
+    ));
+  const ownedSet = new Set(ownedStudents.map(s => s.id));
+
+  let updated = 0;
+  for (const { studentId, classe } of assignments) {
+    if (!ownedSet.has(studentId)) continue;
+    await db
+      .update(studentsTable)
+      .set({ classe })
+      .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId)));
+    updated++;
+  }
+
+  res.json({ ok: true, updated });
 });
 
 export default router;

@@ -245,6 +245,11 @@ export const translations: TranslationMap = {
   "val.mustarrak":  { en: "Remedial", ar: "استدراك",   fr: "Rattrapage" },
   "val.na":         { en: "—",        ar: "—",     fr: "—" },
 
+  // Class Balancer
+  "nav.planning_section": { en: "Planning & Scheduling", ar: "التخطيط والجداول", fr: "Planification" },
+  "nav.class_balancer": { en: "Class Balancing", ar: "توزيع الأقسام (المعيدون)", fr: "Répartition des classes" },
+  "nav.timetable":      { en: "Timetable Manager",  ar: "جدول الأوقات والأساتذة", fr: "Emploi du temps" },
+
   toggleTheme: { en: "Toggle Theme", ar: "تبديل المظهر", fr: "Changer de thème" },
 
   // RBAC — Members management

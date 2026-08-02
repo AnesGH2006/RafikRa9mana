@@ -46,7 +46,7 @@ router.put("/school", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: "Invalid data", details: parsed.error.issues }); return; }
 
   const userId = req.user!.id;
-  const { nom, wilaya, commune, annee, directeur, phone, smsGatewayUrl, smsGatewayApiKey } = parsed.data;
+  const { nom, wilaya, commune, annee, directeur, phone, smsGatewayUrl, smsGatewayApiKey, supportPhone } = parsed.data;
   const [existing] = await db.select().from(schoolInfoTable).where(eq(schoolInfoTable.userId, userId));
 
   const vals = {
@@ -55,6 +55,7 @@ router.put("/school", async (req, res): Promise<void> => {
     phone: phone ?? "",
     smsGatewayUrl: smsGatewayUrl ?? "",
     smsGatewayApiKey: smsGatewayApiKey ?? "",
+    supportPhone: supportPhone ?? "",
   };
 
   if (existing) {

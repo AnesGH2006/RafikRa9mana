@@ -28,13 +28,13 @@ export default function Settings() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ nom: "", wilaya: "", commune: "", annee: "2025-2026", directeur: "", phone: "" });
+  const [form, setForm] = useState({ nom: "", wilaya: "", commune: "", annee: "2025-2026", directeur: "", phone: "", supportPhone: "" });
 
   const fetchSchool = useCallback(async () => {
     const res = await fetch(`${BASE}api/school`, { credentials: "include" });
     if (res.ok) {
-      const d: SchoolInfo = await res.json();
-      if (d) setForm({ nom: d.nom, wilaya: d.wilaya, commune: d.commune, annee: d.annee, directeur: d.directeur ?? "", phone: d.phone ?? "" });
+      const d: SchoolInfo & { supportPhone?: string } = await res.json();
+      if (d) setForm({ nom: d.nom, wilaya: d.wilaya, commune: d.commune, annee: d.annee, directeur: d.directeur ?? "", phone: d.phone ?? "", supportPhone: d.supportPhone ?? "" });
     }
   }, []);
 
@@ -59,7 +59,8 @@ export default function Settings() {
     { key: "commune",  label: t("dashboard.commune"),    placeholder: "بلدية..." },
     { key: "annee",    label: t("dashboard.year"),       placeholder: "2025-2026" },
     { key: "directeur",label: t("settings.director"),   placeholder: "اسم المدير..." },
-    { key: "phone",    label: t("settings.phone"),       placeholder: "0xxx..." },
+    { key: "phone",        label: t("settings.phone"),           placeholder: "0xxx..." },
+    { key: "supportPhone", label: "رقم واتساب للدعم التقني",     placeholder: "213XXXXXXXXX (بدون +)" },
   ];
 
   return (

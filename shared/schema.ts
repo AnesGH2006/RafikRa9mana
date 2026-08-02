@@ -43,6 +43,8 @@ export const schoolInfoTable = pgTable("school_info", {
   smsGatewayApiKey: varchar("sms_gateway_api_key", { length: 500 }).default(""),
   /** Short join code shared with parents for self-registration (e.g. "A3X7K9") */
   joinCode: varchar("join_code", { length: 10 }).unique(),
+  /** WhatsApp support number (international format without +, e.g. 213XXXXXXXXX) */
+  supportPhone: varchar("support_phone", { length: 30 }).default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -261,6 +263,54 @@ export const schoolMembersTable = pgTable("school_members", {
 
 export type SchoolMember       = typeof schoolMembersTable.$inferSelect;
 export type InsertSchoolMember = typeof schoolMembersTable.$inferInsert;
+
+// ─── Timetable ────────────────────────────────────────────────────────────────
+
+export const timetableTeachersTable = pgTable("timetable_teachers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  subjects: jsonb("subjects").$type<string[]>().default([]),
+  phone: varchar("phone", { length: 30 }),
+  color: varchar("color", { length: 20 }).notNull().default("#3b82f6"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TimetableTeacher       = typeof timetableTeachersTable.$inferSelect;
+export type InsertTimetableTeacher = typeof timetableTeachersTable.$inferInsert;
+
+export const timetableRoomsTable = pgTable("timetable_rooms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 100 }).notNull(),
+  /** classroom | lab | sports | library | other */
+  type: varchar("type", { length: 30 }).notNull().default("classroom"),
+  capacity: integer("capacity"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TimetableRoom       = typeof timetableRoomsTable.$inferSelect;
+export type InsertTimetableRoom = typeof timetableRoomsTable.$inferInsert;
+
+export const timetableSlotsTable = pgTable("timetable_slots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
+  /** The class this slot belongs to, e.g. "1AM-أ" */
+  classe: varchar("classe", { length: 30 }).notNull(),
+  subject: varchar("subject", { length: 100 }).notNull(),
+  teacherId: varchar("teacher_id").references(() => timetableTeachersTable.id, { onDelete: "set null" }),
+  roomId: varchar("room_id").references(() => timetableRoomsTable.id, { onDelete: "set null" }),
+  /** 0 = Sunday, 1 = Monday … 4 = Thursday (Algerian school week) */
+  day: integer("day").notNull(),
+  /** 0-indexed period in the day (0 = first period) */
+  period: integer("period").notNull(),
+  notes: varchar("notes", { length: 500 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TimetableSlot       = typeof timetableSlotsTable.$inferSelect;
+export type InsertTimetableSlot = typeof timetableSlotsTable.$inferInsert;
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────
 // Records every critical action performed by the head-admin or any sub-account member.

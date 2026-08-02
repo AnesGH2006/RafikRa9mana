@@ -122,7 +122,7 @@ router.post("/grades/bulk", async (req, res): Promise<void> => {
 
   logAudit({
     userId,
-    actorId:     req.memberContext?.memberUserId ?? userId,
+    actorId:     req.memberContext?.memberId ?? userId,
     actorName:   req.memberContext?.name ?? req.user!.firstName ?? req.user!.email ?? undefined,
     action:      "grade_edit",
     description: `تعديل درجات ${student.nomPrenom} — الفصل ${trimestre} (${validGrades.length} مادة)`,

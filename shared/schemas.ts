@@ -61,6 +61,7 @@ export const UpsertSchoolInfoBody = zod.object({
   phone: zod.string().optional(),
   smsGatewayUrl: zod.string().optional(),
   smsGatewayApiKey: zod.string().optional(),
+  supportPhone: zod.string().optional(),
 });
 
 export const NiveauEnum = zod.enum(["1AM", "2AM", "3AM", "4AM"]);

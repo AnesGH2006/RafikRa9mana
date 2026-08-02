@@ -4,3 +4,4 @@
 - [UI Beauty Conventions](ui-beauty.md) — bg-dot-grid utility in index.css for subtle background texture; page headers use gradient text + icon badge pattern; KPI cards use bg-gradient-to-br with white/20 radial glow overlay
 - [Free LLM via Groq](free-llm-groq.md) — no Replit-managed passthrough billing exists for text/chat LLMs; Groq's free OpenAI-compatible API is the fallback when user wants a no-cost assistant
 - [Dev-login test data pollution](dev-login-test-data.md) — /api/dev-login writes real rows under a persistent "dev-test-user" account; clean up after curl-testing an endpoint
+- [Timetable & Class Balancer](timetable-classbalancer.md) — new modules: schedule grid, teacher/room CRUD, conflict detection, class balancer with drag-and-drop; WhatsApp button uses school.supportPhone
