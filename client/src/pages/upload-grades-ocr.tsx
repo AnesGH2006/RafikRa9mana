@@ -2,7 +2,7 @@
  * /upload-grades-ocr — OCR Grade Sheet Review Page
  *
  * Flow:
- *  1. Teacher picks year, class, trimestre, subject
+ *  1. Teacher picks year, niveau, class, trimestre, subject
  *  2. Uploads an image of a printed grade sheet
  *  3. OCR runs (POST /api/ocr/parse-grades)
  *  4. Results appear in an editable table
@@ -28,6 +28,13 @@ const BASE = import.meta.env.BASE_URL;
 
 const ACADEMIC_YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 const TRIMESTERS = ["1", "2", "3"];
+// ✅ NEW: students are stored with niveau ("1AM".."4AM") and classe
+// ("1", "A", …) as two SEPARATE fields. The page previously only had one
+// free-text "الفوج" input, where teachers naturally typed combined values
+// like "4eme1" — which never matches the stored classe field alone, so
+// the student lookup silently returned zero students and every row
+// failed to match, regardless of OCR accuracy.
+const NIVEAUX = ["1AM", "2AM", "3AM", "4AM"];
 const SUBJECTS_AR = [
   "عربية", "فرنسية", "رياضيات", "علوم", "تربية إسلامية",
   "تاريخ وجغرافيا", "تربية مدنية", "إنجليزية", "تربية تشكيلية",
@@ -60,11 +67,41 @@ const pageVariants = {
   exit:    { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
 
+// ✅ NEW: same Arabic normalization used server-side in database-query.ts
+// (strips diacritics, unifies أ/إ/آ/ا, ة/ه, ى/ي) so OCR-extracted names
+// match stored names regardless of minor spelling/diacritic variance.
+function normArabic(s: string): string {
+  return String(s ?? "")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/\u200B|\u200C|\u200D|\uFEFF/g, "")
+    .replace(/[أإآا]/g, "ا")
+    .replace(/[ةه]/g, "ه")
+    .replace(/ى/g, "ي")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// ✅ NEW: word-order-independent match — handles "اللقب الاسم" vs
+// "الاسم اللقب" ordering differences between the OCR sheet and how the
+// student was originally imported.
+function nameMatches(a: string, b: string): boolean {
+  const na = normArabic(a);
+  const nb = normArabic(b);
+  if (!na || !nb) return false;
+  if (na === nb || na.includes(nb) || nb.includes(na)) return true;
+  const wordsA = na.split(" ").filter(Boolean);
+  const wordsB = nb.split(" ").filter(Boolean);
+  const [shorter, longer] = wordsA.length <= wordsB.length ? [wordsA, wordsB] : [wordsB, wordsA];
+  return shorter.length > 0 && shorter.every(w => longer.some(lw => lw.includes(w)));
+}
+
 export default function UploadGradesOcrPage() {
   const { toast } = useToast();
 
   // ── Form fields ──────────────────────────────────────────────────────────
   const [annee,     setAnnee]     = useState("2025-2026");
+  const [niveau,    setNiveau]    = useState("");
   const [classe,    setClasse]    = useState("");
   const [trimestre, setTrimestre] = useState("1");
   const [subject,   setSubject]   = useState("");
@@ -150,18 +187,22 @@ export default function UploadGradesOcrPage() {
 
   // ── Save grades ────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!classe || !subject) {
-      toast({ variant: "destructive", title: "خطأ", description: "يرجى تحديد الفوج والمادة قبل الحفظ" });
+    if (!niveau || !classe || !subject) {
+      toast({ variant: "destructive", title: "خطأ", description: "يرجى تحديد المستوى والفوج والمادة قبل الحفظ" });
       return;
     }
 
     setSaveState({ phase: "saving", saved: 0, failed: 0, errors: [] });
 
-    // First fetch students in the selected class + year
+    // ✅ FIX: now includes niveau in the query, matching how students are
+    // actually stored (niveau + classe as separate fields) instead of only
+    // filtering by classe, which silently returned zero students whenever
+    // the typed classe value didn't literally match the DB's raw classe
+    // string (e.g. "4eme1" typed vs "1" stored).
     let students: Array<{ id: string; nomPrenom: string }> = [];
     try {
       const res = await fetch(
-        `${BASE}api/students?annee=${encodeURIComponent(annee)}&classe=${encodeURIComponent(classe)}&limit=200`,
+        `${BASE}api/students?annee=${encodeURIComponent(annee)}&niveau=${encodeURIComponent(niveau)}&classe=${encodeURIComponent(classe)}&limit=200`,
         { credentials: "include" },
       );
       if (res.ok) {
@@ -170,17 +211,19 @@ export default function UploadGradesOcrPage() {
       }
     } catch { /* continue with empty list */ }
 
-    // Simple fuzzy name match (normalize spaces + case)
-    const normalize = (s: string) =>
-      s.replace(/\s+/g, " ").trim().toLowerCase();
+    // ✅ FIX: give one clear, actionable error instead of 14 identical
+    // per-row "student not found" errors when the real cause is that the
+    // niveau/classe/year combination matched no students at all.
+    if (students.length === 0) {
+      const msg = `لم يتم العثور على أي تلميذ في ${niveau} — الفوج ${classe} — سنة ${annee}. تحقق من صحة المستوى والفوج المحددين، أو تأكد من استيراد قائمة التلاميذ لهذا الفوج أولاً.`;
+      setSaveState({ phase: "done", saved: 0, failed: rows.length, errors: [msg] });
+      setRows(prev => prev.map(r => ({ ...r, saveError: "لا يوجد تلاميذ في هذا الفوج" })));
+      toast({ variant: "destructive", title: "لم يتم العثور على تلاميذ", description: msg });
+      return;
+    }
 
-    const findStudent = (name: string) => {
-      const n = normalize(name);
-      return (
-        students.find(s => normalize(s.nomPrenom) === n) ??
-        students.find(s => normalize(s.nomPrenom).includes(n) || n.includes(normalize(s.nomPrenom)))
-      );
-    };
+    const findStudent = (name: string) =>
+      students.find(s => nameMatches(s.nomPrenom, name));
 
     let saved = 0, failed = 0;
     const errors: string[] = [];
@@ -266,12 +309,17 @@ export default function UploadGradesOcrPage() {
       </div>
 
       {/* Form fields */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Select value={annee} onValueChange={setAnnee}>
           <SelectTrigger><SelectValue placeholder="السنة" /></SelectTrigger>
           <SelectContent>{ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
         </Select>
-        <Input placeholder="الفوج (مثال: 1أ)" value={classe} onChange={e => setClasse(e.target.value)} />
+        {/* ✅ NEW: separate niveau selector */}
+        <Select value={niveau} onValueChange={setNiveau}>
+          <SelectTrigger><SelectValue placeholder="المستوى" /></SelectTrigger>
+          <SelectContent>{NIVEAUX.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+        </Select>
+        <Input placeholder="الفوج (مثال: 1 أو A)" value={classe} onChange={e => setClasse(e.target.value)} />
         <Select value={trimestre} onValueChange={setTrimestre}>
           <SelectTrigger><SelectValue placeholder="الفصل" /></SelectTrigger>
           <SelectContent>{TRIMESTERS.map(t => <SelectItem key={t} value={t}>الفصل {t}</SelectItem>)}</SelectContent>
@@ -376,7 +424,7 @@ export default function UploadGradesOcrPage() {
                   size="sm"
                   className="gap-1.5 text-xs h-8 bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-0 shadow-sm"
                   onClick={handleSave}
-                  disabled={saveState.phase === "saving" || !classe || !subject}
+                  disabled={saveState.phase === "saving" || !niveau || !classe || !subject}
                 >
                   {saveState.phase === "saving" ? (
                     <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري الحفظ…</>
@@ -391,21 +439,26 @@ export default function UploadGradesOcrPage() {
             {saveState.phase === "done" && (
               <motion.div
                 initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                className={`rounded-xl border p-3 flex items-center gap-3 text-sm ${
+                className={`rounded-xl border p-3 flex items-start gap-3 text-sm ${
                   saveState.failed === 0
                     ? "border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/30"
                     : "border-amber-500/30 bg-amber-50 dark:bg-amber-950/30"
                 }`}
               >
                 {saveState.failed === 0 ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
                 ) : (
-                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                 )}
-                <span className="font-semibold">
-                  تم حفظ {saveState.saved} درجة
-                  {saveState.failed > 0 && ` · فشل ${saveState.failed} صف`}
-                </span>
+                <div>
+                  <span className="font-semibold block">
+                    تم حفظ {saveState.saved} درجة
+                    {saveState.failed > 0 && ` · فشل ${saveState.failed} صف`}
+                  </span>
+                  {saveState.errors.length > 0 && saveState.saved === 0 && (
+                    <span className="text-xs text-muted-foreground mt-1 block">{saveState.errors[0]}</span>
+                  )}
+                </div>
               </motion.div>
             )}
 
@@ -523,11 +576,11 @@ export default function UploadGradesOcrPage() {
               </div>
             </div>
 
-            {/* No-phone warning if class not set */}
-            {(!classe || !subject) && (
+            {/* Missing field warning */}
+            {(!niveau || !classe || !subject) && (
               <p className="text-xs text-amber-600 flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                حدد الفوج والمادة أعلاه لتفعيل زر الحفظ
+                حدد المستوى والفوج والمادة أعلاه لتفعيل زر الحفظ
               </p>
             )}
           </motion.div>
