@@ -31,3 +31,17 @@ description: Architecture and key decisions for the timetable manager and smart 
 
 ## Pre-existing TS bug fixed
 `server/routes/grades.ts` line 125: `req.memberContext?.memberUserId` → `req.memberContext?.memberId`
+
+## Trimestre filter in results.tsx
+Added `TriFilter` type + `TRI_OPTIONS` constant + `getTriAvg` / `getTriPassed` / `resultBadgeLabel` helpers.
+Filter options: "" | "1" | "2" | "1+2" | "3" | "1+2+3". Selected filter highlights the relevant T column(s) with a violet tint and changes the avg column header dynamically.
+Niveau change no longer resets the classe filter.
+
+## 4AM result label
+`resultBadgeLabel(passed, niveau)` returns "معيد" for 4AM students who fail (not "راسب"). Badge uses amber color for "معيد" vs red for "راسب".
+
+## OCR v3 — Groq Vision
+Replaced Tesseract with Groq `meta-llama/llama-4-scout-17b-16e-instruct` vision model.
+Uses raw fetch to `https://api.groq.com/openai/v1/chat/completions` with base64 JPEG image.
+Sharp still used for resize-only preprocessing (max 1920px, JPEG 88 quality).
+Returns same response shape as v2: `{ rows, totalLines, overallConfidence, rawText }`.

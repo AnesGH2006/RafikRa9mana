@@ -99,6 +99,51 @@ function MiniTooltip({ active, payload, label }: any) {
   );
 }
 
+// ─── Trimestre-filter helpers ─────────────────────────────────────────────────
+type TriFilter = "" | "1" | "2" | "1+2" | "3" | "1+2+3";
+
+const TRI_OPTIONS: Array<{ value: TriFilter; label: string }> = [
+  { value: "",      label: "كل الفصول"   },
+  { value: "1",     label: "الفصل 1"    },
+  { value: "2",     label: "الفصل 2"    },
+  { value: "1+2",   label: "ف1 + ف2"   },
+  { value: "3",     label: "الفصل 3"    },
+  { value: "1+2+3", label: "السنة كاملة" },
+];
+
+/** Return the relevant average for the given tri selection. */
+function getTriAvg(r: StudentResult, tri: TriFilter): number | null {
+  if (!tri || tri === "1+2+3") return r.annualAvg;
+  if (tri === "1") return r.t1Avg ?? null;
+  if (tri === "2") return r.t2Avg ?? null;
+  if (tri === "3") return r.t3Avg ?? null;
+  if (tri === "1+2") {
+    const t1 = r.t1Avg, t2 = r.t2Avg;
+    if (t1 == null && t2 == null) return null;
+    if (t1 == null) return t2;
+    if (t2 == null) return t1;
+    return Math.round(((t1 + t2) / 2) * 100) / 100;
+  }
+  return r.annualAvg;
+}
+
+/** Derive pass/fail from a filtered average (or fall back to server value). */
+function getTriPassed(r: StudentResult, tri: TriFilter): boolean | null {
+  if (!tri || tri === "1+2+3") return r.passed;
+  const avg = getTriAvg(r, tri);
+  return avg == null ? null : avg >= 10;
+}
+
+/**
+ * For 4AM, "راسب" → "معيد" (they re-sit the year, not the generic "failed").
+ * After BEM: pass → ثانوي, fail → معيد 4AM.
+ */
+function resultBadgeLabel(passed: boolean | null, niveau: string): string {
+  if (passed === null) return "—";
+  if (passed) return "ناجح";
+  return niveau === "4AM" ? "معيد" : "راسب";
+}
+
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KPICard({ label, value, sub, gradient, icon: Icon }: {
   label: string; value: React.ReactNode; sub?: string;
@@ -2769,7 +2814,7 @@ export default function Results() {
   const [showImport, setShowImport]   = useState(false);
   const [smsOpen,    setSmsOpen]      = useState(false);
   const [annee, setAnnee]             = useState(DEFAULT_YEAR);
-  const [filters, setFilters]         = useState({ niveau: "", classe: "", sexe: "", q: "" });
+  const [filters, setFilters]         = useState({ niveau: "", classe: "", sexe: "", q: "", tri: "" as TriFilter });
   const [listKey, setListKey]         = useState(0);
   const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTabId>("general");
 
@@ -2847,7 +2892,7 @@ export default function Results() {
           </SelectContent>
         </Select>
         <Select value={filters.niveau || "__all__"}
-          onValueChange={v => setFilters(p => ({ ...p, niveau: v === "__all__" ? "" : v, classe: "" }))}>
+          onValueChange={v => setFilters(p => ({ ...p, niveau: v === "__all__" ? "" : v }))}>
           <SelectTrigger className="w-36"><SelectValue placeholder={t("students.filterLevel")} /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">{t("students.allLevels")}</SelectItem>
@@ -2873,6 +2918,17 @@ export default function Results() {
             <SelectItem value="F">إناث</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={filters.tri || "__all__"}
+          onValueChange={v => setFilters(p => ({ ...p, tri: (v === "__all__" ? "" : v) as TriFilter }))}>
+          <SelectTrigger className={`w-32 transition-all ${filters.tri ? "border-violet-400 dark:border-violet-600 text-violet-700 dark:text-violet-300 bg-violet-50/50 dark:bg-violet-950/30 font-semibold" : ""}`}>
+            <SelectValue placeholder="الفصل" />
+          </SelectTrigger>
+          <SelectContent>
+            {TRI_OPTIONS.map(o => (
+              <SelectItem key={o.value || "__all__"} value={o.value || "__all__"}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </motion.div>
 
       {/* ── ANALYTICS DASHBOARD ── */}
@@ -2893,14 +2949,14 @@ export default function Results() {
               <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full font-mono">
                 {displayed.length}
               </span>
-              {displayed.filter(r => r.passed).length > 0 && (
+              {displayed.filter(r => getTriPassed(r, filters.tri) === true).length > 0 && (
                 <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-full">
-                  {displayed.filter(r => r.passed).length} ناجح
+                  {displayed.filter(r => getTriPassed(r, filters.tri) === true).length} ناجح
                 </span>
               )}
-              {displayed.filter(r => r.passed === false).length > 0 && (
+              {displayed.filter(r => getTriPassed(r, filters.tri) === false).length > 0 && (
                 <span className="text-xs font-semibold text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-full">
-                  {displayed.filter(r => r.passed === false).length} راسب
+                  {displayed.filter(r => getTriPassed(r, filters.tri) === false).length} {filters.niveau === "4AM" ? "معيد" : "راسب"}
                 </span>
               )}
             </div>
@@ -2930,8 +2986,12 @@ export default function Results() {
                 <table className="w-full text-sm">
                   <thead className="bg-muted/60 sticky top-0">
                     <tr>
-                      {["#", t("col.name"), t("col.level"), t("col.class"), t("col.t1"), t("col.t2"), t("col.t3"), t("col.avg"), t("col.result"), ""].map((h, i) => (
-                        <th key={i} className="px-3 py-3 text-start text-xs font-semibold text-muted-foreground uppercase whitespace-nowrap">{h}</th>
+                      {([
+                          "#", t("col.name"), t("col.level"), t("col.class"), t("col.t1"), t("col.t2"), t("col.t3"),
+                          filters.tri ? `م.${TRI_OPTIONS.find(o => o.value === filters.tri)?.label ?? ""}` : t("col.avg"),
+                          t("col.result"), "",
+                        ] as string[]).map((h, i) => (
+                        <th key={i} className={`px-3 py-3 text-start text-xs font-semibold uppercase whitespace-nowrap ${i === 7 && filters.tri ? "text-violet-500 dark:text-violet-400" : "text-muted-foreground"}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -2950,18 +3010,38 @@ export default function Results() {
                         <td className="px-3 py-3 font-medium">{r.student.nomPrenom}</td>
                         <td className="px-3 py-3"><Badge variant="secondary" className="text-xs">{LEVEL_LABELS[r.student.niveau as Niveau]}</Badge></td>
                         <td className="px-3 py-3"><Badge variant="outline" className="font-bold">{r.student.classe}</Badge></td>
-                        {[r.t1Avg, r.t2Avg, r.t3Avg].map((a, ti) => (
-                          <td key={ti} className={`px-3 py-3 font-mono text-sm ${a === null ? "text-muted-foreground" : a >= 10 ? "text-emerald-600" : "text-red-500"}`}>{avg2(a)}</td>
-                        ))}
-                        <td className={`px-3 py-3 font-bold font-mono cursor-pointer underline-offset-2 hover:underline ${r.annualAvg === null ? "text-muted-foreground" : r.annualAvg >= 10 ? "text-emerald-600 hover:text-emerald-700" : "text-red-500 hover:text-red-600"}`}
-                          title="انقر لعرض تفاصيل المواد"
-                          onClick={e => { e.stopPropagation(); setSubjectDetail(r); }}>{avg2(r.annualAvg)}</td>
-                        <td className="px-3 py-3">
-                          {r.passed === null ? <span className="text-muted-foreground text-xs">—</span>
-                            : r.passed
-                              ? <span className="text-xs font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{t("val.admis")}</span>
-                              : <span className="text-xs font-bold px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">{t("val.non_admis")}</span>}
-                        </td>
+                        {[r.t1Avg, r.t2Avg, r.t3Avg].map((a, ti) => {
+                           const triIdx = filters.tri === "1" ? 0 : filters.tri === "2" ? 1 : filters.tri === "3" ? 2 : -1;
+                           const inRange = filters.tri === "1+2" ? ti < 2 : filters.tri === "1+2+3" ? true : ti === triIdx;
+                           return (
+                             <td key={ti} className={`px-3 py-3 font-mono text-sm ${a === null ? "text-muted-foreground" : a >= 10 ? "text-emerald-600" : "text-red-500"}${inRange && filters.tri ? " bg-violet-50/40 dark:bg-violet-950/20" : ""}`}>
+                               {avg2(a)}
+                             </td>
+                           );
+                         })}
+                        {(() => {
+                           const dispAvg = getTriAvg(r, filters.tri);
+                           return (
+                             <td className={`px-3 py-3 font-bold font-mono cursor-pointer underline-offset-2 hover:underline ${dispAvg === null ? "text-muted-foreground" : dispAvg >= 10 ? "text-emerald-600 hover:text-emerald-700" : "text-red-500 hover:text-red-600"}`}
+                               title="انقر لعرض تفاصيل المواد"
+                               onClick={e => { e.stopPropagation(); setSubjectDetail(r); }}>
+                               {avg2(dispAvg)}
+                             </td>
+                           );
+                         })()}
+                        {(() => {
+                           const triPassed = getTriPassed(r, filters.tri);
+                           const lbl = resultBadgeLabel(triPassed, r.student.niveau);
+                           return (
+                             <td className="px-3 py-3">
+                               {triPassed === null
+                                 ? <span className="text-muted-foreground text-xs">—</span>
+                                 : triPassed
+                                   ? <span className="text-xs font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">ناجح</span>
+                                   : <span className={`text-xs font-bold px-2 py-1 rounded-full ${r.student.niveau === "4AM" ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" : "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"}`}>{lbl}</span>}
+                             </td>
+                           );
+                         })()}
                         <td className="px-3 py-3">
                           <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
                             <Button size="sm" variant="ghost" className="h-7 w-7 p-0"

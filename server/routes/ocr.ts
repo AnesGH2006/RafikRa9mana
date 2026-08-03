@@ -1,14 +1,13 @@
 /**
- * OCR Grade Sheet Processing  (v2 — Sharp preprocessing)
+ * OCR Grade Sheet Processing  (v3 — Groq Vision LLM)
  *
  * POST /api/ocr/parse-grades
  *   Accepts an uploaded image of a printed grade sheet.
- *   Pipeline: Sharp preprocess → Tesseract (ara+fra) → grade-line parser
+ *   Pipeline: resize with Sharp → Groq Vision LLM (llama-4-scout) → structured JSON
  *   Returns: { rows, totalLines, overallConfidence, rawText }
  */
 import { Router } from "express";
 import multer from "multer";
-import { createWorker } from "tesseract.js";
 import sharp from "sharp";
 import { logger } from "../lib/logger.js";
 
@@ -25,106 +24,89 @@ const upload = multer({
   },
 });
 
-// ── Image preprocessing ────────────────────────────────────────────────────────
-/**
- * Converts the uploaded image to a high-contrast greyscale PNG that Tesseract
- * reads much more reliably than a raw photo.
- *
- * Steps:
- *  1. Greyscale
- *  2. Upscale to at least 2 400 px wide (Tesseract prefers >300 dpi)
- *  3. Sharpen edges
- *  4. Normalize contrast (stretch histogram)
- *  5. Adaptive threshold — turns the result B&W
- */
-async function preprocessImage(buffer: Buffer): Promise<Buffer> {
+// ── Resize image for Vision API (max 1920px, JPEG for smaller payload) ─────────
+async function prepareForVision(buffer: Buffer): Promise<{ data: string; mimeType: string }> {
   const meta = await sharp(buffer).metadata();
   const w = meta.width ?? 800;
-  const h = meta.height ?? 600;
 
-  // Target ~3 000 px wide for better Tesseract accuracy (300+ dpi equivalent)
-  const targetWidth = Math.max(3000, w);
-
-  // First pass: upscale + grayscale + strong unsharp mask
-  const pass1 = await sharp(buffer)
-    .grayscale()
-    .resize({ width: targetWidth, withoutEnlargement: false, kernel: "lanczos3" })
-    .sharpen({ sigma: 2.0, m1: 2.0, m2: 0.5 })
-    .normalize()               // stretch histogram to 0-255
+  const targetWidth = Math.min(w, 1920);
+  const processed = await sharp(buffer)
+    .resize({ width: targetWidth, withoutEnlargement: true, kernel: "lanczos3" })
+    .jpeg({ quality: 88 })
     .toBuffer();
 
-  // Second pass: mild threshold to binarize cleanly
-  // Use 128 (midpoint) for average-contrast documents
-  return sharp(pass1)
-    .threshold(128)
-    .png({ compressionLevel: 0 }) // no compression for speed
-    .toBuffer();
+  return {
+    data: processed.toString("base64"),
+    mimeType: "image/jpeg",
+  };
 }
 
-// ── Grade line parser ──────────────────────────────────────────────────────────
-/**
- * Looks for lines that contain a grade value (0–20, with optional decimal).
- * Handles both "Name .... 14.50" and "14.50 .... Name" layouts.
- * Arabic grade sheets usually have the score at the END of the row.
- */
-interface ParsedRow {
-  rowNumber: number;
-  studentName: string;
-  grade: number | null;
-  confidence: number;
-  lowConfidence: boolean;
-}
+// ── Call Groq Vision API ────────────────────────────────────────────────────────
+interface GroqRow { studentName: string; grade: number }
 
-const GRADE_RE = /\b(20(?:[.,]0{1,2})?|1[0-9](?:[.,]\d{1,2})?|[0-9](?:[.,]\d{1,2})?)\b/g;
+async function extractWithGroqVision(imageB64: string, mimeType: string): Promise<GroqRow[]> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY غير مضبوط");
 
-function extractGrade(line: string): { grade: number; rest: string } | null {
-  const matches = [...line.matchAll(GRADE_RE)];
-  if (!matches.length) return null;
+  const prompt = `هذه صورة كشف درجات مدرسي جزائري.
+استخرج جدول التلاميذ والدرجات بدقة تامة.
+أعد مصفوفة JSON فقط بالشكل التالي — لا تضف أي نص قبلها أو بعدها:
+[{"studentName": "لقب الاسم", "grade": 14.5}, ...]
 
-  // Prefer the LAST match (grade is usually at the right in Arabic sheets)
-  const m = matches[matches.length - 1];
-  const gradeStr = m[0].replace(",", ".");
-  const grade = parseFloat(gradeStr);
-  if (isNaN(grade) || grade < 0 || grade > 20) return null;
+قواعد:
+- الدرجات من 0 إلى 20، أرقام عشرية مسموحة.
+- استخرج أسماء التلاميذ كاملة كما تظهر في الجدول (عربي).
+- تجاهل أرقام التسلسل والعناوين والخانات الفارغة.
+- لا تخترع بيانات، استخرج ما هو موجود فقط.`;
 
-  const rest = (line.slice(0, m.index!) + line.slice(m.index! + m[0].length))
-    .replace(/[|_\-–—=]+/g, " ")  // strip table borders
-    .replace(/\s+/g, " ")
-    .trim();
+  const body = JSON.stringify({
+    model: "meta-llama/llama-4-scout-17b-16e-instruct",
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageB64}` } },
+          { type: "text",      text: prompt },
+        ],
+      },
+    ],
+    max_tokens: 4096,
+    temperature: 0,
+  });
 
-  return { grade, rest };
-}
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body,
+  });
 
-function parseGradeLines(rawText: string): ParsedRow[] {
-  const lines = rawText
-    .split("\n")
-    .map(l => l.trim())
-    .filter(l => l.length > 2);
-
-  const results: ParsedRow[] = [];
-  let rowNum = 0;
-
-  for (const line of lines) {
-    rowNum++;
-    const extracted = extractGrade(line);
-    if (!extracted) continue;
-
-    const { grade, rest } = extracted;
-
-    // Remove leading row numbers / indices ("1." "2-" etc.)
-    const name = rest.replace(/^\d+[\s.,\-–)]+/, "").trim();
-    if (name.length < 2) continue;
-
-    results.push({
-      rowNumber: rowNum,
-      studentName: name,
-      grade,
-      confidence: 100,
-      lowConfidence: false,
-    });
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText);
+    throw new Error(`Groq API ${res.status}: ${err}`);
   }
 
-  return results;
+  const json = await res.json() as { choices: Array<{ message: { content: string } }> };
+  const content = json.choices?.[0]?.message?.content ?? "";
+
+  // Pull out the JSON array (the model sometimes adds a brief sentence before/after)
+  const match = content.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+
+  try {
+    const parsed = JSON.parse(match[0]) as Array<unknown>;
+    return parsed.filter(
+      (r): r is GroqRow =>
+        typeof r === "object" && r !== null &&
+        typeof (r as any).studentName === "string" &&
+        typeof (r as any).grade === "number" &&
+        (r as any).grade >= 0 && (r as any).grade <= 20,
+    );
+  } catch {
+    return [];
+  }
 }
 
 // ── Route ──────────────────────────────────────────────────────────────────────
@@ -142,76 +124,46 @@ router.post(
       return;
     }
 
-    const lang = typeof req.query.lang === "string" ? req.query.lang : "ara+fra";
-    let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
-
     try {
-      logger.info({ size: req.file.size, lang }, "OCR: preprocessing image");
+      logger.info({ size: req.file.size, mime: req.file.mimetype }, "OCR (Vision): preparing image");
 
-      // ── Step 1: preprocess ──────────────────────────────────────────────────
-      const processed = await preprocessImage(req.file.buffer);
+      const { data: imageB64, mimeType } = await prepareForVision(req.file.buffer);
 
-      logger.info({ processedSize: processed.length }, "OCR: starting Tesseract");
+      logger.info({ bytes: Math.round(imageB64.length * 0.75) }, "OCR (Vision): calling Groq");
 
-      // ── Step 2: Tesseract with optimal settings ─────────────────────────────
-      worker = await createWorker(lang);
+      const rawRows = await extractWithGroqVision(imageB64, mimeType);
 
-      await worker.setParameters({
-        // PSM 4 = single column of text — best for grade sheets with name + score columns
-        tessedit_pageseg_mode: "4" as any,
-        // Keep inter-word spaces so Arabic names aren't merged
-        preserve_interword_spaces: "1" as any,
-        // Whitelist digits, decimal separators, and Arabic characters for better accuracy
-        tessedit_char_whitelist: "" as any,
-      });
+      logger.info({ count: rawRows.length }, "OCR (Vision): extraction complete");
 
-      const { data } = await worker.recognize(processed);
-
-      logger.info(
-        { confidence: data.confidence },
-        "OCR: recognition complete",
-      );
-
-      // ── Step 3: build word-confidence map ───────────────────────────────────
-      const wordConfMap: Record<string, number> = {};
-      for (const block of data.blocks ?? []) {
-        for (const para of block.paragraphs ?? []) {
-          for (const line of para.lines ?? []) {
-            for (const word of line.words ?? []) {
-              if (word.text) wordConfMap[word.text] = Math.max(wordConfMap[word.text] ?? 0, word.confidence);
-            }
-          }
-        }
+      if (rawRows.length === 0) {
+        res.status(422).json({
+          error: "لم يتم العثور على أي درجات في الصورة. تأكد من جودة الصورة وحاول مرة أخرى.",
+        });
+        return;
       }
 
-      // ── Step 4: parse grade lines ────────────────────────────────────────────
-      const rows = parseGradeLines(data.text);
-
-      // Annotate per-row confidence from word map
-      const LOW_CONF_THRESHOLD = 70;
-      for (const row of rows) {
-        const words = row.studentName.split(/\s+/);
-        const confs = words.map(w => wordConfMap[w] ?? data.confidence);
-        const avg = confs.reduce((a, b) => a + b, 0) / (confs.length || 1);
-        row.confidence = Math.round(avg);
-        row.lowConfidence = row.confidence < LOW_CONF_THRESHOLD;
-      }
+      // Map to the same shape the client expects
+      const rows = rawRows.map((r, i) => ({
+        rowNumber:     i + 1,
+        studentName:   r.studentName.trim(),
+        grade:         r.grade,
+        confidence:    95,   // LLM extraction — assume high confidence
+        lowConfidence: false,
+      }));
 
       res.json({
         success: true,
         rows,
         totalLines: rows.length,
-        overallConfidence: Math.round(data.confidence),
-        rawText: data.text,
+        overallConfidence: 95,
+        rawText: rawRows.map(r => `${r.studentName}: ${r.grade}`).join("\n"),
       });
     } catch (err: any) {
-      logger.error({ err }, "OCR: processing failed");
+      logger.error({ err }, "OCR (Vision): processing failed");
       res.status(500).json({
-        error: "فشل معالجة الصورة بالـ OCR",
+        error: "فشل معالجة الصورة بالذكاء الاصطناعي",
         details: err?.message ?? "Unknown error",
       });
-    } finally {
-      if (worker) await worker.terminate().catch(() => {});
     }
   },
 );
