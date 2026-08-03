@@ -1,6 +1,14 @@
 /**
  * أرشفة البيانات
  * Data archiving page — snapshot the current year's data as JSON or Excel.
+ *
+ * ✅ FIX: /api/students returns { students: [], total: N } — not a plain array.
+ *         The previous code did (students as any[]).map(...) which threw
+ *         "y.map is not a function" in the minified bundle.
+ * ✅ NEW:  Content-selection checkboxes — choose what to include (students,
+ *         grades, absences from OCR).
+ * ✅ NEW:  Absences are now fetched from /api/absences and exported as a
+ *         separate sheet / JSON key.
  */
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
@@ -10,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Archive, Download, Database, CheckCircle2,
   Loader2, FileJson, FileSpreadsheet, Calendar, Users, BookOpen,
+  Clock, CheckSquare, Square,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -30,6 +39,7 @@ interface ArchiveEntry {
   stats: ArchiveStats;
   filename: string;
   format: ExportFormat;
+  included?: string[];
 }
 
 const YEAR_GRADIENTS = [
@@ -40,12 +50,21 @@ const YEAR_GRADIENTS = [
   "from-slate-500 to-slate-600",
 ];
 
+const CONTENT_OPTIONS = [
+  { key: "students" as const, label: "قائمة التلاميذ",    icon: Users,        activeClass: "border-violet-500/60 bg-violet-500/10 text-violet-300" },
+  { key: "grades"   as const, label: "النتائج والدرجات",   icon: BookOpen,     activeClass: "border-blue-500/60 bg-blue-500/10 text-blue-300"   },
+  { key: "absences" as const, label: "الغيابات (OCR)",    icon: Clock,        activeClass: "border-amber-500/60 bg-amber-500/10 text-amber-300" },
+] as const;
+
 export default function ArchivePage() {
   const { toast } = useToast();
   const [stats, setStats]         = useState<Record<string, ArchiveStats>>({});
   const [loading, setLoading]     = useState(true);
   const [exporting, setExporting] = useState<string | null>(null);
-  const [format, setFormat]       = useState<ExportFormat>("json");
+  const [format, setFormat]       = useState<ExportFormat>("excel");
+  const [include, setInclude]     = useState<Record<string, boolean>>({
+    students: true, grades: true, absences: true,
+  });
   const [archives, setArchives]   = useState<ArchiveEntry[]>(() => {
     try { return JSON.parse(localStorage.getItem("schoolArchives") ?? "[]"); }
     catch { return []; }
@@ -56,7 +75,10 @@ export default function ArchivePage() {
       YEARS.map(y =>
         fetch(`${BASE}api/results?annee=${encodeURIComponent(y)}`, { credentials: "include" })
           .then(r => r.ok ? r.json() : [])
-          .then((d: any[]) => [y, { students: d.length, grades: d.length * 3, absences: 0 }] as const)
+          .then((d: unknown) => {
+            const arr = Array.isArray(d) ? d : [];
+            return [y, { students: arr.length, grades: arr.length * 3, absences: 0 }] as const;
+          })
           .catch(() => [y, { students: 0, grades: 0, absences: 0 }] as const),
       ),
     ).then(pairs => { setStats(Object.fromEntries(pairs)); setLoading(false); });
@@ -65,66 +87,104 @@ export default function ArchivePage() {
   async function exportYear(year: string) {
     setExporting(year);
     try {
-      const [resultsRes, studentsRes] = await Promise.all([
-        fetch(`${BASE}api/results?annee=${encodeURIComponent(year)}`, { credentials: "include" }),
-        fetch(`${BASE}api/students?annee=${encodeURIComponent(year)}`, { credentials: "include" }),
+      // Fetch all selected data in parallel
+      const [resultsRes, studentsRes, absencesRes] = await Promise.all([
+        include.grades
+          ? fetch(`${BASE}api/results?annee=${encodeURIComponent(year)}`, { credentials: "include" })
+          : Promise.resolve(null),
+        include.students
+          ? fetch(`${BASE}api/students?annee=${encodeURIComponent(year)}`, { credentials: "include" })
+          : Promise.resolve(null),
+        include.absences
+          ? fetch(`${BASE}api/absences?annee=${encodeURIComponent(year)}`, { credentials: "include" })
+          : Promise.resolve(null),
       ]);
-      const results  = resultsRes.ok  ? await resultsRes.json()  : [];
-      const students = studentsRes.ok ? await studentsRes.json() : [];
+
+      const results = resultsRes?.ok ? await resultsRes.json() : [];
+
+      // ✅ FIX: /api/students returns { students: [...], total: N }, not a plain array.
+      // Unwrap it so subsequent .map() calls don't throw "y.map is not a function".
+      const studentsRaw = studentsRes?.ok ? await studentsRes.json() : { students: [] };
+      const students: any[] = Array.isArray(studentsRaw)
+        ? studentsRaw
+        : (studentsRaw.students ?? []);
+
+      const absences: any[] = absencesRes?.ok ? await absencesRes.json() : [];
 
       let blob: Blob;
       let filename: string;
 
       if (format === "excel") {
-        // Build Excel workbook
         const XLSX = await import("xlsx");
-
-        // Students sheet
-        const studentRows = (students as any[]).map((s: any) => ({
-          "المعرّف": s.id,
-          "الاسم واللقب": s.nomPrenom,
-          "المستوى": s.niveau,
-          "القسم": s.classe,
-          "الجنس": s.sexe === "M" ? "ذكر" : "أنثى",
-          "الحالة": s.statut === "nouveau" ? "جديد" : "معيد",
-          "تاريخ الميلاد": s.dateNaissance ?? "",
-          "هاتف الولي": s.parentPhone ?? "",
-        }));
-
-        // Results sheet
-        const resultRows = (results as any[]).map((r: any) => ({
-          "المعرّف": r.student?.id ?? "",
-          "الاسم واللقب": r.student?.nomPrenom ?? "",
-          "المستوى": r.student?.niveau ?? "",
-          "القسم": r.student?.classe ?? "",
-          "معدل ف1": r.t1Avg?.toFixed(2) ?? "",
-          "معدل ف2": r.t2Avg?.toFixed(2) ?? "",
-          "معدل ف3": r.t3Avg?.toFixed(2) ?? "",
-          "المعدل السنوي": r.annualAvg?.toFixed(2) ?? "",
-          "النتيجة": r.annualAvg !== null ? (r.annualAvg >= 10 ? "ناجح" : r.annualAvg >= 9 ? "مستدرك" : "راسب") : "",
-        }));
-
         const wb = XLSX.utils.book_new();
-        const wsStudents = XLSX.utils.json_to_sheet(studentRows);
-        const wsResults  = XLSX.utils.json_to_sheet(resultRows);
-        XLSX.utils.book_append_sheet(wb, wsStudents, "التلاميذ");
-        XLSX.utils.book_append_sheet(wb, wsResults,  "النتائج");
+
+        // ── Students sheet ──────────────────────────────────────────────────
+        if (include.students) {
+          const studentRows = students.map((s: any) => ({
+            "المعرّف":        s.id,
+            "الاسم واللقب":  s.nomPrenom,
+            "المستوى":       s.niveau,
+            "القسم":         s.classe,
+            "الجنس":         s.sexe === "M" ? "ذكر" : "أنثى",
+            "الحالة":        s.statut === "nouveau" ? "جديد" : "معيد",
+            "تاريخ الميلاد": s.dateNaissance ?? "",
+            "هاتف الولي":   s.parentPhone ?? "",
+          }));
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(studentRows.length ? studentRows : [{}]), "التلاميذ");
+        }
+
+        // ── Results sheet ───────────────────────────────────────────────────
+        if (include.grades) {
+          const resultRows = (Array.isArray(results) ? results : []).map((r: any) => ({
+            "المعرّف":      r.student?.id ?? "",
+            "الاسم واللقب": r.student?.nomPrenom ?? "",
+            "المستوى":     r.student?.niveau ?? "",
+            "القسم":       r.student?.classe ?? "",
+            "معدل ف1":     r.t1Avg?.toFixed(2) ?? "",
+            "معدل ف2":     r.t2Avg?.toFixed(2) ?? "",
+            "معدل ف3":     r.t3Avg?.toFixed(2) ?? "",
+            "المعدل السنوي": r.annualAvg?.toFixed(2) ?? "",
+            "النتيجة":     r.annualAvg !== null
+              ? (r.annualAvg >= 10 ? "ناجح" : r.annualAvg >= 9 ? "مستدرك" : "راسب")
+              : "",
+          }));
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resultRows.length ? resultRows : [{}]), "النتائج");
+        }
+
+        // ── Absences sheet ──────────────────────────────────────────────────
+        if (include.absences) {
+          const absenceRows = absences.map((a: any) => ({
+            "معرف التلميذ":          a.studentId,
+            "الفصل":                 a.trimestre,
+            "غياب مبرر (ساعة)":     a.justifiedHours ?? 0,
+            "غياب غير مبرر (ساعة)": a.unjustifiedHours ?? 0,
+            "المجموع":               (a.justifiedHours ?? 0) + (a.unjustifiedHours ?? 0),
+          }));
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(absenceRows.length ? absenceRows : [{}]), "الغيابات");
+        }
+
+        if (wb.SheetNames.length === 0) {
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ "ملاحظة": "لم يتم اختيار أي محتوى" }]), "بيانات");
+        }
 
         const wbArray = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-        blob = new Blob([wbArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        blob     = new Blob([wbArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
         filename = `archive-${year}.xlsx`;
       } else {
-        const payload = {
+        // JSON export
+        const payload: Record<string, unknown> = {
           exportedAt: new Date().toISOString(),
           schoolYear: year,
-          version: "1.0",
-          students,
-          results,
+          version:    "1.0",
         };
-        blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+        if (include.students) payload.students = students;
+        if (include.grades)   payload.results  = results;
+        if (include.absences) payload.absences = absences;
+        blob     = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
         filename = `archive-${year}.json`;
       }
 
+      // Trigger download
       const url = URL.createObjectURL(blob);
       const a   = document.createElement("a");
       a.href     = url;
@@ -135,20 +195,27 @@ export default function ArchivePage() {
       const entry: ArchiveEntry = {
         year,
         archivedAt: new Date().toISOString(),
-        stats: stats[year] ?? { students: students.length, grades: 0, absences: 0 },
+        stats: stats[year] ?? { students: students.length, grades: 0, absences: absences.length },
         filename,
         format,
+        included: CONTENT_OPTIONS.filter(o => include[o.key]).map(o => o.label),
       };
       const updated = [entry, ...archives.filter(a => a.year !== year)];
       setArchives(updated);
       localStorage.setItem("schoolArchives", JSON.stringify(updated));
-      toast({ title: "تم الأرشفة بنجاح", description: `تم تصدير بيانات السنة ${year} بصيغة ${format.toUpperCase()}` });
+      toast({
+        title: "تم الأرشفة بنجاح",
+        description: `تم تصدير بيانات السنة ${year} بصيغة ${format.toUpperCase()}`,
+      });
     } catch (err: any) {
       toast({ title: "خطأ في التصدير", description: err.message, variant: "destructive" });
     } finally {
       setExporting(null);
     }
   }
+
+  const toggleInclude = (key: string) =>
+    setInclude(p => ({ ...p, [key]: !p[key] }));
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="p-6 max-w-5xl mx-auto">
@@ -171,40 +238,68 @@ export default function ArchivePage() {
         <div className="text-sm">
           <p className="font-semibold text-sky-300">كيف تعمل الأرشفة؟</p>
           <p className="text-muted-foreground mt-1 leading-relaxed">
-            يتم تنزيل ملف يحتوي على جميع بيانات التلاميذ والنقاط للسنة المختارة.
+            يتم تنزيل ملف يحتوي على البيانات المختارة للسنة المحددة.
             احتفظ بهذا الملف في مكان آمن كنسخة احتياطية رسمية.
           </p>
         </div>
       </div>
 
-      {/* Format selector */}
-      <div className="mb-6">
-        <p className="text-sm font-semibold mb-3 text-muted-foreground">صيغة الملف المُصدَّر</p>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setFormat("json")}
-            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border text-sm font-semibold transition-all ${
-              format === "json"
-                ? "border-sky-500/60 bg-sky-500/10 text-sky-300 shadow-sm"
-                : "border-border text-muted-foreground hover:border-sky-500/30 hover:bg-sky-500/5"
-            }`}
-          >
-            <FileJson className="w-4 h-4" />
-            JSON
-            <span className="text-xs opacity-70 font-normal">للتطبيقات والنسخ الاحتياطية</span>
-          </button>
-          <button
-            onClick={() => setFormat("excel")}
-            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border text-sm font-semibold transition-all ${
-              format === "excel"
-                ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300 shadow-sm"
-                : "border-border text-muted-foreground hover:border-emerald-500/30 hover:bg-emerald-500/5"
-            }`}
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            Excel (.xlsx)
-            <span className="text-xs opacity-70 font-normal">للطباعة والمراجعة</span>
-          </button>
+      {/* Format + Content selector */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        {/* Format */}
+        <div>
+          <p className="text-sm font-semibold mb-3 text-muted-foreground">صيغة الملف المُصدَّر</p>
+          <div className="flex gap-3 flex-wrap">
+            <button
+              onClick={() => setFormat("json")}
+              className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border text-sm font-semibold transition-all ${
+                format === "json"
+                  ? "border-sky-500/60 bg-sky-500/10 text-sky-300 shadow-sm"
+                  : "border-border text-muted-foreground hover:border-sky-500/30 hover:bg-sky-500/5"
+              }`}
+            >
+              <FileJson className="w-4 h-4" />
+              JSON
+              <span className="text-xs opacity-70 font-normal">للتطبيقات</span>
+            </button>
+            <button
+              onClick={() => setFormat("excel")}
+              className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border text-sm font-semibold transition-all ${
+                format === "excel"
+                  ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300 shadow-sm"
+                  : "border-border text-muted-foreground hover:border-emerald-500/30 hover:bg-emerald-500/5"
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Excel (.xlsx)
+              <span className="text-xs opacity-70 font-normal">للطباعة</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Content checkboxes */}
+        <div>
+          <p className="text-sm font-semibold mb-3 text-muted-foreground">محتوى الملف</p>
+          <div className="flex flex-col gap-2">
+            {CONTENT_OPTIONS.map(({ key, label, icon: Icon, activeClass }) => {
+              const on = include[key];
+              return (
+                <button
+                  key={key}
+                  onClick={() => toggleInclude(key)}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-sm transition-all text-start ${
+                    on ? activeClass : "border-border text-muted-foreground hover:border-muted-foreground/40"
+                  }`}
+                >
+                  {on
+                    ? <CheckSquare className="w-4 h-4 shrink-0" />
+                    : <Square className="w-4 h-4 shrink-0 opacity-40" />}
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="font-semibold">{label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -267,7 +362,7 @@ export default function ArchivePage() {
                     className="w-full"
                     variant={archived ? "outline" : "default"}
                     size="sm"
-                    disabled={!hasData || isExp}
+                    disabled={!hasData || isExp || !Object.values(include).some(Boolean)}
                     onClick={() => exportYear(year)}
                   >
                     {isExp ? (
@@ -298,7 +393,7 @@ export default function ArchivePage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
-                  {["السنة الدراسية", "تاريخ الأرشفة", "التلاميذ", "الصيغة", "اسم الملف"].map(h => (
+                  {["السنة الدراسية", "تاريخ الأرشفة", "التلاميذ", "الصيغة", "المحتوى", "اسم الملف"].map(h => (
                     <th key={h} className="px-4 py-2.5 text-start text-xs font-semibold text-muted-foreground">{h}</th>
                   ))}
                 </tr>
@@ -315,6 +410,13 @@ export default function ArchivePage() {
                       <Badge variant="secondary" className="text-xs">
                         {(a.format ?? "json").toUpperCase()}
                       </Badge>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex flex-wrap gap-1">
+                        {(a.included ?? ["بيانات"]).map(inc => (
+                          <Badge key={inc} variant="outline" className="text-[10px] px-1.5">{inc}</Badge>
+                        ))}
+                      </div>
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-sky-400">{a.filename}</td>
                   </tr>

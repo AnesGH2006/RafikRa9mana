@@ -566,4 +566,83 @@ router.delete("/students", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
+/**
+ * POST /api/students/auto-detect-repeaters?annee=2025-2026
+ *
+ * Smart repeater detection: compares the target year's student list with the
+ * previous year.  A student who appears in the SAME niveau in the previous
+ * year is a repeater (redoublant); one who moved up a niveau (or is brand new)
+ * stays "nouveau".
+ *
+ * Returns { detected, alreadyMarked, total }
+ */
+router.post("/students/auto-detect-repeaters", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const { annee } = req.query as Record<string, string>;
+  if (!annee) { res.status(400).json({ error: "annee query param required" }); return; }
+
+  // Derive previous year  e.g. "2025-2026" → "2024-2025"
+  const parts = annee.split("-");
+  if (parts.length !== 2) { res.status(400).json({ error: "invalid annee format" }); return; }
+  const prevAnnee = `${parseInt(parts[0]!) - 1}-${parseInt(parts[1]!) - 1}`;
+
+  // Normalize Arabic for robust name matching
+  function normAr(s: string): string {
+    return String(s ?? "")
+      .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+      .replace(/\u200B|\u200C|\u200D|\uFEFF/g, "")
+      .replace(/[أإآا]/g, "ا")
+      .replace(/[ةه]/g, "ه")
+      .replace(/ى/g, "ي")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  try {
+    const [currentStudents, prevStudents] = await Promise.all([
+      db.select().from(studentsTable).where(and(eq(studentsTable.userId, userId), eq(studentsTable.annee, annee))),
+      db.select().from(studentsTable).where(and(eq(studentsTable.userId, userId), eq(studentsTable.annee, prevAnnee))),
+    ]);
+
+    if (prevStudents.length === 0) {
+      res.json({ detected: 0, alreadyMarked: 0, total: currentStudents.length, prevAnnee, warning: "لا توجد بيانات للسنة السابقة" });
+      return;
+    }
+
+    // Build a lookup: normalizedName → Set<niveau> for previous year
+    const prevMap = new Map<string, Set<string>>();
+    for (const s of prevStudents) {
+      const key = normAr(s.nomPrenom);
+      if (!prevMap.has(key)) prevMap.set(key, new Set());
+      prevMap.get(key)!.add(s.niveau);
+    }
+
+    let detected = 0;
+    let alreadyMarked = 0;
+
+    for (const student of currentStudents) {
+      const normName = normAr(student.nomPrenom);
+      const prevNiveaux = prevMap.get(normName);
+      const wasInSameNiveau = prevNiveaux?.has(student.niveau) ?? false;
+
+      if (wasInSameNiveau) {
+        if (student.statut === "redoublant") {
+          alreadyMarked++;
+        } else {
+          await db.update(studentsTable)
+            .set({ statut: "redoublant" })
+            .where(eq(studentsTable.id, student.id));
+          detected++;
+        }
+      }
+    }
+
+    res.json({ detected, alreadyMarked, total: currentStudents.length, prevAnnee });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? "Server error" });
+  }
+});
+
 export default router;

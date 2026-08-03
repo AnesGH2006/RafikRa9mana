@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar, Users, Building2, Plus, Trash2, Edit3, X, Check,
-  AlertTriangle, Printer, Loader2, ChevronDown, Grid3X3,
+  AlertTriangle, Printer, Loader2, ChevronDown, Grid3X3, BookMarked, Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -93,7 +93,7 @@ function EditableField({ value, onSave, placeholder = "", className = "" }: {
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
-type Tab = "teachers" | "rooms" | "schedule" | "print";
+type Tab = "teachers" | "rooms" | "schedule" | "print" | "hourly";
 
 export default function TimetablePage() {
   const { toast } = useToast();
@@ -199,10 +199,11 @@ export default function TimetablePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const tabs: { id: Tab; label: string; icon: typeof Calendar }[] = [
-    { id: "schedule", label: "جدول الأوقات", icon: Grid3X3 },
-    { id: "teachers", label: "الأساتذة",     icon: Users },
+    { id: "schedule", label: "جدول الأوقات",   icon: Grid3X3 },
+    { id: "teachers", label: "الأساتذة",       icon: Users },
     { id: "rooms",    label: "القاعات والمخابر", icon: Building2 },
-    { id: "print",    label: "طباعة",         icon: Printer },
+    { id: "hourly",   label: "الحجم الساعي",   icon: BookMarked },
+    { id: "print",    label: "طباعة",           icon: Printer },
   ];
 
   return (
@@ -397,6 +398,11 @@ export default function TimetablePage() {
           onRefresh={fetchRooms}
           toast={toast}
         />
+      )}
+
+      {/* ── HOURLY VOLUME TAB ───────────────────────────────────────────────────── */}
+      {tab === "hourly" && (
+        <HourlyVolumePanel slots={slots} classes={classes} annee={annee} onFetchSlots={fetchSlots} />
       )}
 
       {/* ── PRINT TAB ───────────────────────────────────────────────────────────── */}
@@ -893,6 +899,235 @@ function SlotModal({ day, period, slot, classe, annee, teachers, rooms, onClose,
           </div>
         </div>
       </motion.div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HourlyVolumePanel — الحجم الساعي الأسبوعي
+//
+// Shows: per-subject target hours/week (editable, persisted in localStorage)
+//        vs actual hours scheduled in the grid.
+// "Auto-distribute" fills empty slots greedily to meet targets.
+// ─────────────────────────────────────────────────────────────────────────────
+const STORAGE_KEY = "cem_hourly_targets_v1";
+
+interface HourlyVolumePanelProps {
+  slots: TimetableSlot[];
+  classes: string[];
+  annee: string;
+  onFetchSlots: (classe: string) => Promise<void>;
+}
+
+type SubjectTargets = Record<string, number>; // subject → target h/week
+
+function HourlyVolumePanel({ slots, classes, annee, onFetchSlots }: HourlyVolumePanelProps) {
+  const { toast } = useToast();
+
+  const [selectedClass, setSelectedClass] = useState(classes[0] ?? "");
+  const [targets, setTargets] = useState<SubjectTargets>(() => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}"); }
+    catch { return {}; }
+  });
+  const [distributing, setDistributing] = useState(false);
+  const [newSubject, setNewSubject] = useState("");
+
+  const saveTargets = (t: SubjectTargets) => {
+    setTargets(t);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
+  };
+
+  // Count actual hours per subject for the selected class
+  const classSlots = slots.filter(s => s.classe === selectedClass);
+  const actualMap: Record<string, number> = {};
+  for (const s of classSlots) {
+    if (s.subject) actualMap[s.subject] = (actualMap[s.subject] ?? 0) + 1;
+  }
+
+  // All subjects (from targets + actual)
+  const allSubjects = [...new Set([...Object.keys(targets), ...Object.keys(actualMap)])].sort();
+
+  const addSubject = () => {
+    const s = newSubject.trim();
+    if (!s) return;
+    if (!targets[s]) saveTargets({ ...targets, [s]: 1 });
+    setNewSubject("");
+  };
+
+  const removeSubject = (s: string) => {
+    const t = { ...targets };
+    delete t[s];
+    saveTargets(t);
+  };
+
+  const updateTarget = (s: string, v: number) =>
+    saveTargets({ ...targets, [s]: Math.max(0, v) });
+
+  // ── Auto-distribute greedy fill ────────────────────────────────────────────
+  const DAYS  = ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"];
+  const SLOTS_PER_DAY = 6;
+
+  const handleAutoDistribute = async () => {
+    if (!selectedClass) return;
+    setDistributing(true);
+
+    // Build list of subjects that still need more slots
+    const needs: Array<{ subject: string; remaining: number }> = allSubjects
+      .filter(s => targets[s] !== undefined)
+      .map(s => ({ subject: s, remaining: Math.max(0, (targets[s] ?? 0) - (actualMap[s] ?? 0)) }))
+      .filter(n => n.remaining > 0)
+      .sort((a, b) => b.remaining - a.remaining);
+
+    if (needs.length === 0) {
+      toast({ title: "لا حاجة لتوزيع", description: "جميع المواد وصلت للحجم المستهدف" });
+      setDistributing(false);
+      return;
+    }
+
+    // Find empty slots
+    const occupiedSet = new Set(classSlots.map(s => `${s.day}-${s.slot}`));
+    const emptySlots: Array<{ day: string; slot: number }> = [];
+    for (const day of DAYS)
+      for (let sl = 1; sl <= SLOTS_PER_DAY; sl++)
+        if (!occupiedSet.has(`${day}-${sl}`)) emptySlots.push({ day, slot: sl });
+
+    let filled = 0;
+    const needIdx: Record<string, number> = {};
+
+    for (const empty of emptySlots) {
+      // Pick subject with most remaining need
+      const next = needs.find(n => n.remaining > 0);
+      if (!next) break;
+
+      try {
+        const res = await fetch(`${(import.meta as any).env.BASE_URL ?? "/"}api/timetable`, {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            annee, classe: selectedClass,
+            day: empty.day, slot: empty.slot,
+            subject: next.subject,
+            teacherName: "", roomName: "", notes: "",
+          }),
+        });
+        if (res.ok) {
+          next.remaining--;
+          filled++;
+        }
+      } catch { /* continue */ }
+    }
+
+    await onFetchSlots(selectedClass);
+    toast({
+      title: `✅ تم توزيع ${filled} حصة تلقائياً`,
+      description: needs.filter(n => n.remaining > 0).length > 0
+        ? "بعض المواد لم تكتمل (لا توجد حصص فارغة كافية)"
+        : "تم الوصول لجميع الأهداف",
+    });
+    setDistributing(false);
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+      {/* Class selector */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={selectedClass} onValueChange={v => { setSelectedClass(v); onFetchSlots(v); }}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="اختر الفوج" />
+          </SelectTrigger>
+          <SelectContent>
+            {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Button
+          onClick={handleAutoDistribute}
+          disabled={distributing || !selectedClass}
+          className="gap-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white border-0 shadow"
+          size="sm"
+        >
+          {distributing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+          توزيع تلقائي
+        </Button>
+        <p className="text-xs text-muted-foreground">يملأ الحصص الفارغة تلقائياً حتى الوصول للأهداف المحددة</p>
+      </div>
+
+      {/* Add subject */}
+      <div className="flex items-center gap-2">
+        <input
+          value={newSubject}
+          onChange={e => setNewSubject(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") addSubject(); }}
+          placeholder="أضف مادة جديدة…"
+          className="flex-1 max-w-xs px-3 py-1.5 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+          dir="rtl"
+        />
+        <Button size="sm" variant="outline" onClick={addSubject} className="gap-1.5">
+          <Plus className="w-4 h-4" /> إضافة
+        </Button>
+      </div>
+
+      {/* Table */}
+      {allSubjects.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">
+          <BookMarked className="w-10 h-10 mx-auto mb-3 opacity-20" />
+          <p>لا توجد مواد بعد. أضف مادة وحدد الحجم الساعي المستهدف.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border overflow-hidden shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/60">
+              <tr>
+                {["المادة", "الهدف (حصة/أسبوع)", "الفعلي الآن", "المتبقي", "الحالة", ""].map(h => (
+                  <th key={h} className="px-4 py-2.5 text-start text-xs font-semibold text-muted-foreground">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {allSubjects.map((s, i) => {
+                const target  = targets[s] ?? 0;
+                const actual  = actualMap[s] ?? 0;
+                const remaining = Math.max(0, target - actual);
+                const pct = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 100;
+                return (
+                  <tr key={s} className={`border-t ${i % 2 === 0 ? "" : "bg-muted/15"}`}>
+                    <td className="px-4 py-2.5 font-semibold">{s}</td>
+                    <td className="px-4 py-2.5 w-36">
+                      <input
+                        type="number" min={0} max={40} step={1}
+                        value={targets[s] ?? 0}
+                        onChange={e => updateTarget(s, parseInt(e.target.value) || 0)}
+                        className="w-20 px-2 py-1 text-center rounded-lg border bg-background text-sm font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+                        dir="ltr"
+                      />
+                    </td>
+                    <td className="px-4 py-2.5 font-mono font-bold text-cyan-600">{actual}</td>
+                    <td className="px-4 py-2.5 font-mono font-bold text-amber-600">{remaining}</td>
+                    <td className="px-4 py-2.5 w-40">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${pct >= 100 ? "bg-emerald-500" : pct >= 50 ? "bg-cyan-500" : "bg-amber-500"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-mono text-muted-foreground w-8 shrink-0">{pct}%</span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-2.5 w-8">
+                      {targets[s] !== undefined && (
+                        <button onClick={() => removeSubject(s)}
+                          className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-muted-foreground hover:text-red-500 transition-colors">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </motion.div>
   );
 }

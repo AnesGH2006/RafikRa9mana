@@ -2823,7 +2823,12 @@ export default function Results() {
     try {
       const p = new URLSearchParams({ annee });
       if (filters.niveau) p.set("niveau", filters.niveau);
-      if (filters.classe) p.set("classe", filters.classe);
+      // ✅ FIX: Do NOT pass filters.classe to the API.
+      // If we let the API filter by classe, the returned results only contain
+      // students in that one class, so the classes dropdown loses all other
+      // options and the user must first select "كل الأقسام" before switching
+      // to another class. By always fetching all classes for the selected
+      // niveau and filtering client-side, the dropdown stays fully populated.
       if (filters.sexe)   p.set("sexe",   filters.sexe);
       const res = await fetch(`${BASE}api/results?${p}`, { credentials: "include" });
       if (res.ok) { setResults(await res.json()); setListKey(k => k + 1); }
@@ -2833,9 +2838,12 @@ export default function Results() {
   useEffect(() => { fetchResults(); }, [fetchResults]);
 
   const classes  = [...new Set(results.map(r => r.student.classe))].sort();
-  const displayed = filters.q
-    ? results.filter(r => r.student.nomPrenom.toLowerCase().includes(filters.q.toLowerCase()))
-    : results;
+  // ✅ FIX: apply classe filter client-side (API no longer filters by classe).
+  const displayed = results.filter(r => {
+    if (filters.classe && r.student.classe !== filters.classe) return false;
+    if (filters.q && !r.student.nomPrenom.toLowerCase().includes(filters.q.toLowerCase())) return false;
+    return true;
+  });
 
   const niveauLabel = filters.niveau ? LEVEL_LABELS[filters.niveau as Niveau] : "جميع المستويات";
 
