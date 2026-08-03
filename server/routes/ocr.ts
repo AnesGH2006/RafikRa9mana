@@ -1,9 +1,9 @@
 /**
- * OCR Grade Sheet Processing  (v3 — Groq Vision LLM)
+ * OCR Grade Sheet Processing  (v4 — Groq Vision LLM, updated model)
  *
  * POST /api/ocr/parse-grades
  *   Accepts an uploaded image of a printed grade sheet.
- *   Pipeline: resize with Sharp → Groq Vision LLM (llama-4-scout) → structured JSON
+ *   Pipeline: resize with Sharp → Groq Vision LLM (qwen3.6-27b) → structured JSON
  *   Returns: { rows, totalLines, overallConfidence, rawText }
  */
 import { Router } from "express";
@@ -60,7 +60,13 @@ async function extractWithGroqVision(imageB64: string, mimeType: string): Promis
 - لا تخترع بيانات، استخرج ما هو موجود فقط.`;
 
   const body = JSON.stringify({
-    model: "meta-llama/llama-4-scout-17b-16e-instruct",
+    // ✅ FIX: "meta-llama/llama-4-scout-17b-16e-instruct" was deprecated by
+    // Groq on June 17, 2026 and no longer exists — every call failed with
+    // a 404 model_not_found error, regardless of image quality or content.
+    // "qwen/qwen3.6-27b" is Groq's current vision-capable multimodal model
+    // (their other suggested replacement, openai/gpt-oss-120b, is text-only
+    // and cannot process images — it would fail differently if used here).
+    model: "qwen/qwen3.6-27b",
     messages: [
       {
         role: "user",
@@ -142,12 +148,11 @@ router.post(
         return;
       }
 
-      // Map to the same shape the client expects
       const rows = rawRows.map((r, i) => ({
         rowNumber:     i + 1,
         studentName:   r.studentName.trim(),
         grade:         r.grade,
-        confidence:    95,   // LLM extraction — assume high confidence
+        confidence:    95,
         lowConfidence: false,
       }));
 
