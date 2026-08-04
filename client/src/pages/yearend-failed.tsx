@@ -92,7 +92,7 @@ export default function YearEndFailed() {
             </span>
             قوائم التلاميذ الراسبين
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">التلاميذ الذين لم يبلغ معدلهم السنوي 9/20</p>
+          <p className="text-muted-foreground text-sm mt-1">التلاميذ الذين لم يبلغ معدلهم السنوي 10/20</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => window.print()}>
           <Printer className="w-4 h-4 mr-1" /> طباعة

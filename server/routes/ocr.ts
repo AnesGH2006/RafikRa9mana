@@ -38,10 +38,10 @@ async function prepareForVision(buffer: Buffer): Promise<{ data: string; mimeTyp
 // ── Shared Groq Vision caller ──────────────────────────────────────────────────
 async function callGroqVision(imageB64: string, mimeType: string, prompt: string): Promise<string> {
   const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error("GROQ_API_KEY غير مضبوط — أضفه في الإعدادات للاستفادة من OCR");
+  if (!apiKey) throw new Error("مفتاح GROQ_API_KEY غير مضبوط. أضفه من قائمة الأسرار في لوحة Replit لتفعيل الـ OCR.");
 
   const body = JSON.stringify({
-    model: "qwen/qwen3.6-27b",
+    model: "meta-llama/llama-4-scout-17b-16e-instruct",
     messages: [{
       role: "user",
       content: [

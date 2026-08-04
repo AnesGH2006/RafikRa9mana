@@ -6,6 +6,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL;
@@ -913,7 +916,7 @@ function SlotModal({ day, period, slot, classe, annee, teachers, rooms, onClose,
 const STORAGE_KEY = "cem_hourly_targets_v1";
 
 interface HourlyVolumePanelProps {
-  slots: TimetableSlot[];
+  slots: Slot[];
   classes: string[];
   annee: string;
   onFetchSlots: (classe: string) => Promise<void>;
@@ -985,7 +988,7 @@ function HourlyVolumePanel({ slots, classes, annee, onFetchSlots }: HourlyVolume
     }
 
     // Find empty slots
-    const occupiedSet = new Set(classSlots.map(s => `${s.day}-${s.slot}`));
+    const occupiedSet = new Set(classSlots.map(s => `${s.day}-${s.period}`));
     const emptySlots: Array<{ day: string; slot: number }> = [];
     for (const day of DAYS)
       for (let sl = 1; sl <= SLOTS_PER_DAY; sl++)

@@ -2838,12 +2838,19 @@ export default function Results() {
   useEffect(() => { fetchResults(); }, [fetchResults]);
 
   const classes  = [...new Set(results.map(r => r.student.classe))].sort();
-  // ✅ FIX: apply classe filter client-side (API no longer filters by classe).
-  const displayed = results.filter(r => {
-    if (filters.classe && r.student.classe !== filters.classe) return false;
-    if (filters.q && !r.student.nomPrenom.toLowerCase().includes(filters.q.toLowerCase())) return false;
-    return true;
-  });
+  // ✅ FIX: apply classe filter client-side; also sort by selected trimestre avg.
+  const displayed = results
+    .filter(r => {
+      if (filters.classe && r.student.classe !== filters.classe) return false;
+      if (filters.q && !r.student.nomPrenom.toLowerCase().includes(filters.q.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (!filters.tri) return 0; // keep original API order (annual avg desc)
+      const avgA = getTriAvg(a, filters.tri as any) ?? -1;
+      const avgB = getTriAvg(b, filters.tri as any) ?? -1;
+      return avgB - avgA;
+    });
 
   const niveauLabel = filters.niveau ? LEVEL_LABELS[filters.niveau as Niveau] : "جميع المستويات";
 
