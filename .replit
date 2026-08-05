@@ -3,7 +3,7 @@ modules = ["nodejs-20", "web", "python-3.12", "postgresql-16"]
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
-run = ["node", "--enable-source-maps", "dist/server/index.js"]
+run = ["node", "--enable-source-maps", "dist/server/index.cjs"]
 
 [workflows]
 runButton = "Project"
