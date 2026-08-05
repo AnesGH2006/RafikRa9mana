@@ -4,13 +4,9 @@
 # No need to store the pnpm store twice.
 .local
 
-# Dependencies — installed fresh during the build step
+# Dependencies — installed fresh during the build step (was causing 413 Too Large)
 node_modules
 **/node_modules
-
-# Build output — already pushed as its own layer
-dist
-**/dist
 
 # Dev assets uploaded during development (not needed in production)
 attached_assets
