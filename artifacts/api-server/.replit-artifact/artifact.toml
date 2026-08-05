@@ -21,7 +21,7 @@ args = ["pnpm", "-w", "run", "build:server"]
 NODE_ENV = "production"
 
 [services.production.run]
-args = ["node", "--enable-source-maps", "dist/server/index.js"]
+args = ["node", "--enable-source-maps", "dist/server/index.cjs"]
 
 [services.production.run.env]
 PORT = "8080"
