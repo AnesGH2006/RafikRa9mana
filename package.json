@@ -8,7 +8,7 @@
     "dev:client": "vite --config vite.config.ts --host 0.0.0.0",
     "dev:server": "tsx watch server/index.ts",
     "build:client": "vite build --config vite.config.ts",
-    "build:server": "esbuild server/index.ts --bundle --platform=node --outfile=dist/server/index.cjs --format=cjs --outbase=.",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --outfile=dist/server/index.js --format=cjs --outbase=.",
     "build": "pnpm run build:client && pnpm run build:server",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
