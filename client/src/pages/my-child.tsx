@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   GraduationCap, BookOpen, Calendar, TrendingUp,
-  User, Award, AlertCircle, LogOut,
+  User, Award, AlertCircle, LogOut, Bell, BellOff, Loader2,
 } from "lucide-react";
 import { getSubjectsForLevel, calcWeightedAvg } from "@shared/subjects";
 import type { Niveau } from "@shared/types";
@@ -72,6 +72,55 @@ export default function MyChildPage() {
   const [error, setError] = useState("");
   const [annee, setAnnee] = useState("2025-2026");
   const [leaving, setLeaving] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState("");
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription())
+      .then(subscription => setPushEnabled(!!subscription))
+      .catch(() => setPushEnabled(false));
+  }, []);
+
+  async function togglePush() {
+    setPushBusy(true);
+    setPushError("");
+    try {
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        throw new Error("هذا المتصفح لا يدعم الإشعارات الفورية");
+      }
+      const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+      if (!publicKey) throw new Error("لم يتم إعداد مفتاح الإشعارات للموقع");
+      const registration = await navigator.serviceWorker.ready;
+      const existing = await registration.pushManager.getSubscription();
+      if (existing) {
+        await fetch(`${BASE}api/notifications/push-subscription`, {
+          method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: existing.endpoint }),
+        });
+        await existing.unsubscribe();
+        setPushEnabled(false);
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") throw new Error("يرجى السماح بالإشعارات من إعدادات المتصفح");
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
+      });
+      const response = await fetch(`${BASE}api/notifications/push-subscription`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription }),
+      });
+      if (!response.ok) throw new Error("تعذر تفعيل الإشعارات");
+      setPushEnabled(true);
+    } catch (error: any) {
+      setPushError(error?.message ?? "تعذر تغيير إعداد الإشعارات");
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -134,6 +183,12 @@ export default function MyChildPage() {
     }
   }
 
+  function urlBase64ToUint8Array(value: string): Uint8Array {
+    const padding = "=".repeat((4 - value.length % 4) % 4);
+    const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+    return Uint8Array.from(atob(base64), char => char.charCodeAt(0));
+  }
+
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate"
       className="p-4 md:p-6 space-y-6 max-w-2xl mx-auto"
@@ -149,6 +204,23 @@ export default function MyChildPage() {
           {leaving ? "جارٍ الخروج…" : "خروج من وضع الوالدين ← الموقع الكامل"}
         </button>
       </div>
+
+      <Card className="border-blue-200 bg-blue-50/70 dark:border-blue-900/50 dark:bg-blue-950/20">
+        <CardContent className="py-4 flex items-center justify-between gap-4" dir="rtl">
+          <div className="flex items-center gap-3 min-w-0">
+            {pushEnabled ? <Bell className="w-5 h-5 text-blue-600 shrink-0" /> : <BellOff className="w-5 h-5 text-muted-foreground shrink-0" />}
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">إشعارات المدرسة</p>
+              <p className="text-xs text-muted-foreground">{pushEnabled ? "ستصلك تنبيهات النتائج والغيابات" : "فعّل التنبيهات لتصلك مستجدات طفلك"}</p>
+              {pushError && <p className="text-xs text-red-600 mt-1">{pushError}</p>}
+            </div>
+          </div>
+          <button onClick={togglePush} disabled={pushBusy} className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+            {pushBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {pushEnabled ? "إيقاف" : "تفعيل"}
+          </button>
+        </CardContent>
+      </Card>
 
       {/* Student identity card */}
       <Card className="bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/20 border-violet-200 dark:border-violet-800/40 shadow-md">

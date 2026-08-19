@@ -24,6 +24,11 @@ const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 const router: IRouter = Router();
 
 function getOrigin(req: Request): string {
+  const requestHost = req.headers.host ?? "";
+  const isLocalhost = /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(requestHost);
+  if (isLocalhost && process.env.NODE_ENV !== "production") {
+    return `http://${requestHost}`;
+  }
   // Explicit override for non-Replit deployments (e.g. custom domain)
   if (process.env.APP_BASE_URL) {
     return process.env.APP_BASE_URL.replace(/\/$/, "");
@@ -51,7 +56,13 @@ function getOrigin(req: Request): string {
 }
 
 function setSessionCookie(res: Response, sid: string) {
-  res.cookie(SESSION_COOKIE, sid, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: SESSION_TTL });
+  res.cookie(SESSION_COOKIE, sid, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL,
+  });
 }
 
 function setOidcCookie(res: Response, name: string, value: string) {

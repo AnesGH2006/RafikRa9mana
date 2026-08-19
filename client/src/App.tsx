@@ -991,7 +991,9 @@ function AuthGate() {
   // Teachers/parents are sub-accounts — they bypass the subscription paywall
   // (the head admin's subscription covers them).
   const isMember = !!user?.memberContext;
-  const isSubscribed = user?.subscriptionStatus === "active" || isMember;
+  // Local development uses the test account and must remain usable without payment.
+  // Production keeps the existing subscription requirement.
+  const isSubscribed = import.meta.env.DEV || user?.subscriptionStatus === "active" || isMember;
 
   return (
     <AnimatePresence mode="wait">

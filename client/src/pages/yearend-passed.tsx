@@ -9,6 +9,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from "recharts";
+import { getFinalAvg } from "@/lib/year-end-result";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
@@ -17,6 +18,8 @@ const DEFAULT_YEAR = "2025-2026";
 interface StudentResult {
   student: { id: string; nomPrenom: string; niveau: string; classe: string; sexe: "M" | "F"; };
   annualAvg: number | null;
+  bemAvg?: number | null;
+  finalAvg?: number | null;
   t1Avg: number | null; t2Avg: number | null; t3Avg: number | null;
 }
 
@@ -62,9 +65,9 @@ export default function YearEndPassed() {
   }, [annee, niveau]);
 
   const passed = results
-    .filter(r => r.annualAvg !== null && r.annualAvg >= 10)
+    .filter(r => getFinalAvg(r) !== null && getFinalAvg(r)! >= 10)
     .filter(r => classe === "all" || r.student.classe === classe)
-    .sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+    .sort((a, b) => (getFinalAvg(b) ?? 0) - (getFinalAvg(a) ?? 0));
 
   const classes = [...new Set(results.map(r => r.student.classe))].sort();
   const males = passed.filter(r => r.student.sexe === "M").length;

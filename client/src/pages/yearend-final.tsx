@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Printer, ClipboardList, CheckSquare } from "lucide-react";
+import { getFinalAvg } from "@/lib/year-end-result";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
@@ -18,6 +19,8 @@ const DEFAULT_YEAR = "2025-2026";
 interface StudentResult {
   student: { id: string; nomPrenom: string; niveau: string; classe: string; sexe: "M" | "F"; statut: "nouveau" | "redoublant"; };
   annualAvg: number | null;
+  bemAvg?: number | null;
+  finalAvg?: number | null;
   t1Avg: number | null; t2Avg: number | null; t3Avg: number | null;
 }
 
@@ -50,14 +53,14 @@ export default function YearEndFinal() {
 
   const filtered = results
     .filter(r => classe === "all" || r.student.classe === classe)
-    .sort((a, b) => (b.annualAvg ?? -1) - (a.annualAvg ?? -1));
+    .sort((a, b) => (getFinalAvg(b) ?? -1) - (getFinalAvg(a) ?? -1));
 
   const classes = [...new Set(results.map(r => r.student.classe))].sort();
 
-  const withAvg = filtered.filter(r => r.annualAvg !== null);
-  const passed    = withAvg.filter(r => (r.annualAvg ?? 0) >= 10).length;
-  const mustarrak = withAvg.filter(r => (r.annualAvg ?? 0) >= 9 && (r.annualAvg ?? 0) < 10).length;
-  const failed    = withAvg.filter(r => (r.annualAvg ?? 0) < 9).length;
+  const withAvg = filtered.filter(r => getFinalAvg(r) !== null);
+  const passed    = withAvg.filter(r => (getFinalAvg(r) ?? 0) >= 10).length;
+  const mustarrak = withAvg.filter(r => (getFinalAvg(r) ?? 0) >= 9 && (getFinalAvg(r) ?? 0) < 10).length;
+  const failed    = withAvg.filter(r => (getFinalAvg(r) ?? 0) < 9).length;
   const successRate = withAvg.length > 0 ? Math.round((passed / withAvg.length) * 100) : null;
 
   return (
@@ -134,7 +137,7 @@ export default function YearEndFinal() {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={10} className="text-center py-16 text-muted-foreground">لا توجد بيانات — استورد النقاط أولاً</td></tr>
             ) : filtered.map((r, i) => {
-              const v = verdict(r.annualAvg);
+              const v = verdict(getFinalAvg(r));
               return (
                 <motion.tr key={r.student.id}
                   initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
@@ -159,8 +162,8 @@ export default function YearEndFinal() {
                       {a !== null ? a.toFixed(2) : "—"}
                     </td>
                   ))}
-                  <td className={`px-3 py-2.5 font-bold font-mono ${(r.annualAvg ?? 0) >= 10 ? "text-emerald-600 dark:text-emerald-400" : (r.annualAvg ?? 0) >= 9 ? "text-amber-600" : "text-red-500"}`}>
-                    {r.annualAvg?.toFixed(2) ?? "—"}
+                  <td className={`px-3 py-2.5 font-bold font-mono ${(getFinalAvg(r) ?? 0) >= 10 ? "text-emerald-600 dark:text-emerald-400" : (getFinalAvg(r) ?? 0) >= 9 ? "text-amber-600" : "text-red-500"}`}>
+                    {getFinalAvg(r)?.toFixed(2) ?? "—"}
                   </td>
                   <td className="px-3 py-2.5">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${v.cls}`}>{v.label}</span>

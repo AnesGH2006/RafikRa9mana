@@ -6,6 +6,7 @@
 import nodemailer from "nodemailer";
 import { db, notificationsTable } from "../../../shared/db.js";
 import { randomUUID } from "crypto";
+import { sendPushToUser } from "../../services/pushNotificationService.js";
 
 export interface MessagingInput {
   channel: "email" | "whatsapp" | "dashboard" | "all";
@@ -88,6 +89,11 @@ async function storeNotification(input: MessagingInput, userId: string): Promise
     body: input.message,
     type: input.priority === "urgent" ? "warning" : "info",
     metadata: input.metadata ?? {},
+  });
+  await sendPushToUser(userId, {
+    title: input.subject,
+    body: input.message,
+    type: input.priority === "urgent" ? "warning" : "general",
   });
   return { stored: true, id };
 }

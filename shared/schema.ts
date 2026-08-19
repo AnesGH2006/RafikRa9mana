@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, timestamp, varchar, pgEnum, boolean, integer, numeric } from "drizzle-orm/pg-core";
+import { index, uniqueIndex, jsonb, pgTable, timestamp, varchar, pgEnum, boolean, integer, numeric } from "drizzle-orm/pg-core";
 
 export const sessionsTable = pgTable(
   "sessions",
@@ -70,6 +70,8 @@ export const studentsTable = pgTable("students", {
   annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
   raqm: integer("raqm"),
   parentPhone: varchar("parent_phone", { length: 30 }),
+  /** Hashed token embedded in printable student QR cards */
+  qrToken: varchar("qr_token", { length: 64 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -221,25 +223,85 @@ export const notificationsTable = pgTable("notifications", {
 export type Notification       = typeof notificationsTable.$inferSelect;
 export type InsertNotification = typeof notificationsTable.$inferInsert;
 
+// ─── Web Push subscriptions ──────────────────────────────────────────────────
+export const pushSubscriptionsTable = pgTable("push_subscriptions", {
+  id:        varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId:    varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  endpoint:  varchar("endpoint", { length: 2000 }).notNull().unique(),
+  p256dh:   varchar("p256dh", { length: 255 }).notNull(),
+  auth:     varchar("auth", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type PushSubscription = typeof pushSubscriptionsTable.$inferSelect;
+export type InsertPushSubscription = typeof pushSubscriptionsTable.$inferInsert;
+
 // ─── SMS Dispatch Log ──────────────────────────────────────────────────────────
 export const smsStatusEnum = pgEnum("sms_status", ["sent", "failed", "queued", "no_phone"]);
 export const smsChannelEnum = pgEnum("sms_channel", ["gateway", "modem", "socket"]);
 
 export const smsLogsTable = pgTable("sms_logs", {
   id:          varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** School owner user id (tenant scope) */
   userId:      varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   studentId:   varchar("student_id", { length: 64 }).references(() => studentsTable.id, { onDelete: "set null" }),
+  /** SMS recipient phone number */
   phone:       varchar("phone",   { length: 30 }),
+  recipient:   varchar("recipient", { length: 30 }),
   message:     varchar("message", { length: 1000 }).notNull(),
   status:      smsStatusEnum("status").notNull().default("queued"),
   channel:     smsChannelEnum("channel"),
   gatewayRef:  varchar("gateway_ref", { length: 255 }),
   errorMsg:    varchar("error_msg",   { length: 500 }),
+  sentAt:      timestamp("sent_at", { withTimezone: true }),
   createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type SmsLog       = typeof smsLogsTable.$inferSelect;
 export type InsertSmsLog = typeof smsLogsTable.$inferInsert;
+
+// ─── School SMS Subscription / Credits ───────────────────────────────────────
+export const schoolSubscriptionsTable = pgTable("school_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** School owner user id */
+  schoolId: varchar("school_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }).unique(),
+  smsCreditsRemaining: integer("sms_credits_remaining").notNull().default(100),
+  subscriptionStatus: subscriptionStatusEnum("subscription_status").notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type SchoolSubscription       = typeof schoolSubscriptionsTable.$inferSelect;
+export type InsertSchoolSubscription = typeof schoolSubscriptionsTable.$inferInsert;
+
+// ─── QR Attendance Logs ────────────────────────────────────────────────────────
+export const attendanceLogsTable = pgTable("attendance_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  studentId: varchar("student_id", { length: 64 }).notNull().references(() => studentsTable.id, { onDelete: "cascade" }),
+  scannedAt: timestamp("scanned_at", { withTimezone: true }).notNull().defaultNow(),
+  source: varchar("source", { length: 20 }).notNull().default("qr"),
+  sig: varchar("sig", { length: 32 }),
+});
+
+export type AttendanceLog       = typeof attendanceLogsTable.$inferSelect;
+export type InsertAttendanceLog = typeof attendanceLogsTable.$inferInsert;
+
+// ─── OCR Upload Audit ──────────────────────────────────────────────────────────
+export const ocrUploadsTable = pgTable("ocr_uploads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 20 }).notNull(),
+  engine: varchar("engine", { length: 20 }).notNull(),
+  fileName: varchar("file_name", { length: 255 }),
+  rows: jsonb("rows"),
+  rowCount: integer("row_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type OcrUpload       = typeof ocrUploadsTable.$inferSelect;
+export type InsertOcrUpload = typeof ocrUploadsTable.$inferInsert;
 
 // ─── School Members (RBAC) ────────────────────────────────────────────────────
 export const schoolMemberRoleEnum = pgEnum("school_member_role", ["teacher", "parent", "supervisor", "counselor"]);
@@ -336,3 +398,49 @@ export const auditLogsTable = pgTable("audit_logs", {
 
 export type AuditLog       = typeof auditLogsTable.$inferSelect;
 export type InsertAuditLog = typeof auditLogsTable.$inferInsert;
+
+// ─── Activation codes and payments ──────────────────────────────────────────
+export const activationCodeStatusEnum = pgEnum("activation_code_status", ["available", "redeemed", "revoked"]);
+
+export const activationCodesTable = pgTable("activation_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  codeHash: varchar("code_hash", { length: 64 }).notNull().unique(),
+  codeLast4: varchar("code_last4", { length: 4 }).notNull(),
+  batchId: varchar("batch_id", { length: 64 }).notNull(),
+  status: activationCodeStatusEnum("status").notNull().default("available"),
+  redeemedBy: varchar("redeemed_by").references(() => usersTable.id, { onDelete: "set null" }),
+  redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("UQ_activation_codes_hash").on(table.codeHash),
+  index("IDX_activation_codes_batch").on(table.batchId),
+  index("IDX_activation_codes_status").on(table.status),
+]);
+
+export type ActivationCode = typeof activationCodesTable.$inferSelect;
+export type InsertActivationCode = typeof activationCodesTable.$inferInsert;
+
+export const paymentStatusEnum = pgEnum("payment_status", ["pending", "paid", "failed", "refunded"]);
+export const paymentProviderEnum = pgEnum("payment_provider", ["chargily", "activation_code"]);
+
+export const paymentsTable = pgTable("payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  provider: paymentProviderEnum("provider").notNull(),
+  providerReference: varchar("provider_reference", { length: 255 }),
+  amountDzd: integer("amount_dzd").notNull().default(1000),
+  status: paymentStatusEnum("status").notNull().default("pending"),
+  checkoutUrl: varchar("checkout_url", { length: 2000 }),
+  metadata: jsonb("metadata"),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => [
+  index("IDX_payments_user_created").on(table.userId, table.createdAt),
+  uniqueIndex("UQ_payments_provider_reference").on(table.provider, table.providerReference),
+  index("IDX_payments_status").on(table.status),
+]);
+
+export type Payment = typeof paymentsTable.$inferSelect;
+export type InsertPayment = typeof paymentsTable.$inferInsert;

@@ -119,6 +119,9 @@ export interface StudentResult {
   t2Avg: number | null;
   t3Avg: number | null;
   annualAvg: number | null;
+  bemAvg: number | null;
+  finalAvg: number | null;
+  finalPassed: boolean | null;
   passed: boolean | null;
   rank: number | null;
   totalJustified: number;

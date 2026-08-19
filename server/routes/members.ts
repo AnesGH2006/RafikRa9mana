@@ -14,6 +14,7 @@
 import { Router, type Request, type Response } from "express";
 import { and, eq, inArray } from "drizzle-orm";
 import { db, schoolMembersTable, studentsTable, gradesTable, absencesTable, schoolInfoTable } from "../../shared/db.js";
+import { getCachedJson, setCachedJson } from "../services/redisCache.js";
 
 const router = Router();
 
@@ -152,6 +153,13 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   if (!linkedStudentId) { res.json({ student: null }); return; }
 
   const annee = String(req.query.annee ?? "2025-2026");
+  const cacheKey = `parent-feed:${schoolUserId}:${linkedStudentId}:${annee}`;
+  const cached = await getCachedJson<Record<string, unknown>>(cacheKey);
+  if (cached) {
+    res.set("Cache-Control", "private, max-age=60");
+    res.json(cached);
+    return;
+  }
 
   const [student] = await db
     .select()
@@ -208,7 +216,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
     .filter(g => g.subject !== AVG_SUBJECT)
     .map(g => ({ ...g, score: parseFloat(String(g.score)) }));
 
-  res.json({
+  const payload = {
     student,
     grades,
     absences,
@@ -216,7 +224,10 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
     t2Avg,
     t3Avg,
     annualAvg,
-  });
+  };
+  await setCachedJson(cacheKey, payload, 600);
+  res.set("Cache-Control", "private, max-age=60");
+  res.json(payload);
 });
 
 // ── GET /api/teacher/students ─────────────────────────────────────────────────

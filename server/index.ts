@@ -2,6 +2,8 @@ import { createServer } from "http";
 import app from "./app.js";
 import { logger } from "./lib/logger.js";
 import { initSocketIO } from "./socket/index.js";
+import { isDatabaseConfigured } from "../shared/db.js";
+import { startNotificationWorker } from "./services/notificationQueue.js";
 
 // ── Startup environment validation ────────────────────────────────────────────
 // Log warnings for optional or environment-specific variables; only hard-exit
@@ -49,6 +51,11 @@ import { db } from "../shared/db.js";
 import { sql } from "drizzle-orm";
 
 async function probeDb(attempt = 1): Promise<void> {
+  if (!isDatabaseConfigured) {
+    logger.warn("DATABASE_URL is not configured — skipping database health probe. Database-dependent routes will fail until it is set.");
+    return;
+  }
+
   const MAX_ATTEMPTS = 5;
   const DELAY_MS = 3000;
   try {
@@ -80,6 +87,7 @@ initSocketIO(httpServer);
 
 httpServer.listen(PORT, "0.0.0.0", () => {
   logger.info({ port: PORT }, "Server listening");
+  startNotificationWorker();
   // Probe DB in the background after the port is open so the health check
   // can succeed even while we are still waiting for the database.
   probeDb().catch(() => {/* already logged inside probeDb */});

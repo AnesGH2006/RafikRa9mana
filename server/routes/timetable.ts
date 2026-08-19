@@ -17,6 +17,7 @@ import {
   timetableSlotsTable,
   studentsTable,
 } from "../../shared/db.js";
+import { generateTimetable, type TimetableRequestClass } from "../services/timetableGenerator.js";
 
 const router = Router();
 
@@ -182,6 +183,50 @@ router.post("/timetable/slots", async (req, res): Promise<void> => {
     notes: notes || null,
   }).returning();
   res.status(201).json(row);
+});
+
+// ── GENERATE ─────────────────────────────────────────────────────────────────
+
+router.post("/timetable/generate", async (req, res): Promise<void> => {
+  if (!auth(req, res)) return;
+  const { annee = "2025-2026", classes, roomIds = [], replace = false } = req.body as {
+    annee?: string;
+    classes?: TimetableRequestClass[];
+    roomIds?: string[];
+    replace?: boolean;
+  };
+
+  if (!Array.isArray(classes) || classes.length === 0) {
+    res.status(400).json({ error: "classes must be a non-empty array" });
+    return;
+  }
+  if (!classes.every((entry) => entry && typeof entry.classe === "string" && Array.isArray(entry.subjects))) {
+    res.status(400).json({ error: "Each class must include classe and subjects" });
+    return;
+  }
+
+  const generated = generateTimetable(classes, Array.isArray(roomIds) ? roomIds : []);
+  if (replace) {
+    await db.delete(timetableSlotsTable).where(and(
+      eq(timetableSlotsTable.userId, req.user!.id),
+      eq(timetableSlotsTable.annee, annee),
+    ));
+  }
+
+  const rows = generated.slots.length > 0
+    ? await db.insert(timetableSlotsTable).values(generated.slots.map((slot) => ({
+      userId: req.user!.id,
+      annee,
+      ...slot,
+      notes: "generated",
+    }))).returning()
+    : [];
+
+  res.status(generated.unscheduled.length > 0 ? 207 : 201).json({
+    annee,
+    generated: rows,
+    unscheduled: generated.unscheduled,
+  });
 });
 
 router.put("/timetable/slots/:id", async (req, res): Promise<void> => {

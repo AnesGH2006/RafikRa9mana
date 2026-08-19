@@ -1,13 +1,29 @@
 import crypto from "crypto";
 import { Router, type IRouter } from "express";
 import { logAudit } from "../lib/audit.js";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { db, gradesTable, absencesTable, studentsTable } from "../../shared/db.js";
+import { bemSessionsTable } from "../../shared/schema.js";
 import { UpsertGradesBulkBody, UpsertAbsenceBody } from "../../shared/schemas.js";
 import { getSubjectsForLevel, calcWeightedAvg } from "../../shared/subjects.js";
 import type { Niveau } from "../../shared/types.js";
+import { notifyParentOfAbsence } from "../services/absenceAlerts.js";
+import { enqueueAbsenceAlert } from "../services/notificationQueue.js";
 
 const router: IRouter = Router();
+
+function normalizeStudentName(name: string): string {
+  return name.toLocaleLowerCase("ar-DZ")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآا]/g, "ا")
+    .replace(/[ةه]/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/\s+/g, "")
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+type BemStudent = { name?: string; average?: number | null };
+type BemSessionData = { students?: BemStudent[] };
 
 // ── GET /api/grades?studentId=&annee=&trimestre= ──────────────────────────────
 router.get("/grades", async (req, res): Promise<void> => {
@@ -317,6 +333,18 @@ router.get("/results", async (req, res): Promise<void> => {
     and(eq(absencesTable.userId, userId), inArray(absencesTable.studentId, studentIds))
   );
 
+  const [latestBemSession] = await db.select({ data: bemSessionsTable.data })
+    .from(bemSessionsTable)
+    .where(eq(bemSessionsTable.userId, userId))
+    .orderBy(desc(bemSessionsTable.createdAt))
+    .limit(1);
+  const bemAverageByName = new Map<string, number>();
+  const bemStudents = (latestBemSession?.data as BemSessionData | undefined)?.students ?? [];
+  for (const bemStudent of bemStudents) {
+    if (!bemStudent.name || typeof bemStudent.average !== "number" || !Number.isFinite(bemStudent.average)) continue;
+    bemAverageByName.set(normalizeStudentName(bemStudent.name), bemStudent.average);
+  }
+
   // gradeMap: studentId → trimestre → subject → score
   // storedAvgMap: studentId → trimestre → pre-calculated Ministry average (from __avg__ sentinel)
   const gradeMap: Record<string, Record<string, Record<string, number>>> = {};
@@ -356,12 +384,14 @@ router.get("/results", async (req, res): Promise<void> => {
     const annualAvg = avgs.length > 0
       ? Math.round((avgs.reduce((a, b) => a + b, 0) / avgs.length) * 100) / 100
       : null;
-    const passed = annualAvg !== null ? annualAvg >= 10 : null;
+    const bemAvg = s.niveau === "4AM" ? (bemAverageByName.get(normalizeStudentName(s.nomPrenom)) ?? null) : null;
+    const finalAvg = s.niveau === "4AM" ? bemAvg : annualAvg;
+    const passed = finalAvg !== null ? finalAvg >= 10 : null;
     const abs = absMap[s.id] ?? { j: 0, u: 0 };
 
     return {
       student: s, scores,
-      t1Avg, t2Avg, t3Avg, annualAvg, passed,
+      t1Avg, t2Avg, t3Avg, annualAvg, bemAvg, finalAvg, finalPassed: passed, passed,
       rank: null as number | null,
       totalJustified: abs.j,
       totalUnjustified: abs.u,
@@ -377,8 +407,8 @@ router.get("/results", async (req, res): Promise<void> => {
   }
   for (const group of Object.values(byClass)) {
     const sorted = [...group]
-      .filter(r => r.annualAvg !== null)
-      .sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+      .filter(r => r.finalAvg !== null)
+      .sort((a, b) => (b.finalAvg ?? 0) - (a.finalAvg ?? 0));
     sorted.forEach((r, i) => { r.rank = i + 1; });
   }
 
@@ -507,6 +537,15 @@ router.post("/absences", async (req, res): Promise<void> => {
     id: crypto.randomBytes(8).toString("hex"),
     userId, studentId, annee, trimestre, justifiedHours, unjustifiedHours,
   }).returning();
+
+  if (justifiedHours > 0 || unjustifiedHours > 0) {
+    try {
+      const queued = await enqueueAbsenceAlert({ schoolUserId: userId, studentId, annee });
+      if (!queued) await notifyParentOfAbsence({ schoolUserId: userId, studentId, annee });
+    } catch (error) {
+      req.log?.error?.({ error, studentId }, "Absence parent alert failed");
+    }
+  }
 
   res.json(row);
 });

@@ -20,6 +20,10 @@ import ocrRouter from "./ocr.js";
 import membersRouter from "./members.js";
 import auditLogsRouter from "./audit-logs.js";
 import timetableRouter from "./timetable.js";
+import ocrReviewRouter from "./ocrReview.js";
+import smsBroadcastRouter from "./smsBroadcast.js";
+import qrScannerRouter from "./qrScanner.js";
+import paymentsRouter from "./payments.js";
 
 const router: IRouter = Router();
 
@@ -41,8 +45,12 @@ router.use(qrRouter);
 router.use(smsRouter);
 router.use(notificationsRouter);
 router.use(ocrRouter);
+router.use(ocrReviewRouter);
 router.use(membersRouter);
 router.use(auditLogsRouter);
 router.use(timetableRouter);
+router.use(smsBroadcastRouter);
+router.use(qrScannerRouter);
+router.use(paymentsRouter);
 
 export default router;

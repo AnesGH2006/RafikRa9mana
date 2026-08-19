@@ -13,6 +13,7 @@ import {
   CartesianGrid, Cell, RadialBarChart, RadialBar,
   LineChart, Line, Legend, PieChart, Pie,
 } from "recharts";
+import { getFinalAvg } from "@/lib/year-end-result";
 
 const BASE = import.meta.env.BASE_URL;
 const LEVELS: Niveau[] = ["1AM", "2AM", "3AM", "4AM"];
@@ -63,11 +64,11 @@ export default function YearEnd() {
       .catch(() => setLoading(false));
   }, [filters, annee]);
 
-  const withAvg   = results.filter(r => r.annualAvg !== null);
-  const passed    = withAvg.filter(r => (r.annualAvg ?? 0) >= 10).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
-  const mustarrak = withAvg.filter(r => (r.annualAvg ?? 0) >= 9 && (r.annualAvg ?? 0) < 10).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
-  const failed    = withAvg.filter(r => (r.annualAvg ?? 0) < 9).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
-  const all       = [...withAvg].sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+  const withAvg   = results.filter(r => getFinalAvg(r) !== null);
+  const passed    = withAvg.filter(r => (getFinalAvg(r) ?? 0) >= 10).sort((a, b) => (getFinalAvg(b) ?? 0) - (getFinalAvg(a) ?? 0));
+  const mustarrak = withAvg.filter(r => (getFinalAvg(r) ?? 0) >= 9 && (getFinalAvg(r) ?? 0) < 10).sort((a, b) => (getFinalAvg(b) ?? 0) - (getFinalAvg(a) ?? 0));
+  const failed    = withAvg.filter(r => (getFinalAvg(r) ?? 0) < 9).sort((a, b) => (getFinalAvg(b) ?? 0) - (getFinalAvg(a) ?? 0));
+  const all       = [...withAvg].sort((a, b) => (getFinalAvg(b) ?? 0) - (getFinalAvg(a) ?? 0));
 
   const displayed = tab === "passed" ? passed : tab === "mustarrak" ? mustarrak : tab === "failed" ? failed : all;
   const classes   = [...new Set(results.map(r => r.student.classe))].sort();
