@@ -58,8 +58,7 @@ export async function prepareImage(buffer: Buffer): Promise<{ data: string; mime
 
 // ── Groq Vision ─────────────────────────────────────────────────────────────────
 
-async function callGroqVision(imageB64: string, mimeType: string, prompt: string): Promise<string> {
-  const apiKey = process.env.GROQ_API_KEY;
+async function callGroqVision(imageB64: string, mimeType: string, prompt: string, apiKey: string | null): Promise<string> {
   if (!apiKey) throw new Error("GROQ_API_KEY not configured");
 
   const body = JSON.stringify({
@@ -117,9 +116,10 @@ async function extractWithVision(
   imageB64: string,
   mimeType: string,
   type: OcrType,
+  apiKey: string | null,
 ): Promise<{ rows: OcrGradeRow[] | OcrAbsenceRow[]; rawText: string }> {
   const prompt = type === "absences" ? ABSENCES_PROMPT : GRADES_PROMPT;
-  const content = await callGroqVision(imageB64, mimeType, prompt);
+  const content = await callGroqVision(imageB64, mimeType, prompt, apiKey);
   const match = content.match(/\[[\s\S]*\]/);
   if (!match) return { rows: [], rawText: content };
 
@@ -236,11 +236,11 @@ async function extractWithTesseract(
 
 // ── Public API ────────────────────────────────────────────────────────────────────
 
-export function resolveEngine(requested: OcrEngine): OcrEngine {
+export function resolveEngine(requested: OcrEngine, apiKey: string | null): OcrEngine {
   if (requested === "auto") {
-    return process.env.GROQ_API_KEY ? "vision" : "tesseract";
+    return apiKey ? "vision" : "tesseract";
   }
-  if (requested === "vision" && !process.env.GROQ_API_KEY) {
+  if (requested === "vision" && !apiKey) {
     return "tesseract";
   }
   return requested;
@@ -250,8 +250,9 @@ export async function processOcr(
   buffer: Buffer,
   type: OcrType,
   engine: OcrEngine = "auto",
+  apiKey: string | null = null,
 ): Promise<OcrResult> {
-  const resolved = resolveEngine(engine);
+  const resolved = resolveEngine(engine, apiKey);
   const { data, mimeType, tesseractBuffer } = await prepareImage(buffer);
 
   let rows: Array<OcrGradeRow | OcrAbsenceRow> = [];
@@ -260,7 +261,7 @@ export async function processOcr(
 
   if (resolved === "vision") {
     try {
-      const result = await extractWithVision(data, mimeType, type);
+      const result = await extractWithVision(data, mimeType, type, apiKey);
       rows = result.rows;
       rawText = result.rawText;
 

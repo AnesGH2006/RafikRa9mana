@@ -10,7 +10,6 @@ import { startNotificationWorker } from "./services/notificationQueue.js";
 // for truly required values that cannot be recovered from.
 const HARD_REQUIRED: Record<string, string> = {
   DATABASE_URL: "PostgreSQL connection string — required for sessions and data",
-  GROQ_API_KEY: "Groq API key — required for the AI assistant and OCR features",
 };
 
 const SOFT_REQUIRED: Record<string, string> = {

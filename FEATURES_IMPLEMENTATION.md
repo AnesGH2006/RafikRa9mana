@@ -299,8 +299,8 @@ npm install sharp tesseract.js qrcode twilio
 ### 2. Environment Variables
 
 ```env
-# Groq Vision API (for OCR)
-GROQ_API_KEY=your_groq_api_key
+# Groq Vision API: each active subscriber adds their personal key
+# from the Settings page; do not add GROQ_API_KEY to the server environment.
 
 # Twilio (for SMS)
 TWILIO_ACCOUNT_SID=your_twilio_sid
@@ -511,7 +511,7 @@ curl http://localhost:5000/api/qr/attendance-logs?hours=24
 ## 🐛 Troubleshooting
 
 ### OCR Not Working
-- Check GROQ_API_KEY environment variable
+- تأكد أن صاحب الاشتراك أضاف مفتاح Groq من صفحة الإعدادات
 - Verify image quality and format (JPEG, PNG, WebP)
 - Check Tesseract.js is installed
 

@@ -117,7 +117,8 @@ async function upsertUser(claims: Record<string, unknown>) {
 // GET /api/dev-login — instant test login (only when ALLOW_DEV_LOGIN=true)
 router.get("/dev-login", async (req: Request, res: Response) => {
   if (process.env.ALLOW_DEV_LOGIN !== "true") {
-    res.status(403).json({ error: "Dev login is disabled" });
+    // Old bookmarks to the development endpoint should use real authentication.
+    res.redirect(`/api/login?returnTo=${encodeURIComponent("/")}`);
     return;
   }
   const testUser = {

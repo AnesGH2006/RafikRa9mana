@@ -10,6 +10,7 @@ import multer from "multer";
 import { logger } from "../lib/logger.js";
 import { processOcr, type OcrEngine } from "../services/ocrService.js";
 import { db, ocrUploadsTable } from "../../shared/db.js";
+import { getUserGroqKey } from "../lib/groq-key.js";
 
 const router = Router();
 const upload = multer({
@@ -33,6 +34,10 @@ router.post(
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
+    if (req.memberContext || (req.user!.role !== "admin" && req.user!.subscriptionStatus !== "active")) {
+      res.status(403).json({ error: "ميزة OCR متاحة لصاحب الاشتراك فقط" });
+      return;
+    }
     if (!req.file) {
       res.status(400).json({ error: "لم يتم رفع أي صورة. أرفق الصورة في حقل 'image'." });
       return;
@@ -48,7 +53,7 @@ router.post(
     try {
       logger.info({ size: req.file.size, mime: req.file.mimetype, ocrType, engine }, "OCR: processing");
 
-      const result = await processOcr(req.file.buffer, ocrType, engine);
+      const result = await processOcr(req.file.buffer, ocrType, engine, await getUserGroqKey(userId));
 
       if (result.rows.length === 0) {
         res.status(422).json({

@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { School, User, Save } from "lucide-react";
+import { School, User, Save, KeyRound } from "lucide-react";
 import type { SchoolInfo } from "@shared/types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -28,6 +28,9 @@ export default function Settings() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [groqKey, setGroqKey] = useState("");
+  const [hasGroqKey, setHasGroqKey] = useState(false);
+  const [savingGroqKey, setSavingGroqKey] = useState(false);
   const [form, setForm] = useState({ nom: "", wilaya: "", commune: "", annee: "2025-2026", directeur: "", phone: "", supportPhone: "" });
 
   const fetchSchool = useCallback(async () => {
@@ -39,6 +42,13 @@ export default function Settings() {
   }, []);
 
   useEffect(() => { fetchSchool(); }, [fetchSchool]);
+
+  useEffect(() => {
+    if (user?.memberContext || (user?.role !== "admin" && user?.subscriptionStatus !== "active")) return;
+    fetch(`${BASE}api/assistant/settings`, { credentials: "include" })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setHasGroqKey(Boolean(data.hasGroqApiKey)); });
+  }, [user]);
 
   const handleSave = async () => {
     if (!form.nom || !form.wilaya || !form.commune || !form.annee) return;
@@ -63,6 +73,22 @@ export default function Settings() {
     { key: "supportPhone", label: "رقم واتساب للدعم التقني",     placeholder: "213XXXXXXXXX (بدون +)" },
   ];
 
+  const saveGroqKey = async () => {
+    setSavingGroqKey(true);
+    try {
+      const res = await fetch(`${BASE}api/assistant/settings`, {
+        method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groqApiKey: groqKey }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "تعذر حفظ المفتاح");
+      setHasGroqKey(Boolean(data.hasGroqApiKey));
+      setGroqKey("");
+      toast({ title: "تم حفظ مفتاح Groq بأمان" });
+    } catch (error) { toast({ title: error instanceof Error ? error.message : "تعذر حفظ المفتاح", variant: "destructive" }); }
+    finally { setSavingGroqKey(false); }
+  };
+
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
       className="p-6 space-y-6 max-w-2xl mx-auto">
@@ -70,6 +96,20 @@ export default function Settings() {
       <motion.h1 className="text-2xl font-bold" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
         {t("settings.title")}
       </motion.h1>
+
+      {!user?.memberContext && (user?.role === "admin" || user?.subscriptionStatus === "active") && (
+        <Card className="shadow-sm">
+          <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-base"><KeyRound className="w-5 h-5" /> مفتاح المساعد الذكي Groq</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">أدخل مفتاحك الشخصي من console.groq.com. يُحفظ مشفراً ولا يظهر لأي مستخدم آخر.</p>
+            <Label htmlFor="groq-api-key">مفتاح Groq {hasGroqKey ? "(محفوظ، أدخل مفتاحاً جديداً لتغييره)" : ""}</Label>
+            <Input id="groq-api-key" type="password" autoComplete="off" placeholder="gsk_..." value={groqKey} onChange={e => setGroqKey(e.target.value)} dir="ltr" />
+            <Button onClick={saveGroqKey} disabled={savingGroqKey || !groqKey.trim()} className="gap-2">
+              <KeyRound className="w-4 h-4" /> {savingGroqKey ? "جارٍ الحفظ..." : "حفظ مفتاح Groq"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* School info card */}
       <motion.div initial={{ opacity: 0, y: 20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ delay: 0.1 }}>

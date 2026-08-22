@@ -4,8 +4,10 @@ import OpenAI from "openai";
 import { db, studentsTable, gradesTable, absencesTable, schoolInfoTable } from "../../shared/db.js";
 import { AssistantChatBody, AssistantChatResponse } from "../../shared/schemas.js";
 import { runReActAgent } from "../lib/react-agent.js";
+import { getUserGroqKey } from "../lib/groq-key.js";
 
 const router: IRouter = Router();
+const canUseAssistant = (req: any) => !req.memberContext && (req.user?.role === "admin" || req.user?.subscriptionStatus === "active");
 
 // ── System prompt (keep short to save tokens) ─────────────────────────────────
 const SYSTEM_PROMPT = `أنت "المساعد الذكي" لتطبيق إدارة متوسطة جزائرية.
@@ -194,12 +196,14 @@ async function buildSchoolContext(userId: string): Promise<string> {
 // ── POST /api/assistant/chat ──────────────────────────────────────────────────
 router.post("/assistant/chat", async (req, res) => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!canUseAssistant(req)) { res.status(403).json({ error: "المساعد الذكي متاح لصاحب الاشتراك فقط" }); return; }
 
   const parsed = AssistantChatBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "طلب غير صالح" }); return; }
 
-  if (!process.env.GROQ_API_KEY) {
-    res.status(500).json({ error: "المساعد الذكي غير مُهيّأ — يرجى إضافة GROQ_API_KEY" });
+  const groqApiKey = await getUserGroqKey(req.user!.id);
+  if (!groqApiKey) {
+    res.status(428).json({ error: "أضف مفتاح Groq الخاص بك من صفحة الإعدادات أولاً" });
     return;
   }
 
@@ -207,7 +211,7 @@ router.post("/assistant/chat", async (req, res) => {
     const schoolContext = await buildSchoolContext(req.user!.id);
 
     const client = new OpenAI({
-      apiKey: process.env.GROQ_API_KEY,
+      apiKey: groqApiKey,
       baseURL: "https://api.groq.com/openai/v1",
     });
 
@@ -247,12 +251,14 @@ router.post("/assistant/chat", async (req, res) => {
 // ── POST /api/assistant/run — ReAct agent with SSE streaming ─────────────────
 router.post("/assistant/run", async (req, res) => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!canUseAssistant(req)) { res.status(403).json({ error: "المساعد الذكي متاح لصاحب الاشتراك فقط" }); return; }
 
   const parsed = AssistantChatBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "طلب غير صالح" }); return; }
 
-  if (!process.env.GROQ_API_KEY) {
-    res.status(500).json({ error: "المساعد الذكي غير مُهيّأ — يرجى إضافة GROQ_API_KEY" });
+  const groqApiKey = await getUserGroqKey(req.user!.id);
+  if (!groqApiKey) {
+    res.status(428).json({ error: "أضف مفتاح Groq الخاص بك من صفحة الإعدادات أولاً" });
     return;
   }
 
@@ -275,6 +281,7 @@ router.post("/assistant/run", async (req, res) => {
 
     await runReActAgent({
       userId: req.user!.id,
+      groqApiKey,
       schoolContext,
       messages: recentMessages,
       onStep: (step) => send("step", step),

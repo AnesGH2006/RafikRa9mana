@@ -40,7 +40,7 @@ The `DATABASE_URL` is managed automatically by Replit — no manual setup needed
 |-----|----------|-------|
 | `DATABASE_URL` | ✅ Runtime-managed | Set automatically by Replit |
 | `SESSION_SECRET` | ✅ | Long random string for session cookies |
-| `GROQ_API_KEY` | ✅ | مفتاح Groq للمساعد الذكي وميزات OCR |
+| `GROQ_API_KEY` | — | لا حاجة له؛ يضيف كل مشترك مفتاحه الشخصي من الإعدادات |
 | `SMTP_HOST/USER/PASS/PORT` | Optional | Email notifications |
 | `TWILIO_ACCOUNT_SID` | Optional | SMS/WhatsApp via Twilio |
 | `SMS_API_KEY` | Optional | Alternate SMS gateway |
@@ -72,14 +72,20 @@ The Electron agent in `agent/` is Windows-only and connects to the deployed SaaS
 3. من **Environment Variables** أضف المتغيرات التالية:
 	- `DATABASE_URL`: رابط قاعدة بيانات PostgreSQL.
 	- `SESSION_SECRET`: نص عشوائي طويل لحماية جلسات الدخول.
-	- `GROQ_API_KEY`: مفتاح Groq من [console.groq.com](https://console.groq.com).
 4. اضغط **Create Web Service**. سيستمع الخادم تلقائيًا إلى المنفذ الذي يرسله Render عبر `PORT`.
 
 ### الحصول على مفتاح Groq
 
 1. افتح [console.groq.com](https://console.groq.com) وسجّل الدخول أو أنشئ حسابًا.
 2. افتح صفحة **API Keys** واضغط **Create API Key**.
-3. انسخ المفتاح مرة واحدة، ثم أضفه في Render باسم `GROQ_API_KEY`.
-4. لا تضع المفتاح في Git أو داخل ملفات الواجهة؛ الخادم يقرأه من متغير البيئة فقط.
+3. انسخ المفتاح مرة واحدة، ثم سجّل الدخول إلى التطبيق وافتح **الإعدادات**.
+4. ألصق المفتاح في قسم **مفتاح المساعد الذكي Groq** واحفظه. يُحفظ مشفراً لكل مشترك.
+5. لا تضع المفتاح في Git أو داخل ملفات الواجهة.
 
-إذا لم تضف `GROQ_API_KEY` أو `DATABASE_URL` فسيرفض الخادم بدء التشغيل ويظهر المتغير الناقص في سجل Render.
+إذا لم يضف المشترك مفتاحه، سيطلب منه المساعد إضافته من الإعدادات. أما `DATABASE_URL` و`SESSION_SECRET` فهما مطلوبان في Render لتشغيل التطبيق.
+
+### تسجيل الدخول على Render
+
+استخدم زر **تسجيل الدخول** في التطبيق أو افتح `/api/login`. لا تستخدم `/api/dev-login`؛ هذا رابط اختبار محلي ومغلق في النشر.
+في Render يجب إعداد قيم المصادقة الخاصة بـ Replit (`REPL_ID` وبيانات OIDC المطلوبة) أو ضبط `APP_BASE_URL`، وإضافة رابط callback التالي إلى إعدادات موفر تسجيل الدخول:
+`https://YOUR-RENDER-DOMAIN.onrender.com/api/callback`

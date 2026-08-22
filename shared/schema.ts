@@ -23,6 +23,7 @@ export const usersTable = pgTable("users", {
   role: roleEnum("role").notNull().default("user"),
   subscriptionStatus: subscriptionStatusEnum("subscription_status").notNull().default("pending"),
   subscriptionExpiresAt: timestamp("subscription_expires_at", { withTimezone: true }),
+  groqApiKey: varchar("groq_api_key", { length: 500 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

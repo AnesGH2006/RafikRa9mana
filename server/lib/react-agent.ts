@@ -92,17 +92,14 @@ const SYSTEM_PROMPT = `أنت مساعد تنفيذي (Executive Assistant) مح
 
 export async function runReActAgent(params: {
   userId: string;
+  groqApiKey: string;
   schoolContext: string;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
   onStep: StepCallback;
 }): Promise<string> {
 
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY غير مُهيّأ");
-  }
-
   const client = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
+    apiKey: params.groqApiKey,
     baseURL: "https://api.groq.com/openai/v1",
   });
 
