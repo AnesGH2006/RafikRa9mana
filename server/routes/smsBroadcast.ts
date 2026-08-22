@@ -212,7 +212,7 @@ router.post("/sms/broadcast", async (req, res): Promise<void> => {
         status: smsResult.sent > 0 && smsResult.results.find(r => r.phone === msg.phone)?.success
           ? "sent"
           : "failed",
-        channel: smsResult.channel === "none" ? null : "gateway",
+        channel: smsResult.channel,
         gatewayRef: smsResult.results.find(r => r.phone === msg.phone)?.sid,
         errorMsg: smsResult.results.find(r => r.phone === msg.phone)?.error,
       }),

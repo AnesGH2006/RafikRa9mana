@@ -40,7 +40,7 @@ The `DATABASE_URL` is managed automatically by Replit — no manual setup needed
 |-----|----------|-------|
 | `DATABASE_URL` | ✅ Runtime-managed | Set automatically by Replit |
 | `SESSION_SECRET` | ✅ | Long random string for session cookies |
-| `GROQ_API_KEY` | Optional | AI assistant features |
+| `GROQ_API_KEY` | ✅ | مفتاح Groq للمساعد الذكي وميزات OCR |
 | `SMTP_HOST/USER/PASS/PORT` | Optional | Email notifications |
 | `TWILIO_ACCOUNT_SID` | Optional | SMS/WhatsApp via Twilio |
 | `SMS_API_KEY` | Optional | Alternate SMS gateway |
@@ -62,3 +62,24 @@ The Electron agent in `agent/` is Windows-only and connects to the deployed SaaS
 ## User preferences
 
 - Keep the Arabic RTL layout and direction throughout the UI.
+
+## النشر على Render
+
+1. أنشئ خدمة **Web Service** جديدة واربطها بمستودع المشروع.
+2. اختر **Node**، ثم ضع الأوامر التالية:
+	- **Build Command:** `npm run build`
+	- **Start Command:** `npm start`
+3. من **Environment Variables** أضف المتغيرات التالية:
+	- `DATABASE_URL`: رابط قاعدة بيانات PostgreSQL.
+	- `SESSION_SECRET`: نص عشوائي طويل لحماية جلسات الدخول.
+	- `GROQ_API_KEY`: مفتاح Groq من [console.groq.com](https://console.groq.com).
+4. اضغط **Create Web Service**. سيستمع الخادم تلقائيًا إلى المنفذ الذي يرسله Render عبر `PORT`.
+
+### الحصول على مفتاح Groq
+
+1. افتح [console.groq.com](https://console.groq.com) وسجّل الدخول أو أنشئ حسابًا.
+2. افتح صفحة **API Keys** واضغط **Create API Key**.
+3. انسخ المفتاح مرة واحدة، ثم أضفه في Render باسم `GROQ_API_KEY`.
+4. لا تضع المفتاح في Git أو داخل ملفات الواجهة؛ الخادم يقرأه من متغير البيئة فقط.
+
+إذا لم تضف `GROQ_API_KEY` أو `DATABASE_URL` فسيرفض الخادم بدء التشغيل ويظهر المتغير الناقص في سجل Render.

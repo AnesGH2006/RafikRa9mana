@@ -10,7 +10,7 @@
     "build:client": "vite build --config vite.config.ts",
     "build:server": "esbuild server/index.ts --bundle --platform=node --outfile=dist/server/index.cjs --format=cjs --outbase=. --packages=external --banner:js=\"const importMetaUrl=require('url').pathToFileURL(__filename).href;\" --define:import.meta.url=importMetaUrl",
     "build": "npm run build:client && npm run build:server",
-    "start": "node dist/index.js",
+    "start": "node dist/server/index.cjs",
     "typecheck": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"

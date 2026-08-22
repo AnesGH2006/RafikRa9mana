@@ -310,18 +310,10 @@ SMS_SENDER_ID=your_twilio_phone
 # Session Secret (for QR signatures)
 SESSION_SECRET=your_session_secret
 
-# Web Push (Parent Portal)
-VAPID_SUBJECT=mailto:admin@example.com
-VAPID_PUBLIC_KEY=your_vapid_public_key
-VAPID_PRIVATE_KEY=your_vapid_private_key
-VITE_VAPID_PUBLIC_KEY=your_vapid_public_key
-
 # Optional: School SMS Gateway
 SMS_GATEWAY_URL=https://your-sms-gateway.com/send
 SMS_GATEWAY_API_KEY=your_gateway_key
 ```
-
-Parents can enable push notifications from `/my-child`. Generate a key pair once with `npx web-push generate-vapid-keys`, set the VAPID variables above, and rebuild the client. Authenticated school administrators can send a push to a registered parent with `POST /api/notifications/push` using `{ memberUserId, title, body, url?, type? }`.
 
 ### 3. Database Migration
 

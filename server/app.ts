@@ -11,7 +11,11 @@ import { logger } from "./lib/logger.js";
 
 const app: Express = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const clientDistDir = path.resolve(__dirname, "../dist/public");
+const clientDistDir = [
+  path.resolve(__dirname, "../public"),
+  path.resolve(__dirname, "../dist/public"),
+].find(candidate => existsSync(path.join(candidate, "index.html")))
+  ?? path.resolve(__dirname, "../dist/public");
 
 app.use(
   pinoHttp({

@@ -83,7 +83,9 @@ export function QrScannerDialog() {
       setLoading(true);
       
       // Initialize html5-qrcode scanner
-      qrScannerRef.current = new Html5QrcodePlugin.Html5Qrcode("qr-video");
+      qrScannerRef.current = new Html5QrcodePlugin.Html5Qrcode("qr-video", {
+        facingMode: "environment",
+      });
 
       await qrScannerRef.current.start(
         { facingMode: "environment" },
