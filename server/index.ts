@@ -12,10 +12,6 @@ const HARD_REQUIRED: Record<string, string> = {
   DATABASE_URL: "PostgreSQL connection string — required for sessions and data",
 };
 
-const SOFT_REQUIRED: Record<string, string> = {
-  REPL_ID: "Replit OIDC client ID — needed for the login flow (login will be unavailable without it)",
-};
-
 let startupOk = true;
 for (const [key, description] of Object.entries(HARD_REQUIRED)) {
   if (!process.env[key]) {
@@ -24,10 +20,11 @@ for (const [key, description] of Object.entries(HARD_REQUIRED)) {
   }
 }
 
-for (const [key, description] of Object.entries(SOFT_REQUIRED)) {
-  if (!process.env[key]) {
-    logger.warn({ envVar: key }, `Missing environment variable: ${key} (${description})`);
-  }
+if (!process.env.OIDC_CLIENT_ID && !process.env.REPL_ID) {
+  logger.warn(
+    { envVar: "OIDC_CLIENT_ID" },
+    "Missing OIDC client ID (set OIDC_CLIENT_ID, or REPL_ID for Replit deployments). Login will be unavailable.",
+  );
 }
 
 if (!startupOk) {

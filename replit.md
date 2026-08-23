@@ -74,6 +74,18 @@ The Electron agent in `agent/` is Windows-only and connects to the deployed SaaS
 	- `SESSION_SECRET`: نص عشوائي طويل لحماية جلسات الدخول.
 4. اضغط **Create Web Service**. سيستمع الخادم تلقائيًا إلى المنفذ الذي يرسله Render عبر `PORT`.
 
+### متغيرات المصادقة في Render
+
+لأن Render لا يحقن إعدادات Replit تلقائيًا، أضف متغيرات المصادقة التالية في إعدادات الخدمة:
+
+- `OIDC_ISSUER_URL`: عنوان موفر OpenID Connect (لـ Replit: `https://replit.com/oidc`).
+- `OIDC_CLIENT_ID`: معرّف عميل OpenID Connect.
+- `OIDC_CLIENT_SECRET`: السر إذا كان موفر الهوية يتطلبه.
+- `APP_BASE_URL`: عنوان الخدمة العام، مثل `https://rafikra9mana.onrender.com`.
+
+يمكن استخدام `REPL_ID` بدل `OIDC_CLIENT_ID` عند ربط الخدمة بتطبيق Replit. يجب أن يطابق عنوان callback المسجل لدى موفر الهوية:
+`https://YOUR-RENDER-DOMAIN.onrender.com/api/callback`
+
 ### الحصول على مفتاح Groq
 
 1. افتح [console.groq.com](https://console.groq.com) وسجّل الدخول أو أنشئ حسابًا.
@@ -87,5 +99,5 @@ The Electron agent in `agent/` is Windows-only and connects to the deployed SaaS
 ### تسجيل الدخول على Render
 
 استخدم زر **تسجيل الدخول** في التطبيق أو افتح `/api/login`. لا تستخدم `/api/dev-login`؛ هذا رابط اختبار محلي ومغلق في النشر.
-في Render يجب إعداد قيم المصادقة الخاصة بـ Replit (`REPL_ID` وبيانات OIDC المطلوبة) أو ضبط `APP_BASE_URL`، وإضافة رابط callback التالي إلى إعدادات موفر تسجيل الدخول:
+في Render يجب إعداد قيم المصادقة الخاصة بموفر OpenID Connect (`OIDC_CLIENT_ID` و`OIDC_ISSUER_URL` والسر إن لزم) وضبط `APP_BASE_URL`، ثم إضافة رابط callback التالي إلى إعدادات موفر تسجيل الدخول:
 `https://YOUR-RENDER-DOMAIN.onrender.com/api/callback`

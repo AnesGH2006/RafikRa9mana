@@ -17,6 +17,7 @@ import {
   SESSION_COOKIE,
   SESSION_TTL,
   ISSUER_URL,
+  OIDC_CLIENT_ID,
   type SessionData,
 } from "../lib/auth.js";
 
@@ -263,7 +264,8 @@ router.get("/logout", async (req: Request, res: Response) => {
   let endSessionUrl: URL;
   try {
     const config = await getOidcConfig();
-    endSessionUrl = oidc.buildEndSessionUrl(config, { client_id: process.env.REPL_ID!, post_logout_redirect_uri: origin });
+    if (!OIDC_CLIENT_ID) throw new Error("OIDC client ID is not configured");
+    endSessionUrl = oidc.buildEndSessionUrl(config, { client_id: OIDC_CLIENT_ID, post_logout_redirect_uri: origin });
   } catch (err) {
     req.log.error({ err }, "OIDC end-session URL build failed — redirecting home after local session clear");
     res.redirect("/");
