@@ -7,7 +7,7 @@ Algerian school management SaaS for middle schools. Full-stack Arabic-language w
 - **Frontend**: React 19 + Vite 7 + Tailwind CSS 4 + Wouter (routing) + Radix UI + Framer Motion
 - **Backend**: Express 5 + TypeScript + Socket.IO
 - **Database**: PostgreSQL via Drizzle ORM
-- **Auth**: Replit OpenID Connect (PKCE)
+- **Auth**: Google OpenID Connect (PKCE)
 - **Desktop agent**: Electron (Windows-only, in `agent/`)
 
 ## Running the app
@@ -32,14 +32,17 @@ Browse the database visually:
 pnpm run db:studio
 ```
 
-The `DATABASE_URL` is managed automatically by Replit — no manual setup needed.
+Set `DATABASE_URL` to the PostgreSQL connection string for the environment.
 
 ## Environment variables / secrets
 
 | Key | Required | Notes |
 |-----|----------|-------|
-| `DATABASE_URL` | ✅ Runtime-managed | Set automatically by Replit |
+| `DATABASE_URL` | ✅ | PostgreSQL connection string |
 | `SESSION_SECRET` | ✅ | Long random string for session cookies |
+| `GOOGLE_CLIENT_ID` | ✅ | Google OAuth web client ID |
+| `GOOGLE_CLIENT_SECRET` | ✅ | Google OAuth web client secret |
+| `APP_BASE_URL` | Production | Public application URL |
 | `GROQ_API_KEY` | — | لا حاجة له؛ يضيف كل مشترك مفتاحه الشخصي من الإعدادات |
 | `SMTP_HOST/USER/PASS/PORT` | Optional | Email notifications |
 | `TWILIO_ACCOUNT_SID` | Optional | SMS/WhatsApp via Twilio |
@@ -76,14 +79,14 @@ The Electron agent in `agent/` is Windows-only and connects to the deployed SaaS
 
 ### متغيرات المصادقة في Render
 
-لأن Render لا يحقن إعدادات Replit تلقائيًا، أضف متغيرات المصادقة التالية في إعدادات الخدمة:
+أضف متغيرات Google OAuth التالية في إعدادات الخدمة:
 
-- `OIDC_ISSUER_URL`: عنوان موفر OpenID Connect (لـ Replit: `https://replit.com/oidc`).
-- `OIDC_CLIENT_ID`: معرّف عميل OpenID Connect.
-- `OIDC_CLIENT_SECRET`: السر إذا كان موفر الهوية يتطلبه.
+- `GOOGLE_CLIENT_ID`: معرّف عميل Google OAuth.
+- `GOOGLE_CLIENT_SECRET`: سر عميل Google OAuth.
+- `OIDC_ISSUER_URL`: اختياري، والإعداد الافتراضي هو `https://accounts.google.com`.
 - `APP_BASE_URL`: عنوان الخدمة العام، مثل `https://rafikra9mana.onrender.com`.
 
-يمكن استخدام `REPL_ID` بدل `OIDC_CLIENT_ID` عند ربط الخدمة بتطبيق Replit. يجب أن يطابق عنوان callback المسجل لدى موفر الهوية:
+يجب أن يطابق عنوان callback المسجل في Google Cloud Console:
 `https://YOUR-RENDER-DOMAIN.onrender.com/api/callback`
 
 ### الحصول على مفتاح Groq
@@ -99,5 +102,5 @@ The Electron agent in `agent/` is Windows-only and connects to the deployed SaaS
 ### تسجيل الدخول على Render
 
 استخدم زر **تسجيل الدخول** في التطبيق أو افتح `/api/login`. لا تستخدم `/api/dev-login`؛ هذا رابط اختبار محلي ومغلق في النشر.
-في Render يجب إعداد قيم المصادقة الخاصة بموفر OpenID Connect (`OIDC_CLIENT_ID` و`OIDC_ISSUER_URL` والسر إن لزم) وضبط `APP_BASE_URL`، ثم إضافة رابط callback التالي إلى إعدادات موفر تسجيل الدخول:
+في Render يجب إعداد `GOOGLE_CLIENT_ID` و`GOOGLE_CLIENT_SECRET` وضبط `APP_BASE_URL`، ثم إضافة رابط callback التالي إلى إعدادات Google OAuth:
 `https://YOUR-RENDER-DOMAIN.onrender.com/api/callback`

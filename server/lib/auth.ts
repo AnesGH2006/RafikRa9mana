@@ -5,9 +5,9 @@ import { db, sessionsTable } from "../../shared/db.js";
 import { eq } from "drizzle-orm";
 import type { AuthUser } from "../../shared/types.js";
 
-export const ISSUER_URL = process.env.OIDC_ISSUER_URL ?? process.env.ISSUER_URL ?? "https://replit.com/oidc";
-export const OIDC_CLIENT_ID = process.env.OIDC_CLIENT_ID ?? process.env.REPL_ID;
-const OIDC_CLIENT_SECRET = process.env.OIDC_CLIENT_SECRET;
+export const ISSUER_URL = process.env.OIDC_ISSUER_URL ?? process.env.ISSUER_URL ?? "https://accounts.google.com";
+export const OIDC_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? process.env.OIDC_CLIENT_ID;
+const OIDC_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? process.env.OIDC_CLIENT_SECRET;
 export const SESSION_COOKIE = "sid";
 export const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
 
@@ -23,7 +23,7 @@ let oidcConfig: client.Configuration | null = null;
 export async function getOidcConfig(): Promise<client.Configuration> {
   if (!oidcConfig) {
     if (!OIDC_CLIENT_ID) {
-      throw new Error("OIDC client ID is not configured. Set OIDC_CLIENT_ID (or REPL_ID for Replit deployments).");
+      throw new Error("Google OAuth client ID is not configured. Set GOOGLE_CLIENT_ID.");
     }
     oidcConfig = await client.discovery(
       new URL(ISSUER_URL),

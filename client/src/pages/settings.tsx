@@ -179,7 +179,7 @@ export default function Settings() {
               </div>
             )}
             <p className="text-xs text-muted-foreground mt-3">
-              تسجيل الدخول عبر Replit Auth. لتغيير البيانات الشخصية، قم بتعديل ملفك الشخصي على Replit.
+              تسجيل الدخول عبر Google. لتغيير البيانات الشخصية، قم بتعديل ملفك الشخصي على Google.
             </p>
           </CardContent>
         </Card>

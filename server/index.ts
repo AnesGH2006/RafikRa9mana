@@ -20,10 +20,10 @@ for (const [key, description] of Object.entries(HARD_REQUIRED)) {
   }
 }
 
-if (!process.env.OIDC_CLIENT_ID && !process.env.REPL_ID) {
+if (!process.env.GOOGLE_CLIENT_ID && !process.env.OIDC_CLIENT_ID) {
   logger.warn(
-    { envVar: "OIDC_CLIENT_ID" },
-    "Missing OIDC client ID (set OIDC_CLIENT_ID, or REPL_ID for Replit deployments). Login will be unavailable.",
+    { envVar: "GOOGLE_CLIENT_ID" },
+    "Missing Google OAuth client ID (set GOOGLE_CLIENT_ID). Login will be unavailable.",
   );
 }
 

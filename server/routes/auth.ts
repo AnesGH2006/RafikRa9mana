@@ -30,27 +30,11 @@ function getOrigin(req: Request): string {
   if (isLocalhost && process.env.NODE_ENV !== "production") {
     return `http://${requestHost}`;
   }
-  // Explicit override for non-Replit deployments (e.g. custom domain)
+  // Explicit override for deployments using a custom domain.
   if (process.env.APP_BASE_URL) {
     return process.env.APP_BASE_URL.replace(/\/$/, "");
   }
-  // REPLIT_DOMAINS is a comma-separated allowlist injected by the platform in BOTH
-  // development (*.replit.dev) and production (*.replit.app / custom domains) — unlike
-  // REPLIT_DEV_DOMAIN, which is dev-only and left the OIDC redirect_uri broken in prod
-  // (falling through to proxy headers that reflect the internal artifact host, not the
-  // public domain, and got rejected by Replit's OIDC server as invalid_redirect_uri).
-  const replitDomains = process.env.REPLIT_DOMAINS?.split(",").map(d => d.trim()).filter(Boolean);
-  if (replitDomains?.length) {
-    const forwardedHost = (req.headers["x-forwarded-host"] as string | undefined) || req.headers.host;
-    const hostName = forwardedHost?.split(":")[0];
-    // If the request's Host matches one of our known domains, echo it back (handles
-    // multiple production domains); otherwise fall back to the first known domain.
-    if (hostName && replitDomains.includes(hostName)) {
-      return `https://${forwardedHost}`;
-    }
-    return `https://${replitDomains[0]}`;
-  }
-  // Last resort: trust forwarded headers (only safe behind a controlled proxy)
+  // Last resort: use the public proxy host when APP_BASE_URL is not configured.
   const proto = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
   return `${proto}://${host}`;
@@ -83,8 +67,8 @@ async function upsertUser(claims: Record<string, unknown>) {
   const id = claims.sub as string;
   const identityFields = {
     email,
-    firstName: (claims.first_name as string) || null,
-    lastName: (claims.last_name as string) || null,
+    firstName: (claims.first_name || claims.given_name) as string || null,
+    lastName: (claims.last_name || claims.family_name) as string || null,
     profileImageUrl: (claims.profile_image_url || claims.picture) as string | null,
   };
 
@@ -168,7 +152,7 @@ router.get("/login", async (req: Request, res: Response) => {
   try {
     config = await getOidcConfig();
   } catch (err) {
-    req.log.error({ err }, "OIDC configuration failed — check REPL_ID and network access to the OIDC issuer");
+    req.log.error({ err }, "Google OAuth configuration failed — check GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and issuer access");
     res.redirect("/?auth_error=config_error");
     return;
   }

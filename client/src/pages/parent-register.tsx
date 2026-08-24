@@ -4,7 +4,7 @@
  * Flow:
  *  1. Parent visits /parent-register
  *  2. They enter the school join code + their student's national ID
- *  3. If not logged in → Replit OIDC login is triggered (return URL preserved)
+ *  3. If not logged in → Google login is triggered (return URL preserved)
  *  4. After login → form is submitted and school_members record is created
  */
 import { useState, useEffect } from "react";
@@ -71,7 +71,7 @@ export default function ParentRegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) {
-      // Save form state in sessionStorage and redirect to OIDC login
+      // Save form state in sessionStorage and redirect to Google login
       sessionStorage.setItem("parent_register_form", JSON.stringify({ joinCode, nationalId, parentName }));
       login();
       return;
@@ -102,7 +102,7 @@ export default function ParentRegisterPage() {
     }
   }
 
-  // Restore form state if returning from OIDC login
+  // Restore form state if returning from Google login
   useEffect(() => {
     const saved = sessionStorage.getItem("parent_register_form");
     if (saved && user) {

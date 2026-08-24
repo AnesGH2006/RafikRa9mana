@@ -970,7 +970,7 @@ function LoginScreen() {
             </Button>
           </motion.div>
           <motion.p className="text-xs text-muted-foreground mt-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}>
-            تسجيل الدخول عبر حساب Replit • آمن ومشفر
+            تسجيل الدخول عبر حساب Google • آمن ومشفر
           </motion.p>
         </motion.div>
       </motion.div>
