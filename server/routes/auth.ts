@@ -162,7 +162,15 @@ router.get("/login", async (req: Request, res: Response) => {
   const nonce = oidc.randomNonce();
   const codeVerifier = oidc.randomPKCECodeVerifier();
   const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
-  const redirectTo = oidc.buildAuthorizationUrl(config, { redirect_uri: callbackUrl, scope: "openid email profile offline_access", code_challenge: codeChallenge, code_challenge_method: "S256", prompt: "login consent", state, nonce });
+  const redirectTo = oidc.buildAuthorizationUrl(config, { 
+  redirect_uri: callbackUrl, 
+  scope: "openid email profile", 
+  code_challenge: codeChallenge, 
+  code_challenge_method: "S256", 
+  prompt: "consent", 
+  state, 
+  nonce 
+});;
   setOidcCookie(res, "code_verifier", codeVerifier);
   setOidcCookie(res, "nonce", nonce);
   setOidcCookie(res, "state", state);
