@@ -107,6 +107,7 @@ export default function TimetablePage() {
   const [rooms,    setRooms]    = useState<Room[]>([]);
   const [slots,    setSlots]    = useState<Slot[]>([]);
   const [classes,  setClasses]  = useState<string[]>([]);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>(CEM_SUBJECTS);
   const [conflictIds, setConflictIds] = useState<Set<string>>(new Set());
 
   // Filters
@@ -154,7 +155,15 @@ export default function TimetablePage() {
     setLoadingSlots(true);
     try {
       const res = await fetch(`${BASE}api/timetable/slots?annee=${encodeURIComponent(annee)}&classe=${encodeURIComponent(activeClasse)}`, { credentials: "include" });
-      if (res.ok) setSlots(await res.json());
+      if (res.ok) {
+        const loadedSlots: Slot[] = await res.json();
+        setSlots(loadedSlots);
+        setAvailableSubjects(current => [...new Set([
+          ...CEM_SUBJECTS,
+          ...current,
+          ...loadedSlots.map(slot => slot.subject).filter(Boolean),
+        ])]);
+      }
       // Fetch conflicts
       const cr = await fetch(`${BASE}api/timetable/conflicts?annee=${encodeURIComponent(annee)}`, { credentials: "include" });
       if (cr.ok) {
@@ -430,6 +439,7 @@ export default function TimetablePage() {
             annee={annee}
             teachers={teachers}
             rooms={rooms}
+            subjects={availableSubjects}
             onClose={() => setSlotModal(null)}
             onSave={async (data) => {
               const method = slotModal.slot ? "PUT" : "POST";
@@ -818,10 +828,11 @@ function PrintPanel({ classes, annee, teachers, rooms, slots, activeClasse, onCl
 }
 
 // ── Slot Modal ────────────────────────────────────────────────────────────────
-function SlotModal({ day, period, slot, classe, annee, teachers, rooms, onClose, onSave }: {
+function SlotModal({ day, period, slot, classe, annee, teachers, rooms, subjects, onClose, onSave }: {
   day: number; period: number; slot?: Slot;
   classe: string; annee: string;
   teachers: Teacher[]; rooms: Room[];
+  subjects: string[];
   onClose: () => void;
   onSave: (data: { subject: string; teacherId?: string; roomId?: string; notes?: string }) => void;
 }) {
@@ -861,7 +872,7 @@ function SlotModal({ day, period, slot, classe, annee, teachers, rooms, onClose,
             <select value={subject} onChange={e => setSubject(e.target.value)}
               className="w-full text-sm px-3 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-cyan-500/30">
               <option value="">— اختر أو اكتب —</option>
-              {CEM_SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+              {subjects.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             {!CEM_SUBJECTS.includes(subject) && (
               <input value={subject} onChange={e => setSubject(e.target.value)}

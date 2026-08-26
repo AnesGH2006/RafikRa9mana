@@ -323,8 +323,9 @@ router.get("/timetable/conflicts", async (req, res): Promise<void> => {
 router.get("/timetable/classes", async (req, res): Promise<void> => {
   if (!auth(req, res)) return;
   const { annee = "2025-2026" } = req.query as Record<string, string>;
-  // Fetch distinct classes from students table for this user/year
-  const rows = await db
+  // A timetable can be prepared before students are imported, so include
+  // classes from both the student register and existing timetable slots.
+  const studentRows = await db
     .selectDistinct({ classe: studentsTable.classe })
     .from(studentsTable)
     .where(and(
@@ -332,7 +333,18 @@ router.get("/timetable/classes", async (req, res): Promise<void> => {
       eq(studentsTable.annee, annee),
     ))
     .orderBy(studentsTable.classe);
-  res.json(rows.map(r => r.classe));
+  const slotRows = await db
+    .selectDistinct({ classe: timetableSlotsTable.classe })
+    .from(timetableSlotsTable)
+    .where(and(
+      eq(timetableSlotsTable.userId, req.user!.id),
+      eq(timetableSlotsTable.annee, annee),
+    ))
+    .orderBy(timetableSlotsTable.classe);
+  const classes = [...new Set([...studentRows, ...slotRows]
+    .map(row => row.classe?.trim())
+    .filter((classe): classe is string => Boolean(classe)))].sort();
+  res.json(classes);
 });
 
 export default router;
