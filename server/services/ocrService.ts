@@ -89,7 +89,7 @@ async function callGroqVision(imageB64: string, mimeType: string, prompt: string
   return json.choices?.[0]?.message?.content ?? "";
 }
 
-const GRADES_PROMPT = `هذه صورة كشف درجات مدرسي جزائري.
+const GRADES_PROMPT = `هذه صورة كشف درجات مدرسي جزائري، وقد تكون مطبوعة أو مكتوبة بخط اليد، بالعربية أو الفرنسية، وبأي اتجاه للأعمدة.
 استخرج جدول التلاميذ والدرجات بدقة تامة.
 أعد مصفوفة JSON فقط بالشكل التالي — لا تضف أي نص قبلها أو بعدها:
 [{"studentName": "لقب الاسم", "grade": 14.5}, ...]
@@ -97,10 +97,13 @@ const GRADES_PROMPT = `هذه صورة كشف درجات مدرسي جزائري
 قواعد:
 - الدرجات من 0 إلى 20، أرقام عشرية مسموحة.
 - استخرج أسماء التلاميذ كاملة كما تظهر في الجدول (عربي).
+- اقرأ الصفوف حتى لو كانت الكتابة اليدوية أو الصورة مائلة أو الأعمدة غير منتظمة.
+- ميّز رقم التسلسل عن الدرجة، واربط الدرجة بالاسم في الصف نفسه لا بمجرد قربها البصري.
+- إذا كانت الخانة غير مقروءة، لا تخمّنها وأعد الصف بدونها.
 - تجاهل أرقام التسلسل والعناوين والخانات الفارغة.
 - لا تخترع بيانات، استخرج ما هو موجود فقط.`;
 
-const ABSENCES_PROMPT = `هذه صورة كشف غياب مدرسي جزائري.
+const ABSENCES_PROMPT = `هذه صورة كشف غياب مدرسي جزائري، وقد تكون مطبوعة أو مكتوبة بخط اليد، بالعربية أو الفرنسية، وبأي ترتيب للأعمدة.
 استخرج جدول التلاميذ وساعات الغياب بدقة تامة.
 أعد مصفوفة JSON فقط بالشكل التالي — لا تضف أي نص قبلها أو بعدها:
 [{"studentName": "لقب الاسم", "justifiedHours": 2, "unjustifiedHours": 5}, ...]
@@ -109,6 +112,9 @@ const ABSENCES_PROMPT = `هذه صورة كشف غياب مدرسي جزائري
 - ساعات الغياب أرقام صحيحة من 0 إلى 500.
 - إذا وجدت عمود واحد للغياب فقط (بدون تمييز)، ضع القيمة في "unjustifiedHours" و 0 في "justifiedHours".
 - استخرج أسماء التلاميذ كاملة كما تظهر في الجدول (عربي).
+- اقرأ الجدول حتى لو كانت الكتابة اليدوية أو الصورة مائلة أو الأعمدة غير منتظمة.
+- اربط كل رقم بالاسم في الصف نفسه، ولا تعتبر رقم التسلسل ساعة غياب.
+- إذا كانت خانة غير مقروءة، لا تخمّنها واستخدم 0 فقط عندما يكون العمود غير موجود أصلاً.
 - تجاهل أرقام التسلسل والعناوين والخانات الفارغة.
 - لا تخترع بيانات، استخرج ما هو موجود فقط.`;
 
@@ -129,15 +135,15 @@ async function extractWithVision(
       const rows = parsed
         .filter(r =>
           typeof r.studentName === "string" &&
-          typeof r.justifiedHours === "number" &&
-          typeof r.unjustifiedHours === "number" &&
-          r.justifiedHours >= 0 &&
-          r.unjustifiedHours >= 0,
+          Number.isFinite(Number(r.justifiedHours)) &&
+          Number.isFinite(Number(r.unjustifiedHours)) &&
+          Number(r.justifiedHours) >= 0 &&
+          Number(r.unjustifiedHours) >= 0,
         )
         .map(r => ({
           studentName: String(r.studentName).trim(),
-          justifiedHours: Number(r.justifiedHours),
-          unjustifiedHours: Number(r.unjustifiedHours),
+          justifiedHours: Math.round(Number(r.justifiedHours)),
+          unjustifiedHours: Math.round(Number(r.unjustifiedHours)),
           confidence: 95,
         }));
       return { rows, rawText: content };
@@ -146,9 +152,9 @@ async function extractWithVision(
     const rows = parsed
       .filter(r =>
         typeof r.studentName === "string" &&
-        typeof r.grade === "number" &&
-        r.grade >= 0 &&
-        r.grade <= 20,
+        Number.isFinite(Number(r.grade)) &&
+        Number(r.grade) >= 0 &&
+        Number(r.grade) <= 20,
       )
       .map(r => ({
         studentName: String(r.studentName).trim(),

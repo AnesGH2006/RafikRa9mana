@@ -12,7 +12,6 @@ const BASE = import.meta.env.BASE_URL;
 
 const NIVEAUX = ["1AM", "2AM", "3AM", "4AM"];
 const YEARS   = ["2023-2024", "2024-2025", "2025-2026", "2026-2027"];
-const CLASS_LABELS_AR = ["أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي"];
 const CLASS_COLORS = [
   "from-blue-500 to-indigo-600",
   "from-violet-500 to-purple-600",
@@ -86,6 +85,7 @@ export default function ClassBalancerPage() {
   const [weightGrade, setWeightGrade]     = useState(60);
   const [weightGender, setWeightGender]   = useState(25);
   const [weightRepeat, setWeightRepeat]   = useState(15);
+  const [rules, setRules] = useState("");
 
   // State
   const [loading, setLoading]   = useState(false);
@@ -114,6 +114,7 @@ export default function ClassBalancerPage() {
             gender:    weightGender    / 100,
             repeating: weightRepeat    / 100,
           },
+          rules,
         }),
       });
       if (!res.ok) {
@@ -139,7 +140,7 @@ export default function ClassBalancerPage() {
       const assignments = classes.flatMap((cls, i) =>
         cls.students.map(s => ({
           studentId: s.id,
-          classe: `${niveau}-${CLASS_LABELS_AR[i] ?? String(i + 1)}`,
+                          classe: `${niveau}${i + 1}`,
         }))
       );
       const res = await fetch(`${BASE}api/class-balancer/apply`, {
@@ -264,6 +265,17 @@ export default function ClassBalancerPage() {
               ))}
             </div>
           </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground">شروط إضافية للتوزيع</label>
+            <textarea
+              value={rules}
+              onChange={e => setRules(e.target.value)}
+              placeholder="مثال: أريد توازناً أكبر بين الذكور والإناث، مع توزيع المعيدين بالتساوي"
+              className="w-full min-h-20 resize-y text-sm px-3 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+            />
+            <p className="text-[11px] text-muted-foreground">يفهم النظام حالياً أولوية المعدل والجنس والمعيدين، ويمكنك ضبط النتيجة يدوياً قبل الحفظ.</p>
+          </div>
         </CardContent>
       </Card>
 
@@ -325,7 +337,7 @@ export default function ClassBalancerPage() {
                     <div className={`bg-gradient-to-br ${CLASS_COLORS[ci % CLASS_COLORS.length]} p-3`}>
                       <div className="flex items-center justify-between mb-1">
                         <h3 className="text-white font-extrabold text-lg">
-                          قسم {CLASS_LABELS_AR[ci] ?? String(ci + 1)} — {niveau}
+                          {niveau}{ci + 1}
                         </h3>
                         <span className="text-white/80 text-sm font-bold">{cls.stats.count} تلميذ</span>
                       </div>

@@ -43,6 +43,8 @@ Set `DATABASE_URL` to the PostgreSQL connection string for the environment.
 | `GOOGLE_CLIENT_ID` | ✅ | Google OAuth web client ID |
 | `GOOGLE_CLIENT_SECRET` | ✅ | Google OAuth web client secret |
 | `APP_BASE_URL` | Production | Public application URL |
+| `ADMIN_EMAILS` | Optional | Comma-separated Google accounts promoted to active admins |
+| `ALLOW_DEV_LOGIN` | Local/temporary only | Enables the test admin account at `/api/dev-login`; disable after testing |
 | `GROQ_API_KEY` | — | لا حاجة له؛ يضيف كل مشترك مفتاحه الشخصي من الإعدادات |
 | `SMTP_HOST/USER/PASS/PORT` | Optional | Email notifications |
 | `TWILIO_ACCOUNT_SID` | Optional | SMS/WhatsApp via Twilio |
@@ -101,6 +103,9 @@ The Electron agent in `agent/` is Windows-only and connects to the deployed SaaS
 
 ### تسجيل الدخول على Render
 
-استخدم زر **تسجيل الدخول** في التطبيق أو افتح `/api/login`. لا تستخدم `/api/dev-login`؛ هذا رابط اختبار محلي ومغلق في النشر.
+استخدم زر **تسجيل الدخول** في التطبيق أو افتح `/api/login`. الحسابات العادية تبقى في صفحة الاشتراك حتى تصبح حالتها نشطة؛ لإتاحة حساب Google كمدير نشط، أضف بريده إلى `ADMIN_EMAILS` في إعدادات Render ثم أعد النشر.
+
+للاختبار المؤقت بحساب المدير التجريبي، أضف `ALLOW_DEV_LOGIN=true` إلى متغيرات البيئة في Render ثم أعد النشر، وبعدها افتح `/api/dev-login`. هذا ينشئ جلسة المدير التجريبي `dev-test-user` مباشرة. احذف المتغير أو عيّنه إلى `false` بعد الاختبار، لأن الرابط يمنح صلاحيات المدير.
+
 في Render يجب إعداد `GOOGLE_CLIENT_ID` و`GOOGLE_CLIENT_SECRET` وضبط `APP_BASE_URL`، ثم إضافة رابط callback التالي إلى إعدادات Google OAuth:
 `https://YOUR-RENDER-DOMAIN.onrender.com/api/callback`

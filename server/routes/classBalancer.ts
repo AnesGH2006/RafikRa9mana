@@ -103,11 +103,12 @@ router.post("/class-balancer/balance", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const userId = req.user!.id;
-  const { studentIds, classCount, annee = "2025-2026", weights } = req.body as {
+  const { studentIds, classCount, annee = "2025-2026", weights, rules } = req.body as {
     studentIds?: string[];
     classCount?: number;
     annee?: string;
     weights?: Record<string, number>;
+    rules?: string;
   };
 
   if (!Array.isArray(studentIds) || studentIds.length === 0) {
@@ -125,7 +126,7 @@ router.post("/class-balancer/balance", async (req, res): Promise<void> => {
     return;
   }
 
-  const result = balanceClasses(students, { classCount, weights });
+  const result = balanceClasses(students, { classCount, weights, rules });
   res.json(result);
 });
 
@@ -134,11 +135,12 @@ router.post("/class-balancer/balance-niveau", async (req, res): Promise<void> =>
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const userId = req.user!.id;
-  const { niveau, classCount, annee = "2025-2026", weights } = req.body as {
+  const { niveau, classCount, annee = "2025-2026", weights, rules } = req.body as {
     niveau?: string;
     classCount?: number;
     annee?: string;
     weights?: Record<string, number>;
+    rules?: string;
   };
 
   const VALID_NIVEAUX = ["1AM", "2AM", "3AM", "4AM"];
@@ -157,7 +159,7 @@ router.post("/class-balancer/balance-niveau", async (req, res): Promise<void> =>
     return;
   }
 
-  const result = balanceClasses(students, { classCount, weights });
+  const result = balanceClasses(students, { classCount, weights, rules });
   res.json(result);
 });
 

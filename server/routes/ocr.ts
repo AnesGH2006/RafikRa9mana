@@ -45,6 +45,13 @@ router.post(
 
     const userId = req.user!.id;
     const ocrType = (req.query.type as string) === "absences" ? "absences" : "grades";
+    if (req.file.mimetype === "application/pdf") {
+      res.status(415).json({
+        error: "ملفات PDF تحتاج إلى تحويل صفحاتها إلى صور قبل OCR. ارفع PNG أو JPG لكل صفحة.",
+      });
+      return;
+    }
+
     const engineParam = String(req.query.engine ?? "auto") as OcrEngine;
     const engine: OcrEngine = ["auto", "vision", "tesseract"].includes(engineParam)
       ? engineParam

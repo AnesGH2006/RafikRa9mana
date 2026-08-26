@@ -68,10 +68,29 @@ export interface ClassBalancerOptions {
     gender?: number;
     repeating?: number;
   };
+  /** Optional Arabic instructions used to derive the balancing priorities. */
+  rules?: string;
 }
 
 // ── Arabic class labels ───────────────────────────────────────────────────────
 const CLASS_LABELS = ["أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي"];
+
+function weightsFromRules(
+  rules: string | undefined,
+  fallback: NonNullable<ClassBalancerOptions["weights"]> = {},
+): Required<NonNullable<ClassBalancerOptions["weights"]>> {
+  const text = (rules ?? "").toLowerCase();
+  const weights = {
+    grade: fallback.grade ?? 0.6,
+    gender: fallback.gender ?? 0.25,
+    repeating: fallback.repeating ?? 0.15,
+  };
+
+  if (/معدل|نقاط|درجات|متفوق/.test(text)) weights.grade = 0.7;
+  if (/جنس|ذكور|إناث|بنات|اولاد|أولاد/.test(text)) weights.gender = 0.7;
+  if (/معيد|راسب|إعادة|اعادة/.test(text)) weights.repeating = 0.7;
+  return weights;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -140,11 +159,7 @@ export function balanceClasses(
   options: ClassBalancerOptions,
 ): ClassBalancerResult {
   const classCount = Math.min(Math.max(options.classCount, 2), CLASS_LABELS.length);
-  const weights: Required<NonNullable<ClassBalancerOptions["weights"]>> = {
-    grade:     options.weights?.grade     ?? 0.60,
-    gender:    options.weights?.gender    ?? 0.25,
-    repeating: options.weights?.repeating ?? 0.15,
-  };
+  const weights = weightsFromRules(options.rules, options.weights);
 
   // Sort descending by composite key
   const sorted = [...students].sort(
