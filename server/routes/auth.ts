@@ -7,6 +7,9 @@ import {
   LogoutMobileSessionResponse,
 } from "../../shared/schemas.js";
 import { db, usersTable, schoolMembersTable } from "../../shared/db.js";
+// The server build provides Drizzle at runtime, but some editor configurations
+// do not include its type declarations in the project graph.
+// @ts-expect-error -- drizzle-orm is available in the server dependency graph
 import { and, eq, isNull } from "drizzle-orm";
 import {
   clearSession,
@@ -51,7 +54,13 @@ function setSessionCookie(res: Response, sid: string) {
 }
 
 function setOidcCookie(res: Response, name: string, value: string) {
-  res.cookie(name, value, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: OIDC_COOKIE_TTL });
+  res.cookie(name, value, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: OIDC_COOKIE_TTL,
+  });
 }
 
 function getSafeReturnTo(value: unknown): string {
@@ -162,15 +171,15 @@ router.get("/login", async (req: Request, res: Response) => {
   const nonce = oidc.randomNonce();
   const codeVerifier = oidc.randomPKCECodeVerifier();
   const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
-  const redirectTo = oidc.buildAuthorizationUrl(config, { 
-  redirect_uri: callbackUrl, 
-  scope: "openid email profile", 
-  code_challenge: codeChallenge, 
-  code_challenge_method: "S256", 
-  prompt: "consent", 
-  state, 
-  nonce 
-});;
+  const redirectTo = oidc.buildAuthorizationUrl(config, {
+    redirect_uri: callbackUrl,
+    scope: "openid email profile",
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
+    prompt: "consent",
+    state,
+    nonce,
+  });
   setOidcCookie(res, "code_verifier", codeVerifier);
   setOidcCookie(res, "nonce", nonce);
   setOidcCookie(res, "state", state);

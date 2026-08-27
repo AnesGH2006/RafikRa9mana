@@ -95,6 +95,101 @@ function EditableField({ value, onSave, placeholder = "", className = "" }: {
       </span>;
 }
 
+function TimetableGeneratorPanel({ classes, subjects, roomIds, annee, onClose, onDone }: {
+  classes: string[];
+  subjects: string[];
+  roomIds: string[];
+  annee: string;
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const { toast } = useToast();
+  const [selectedClasses, setSelectedClasses] = useState<string[]>(classes);
+  const [periods, setPeriods] = useState(6);
+  const [maxDaily, setMaxDaily] = useState(6);
+  const [selectedDays, setSelectedDays] = useState([0, 1, 2, 3, 4]);
+  const [blocked, setBlocked] = useState("");
+  const [spread, setSpread] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [targets, setTargets] = useState<Record<string, number>>(() =>
+    Object.fromEntries(subjects.slice(0, 13).map(subject => [subject, 1])),
+  );
+
+  const toggleClass = (classe: string) => setSelectedClasses(current =>
+    current.includes(classe) ? current.filter(item => item !== classe) : [...current, classe],
+  );
+  const toggleDay = (day: number) => setSelectedDays(current =>
+    current.includes(day) ? current.filter(item => item !== day) : [...current, day].sort(),
+  );
+
+  const generate = async () => {
+    const activeSubjects = Object.entries(targets)
+      .filter(([, count]) => count > 0)
+      .map(([subject, count]) => ({ subject, periods: count }));
+    if (!selectedClasses.length || !activeSubjects.length || !selectedDays.length) {
+      toast({ title: "شروط ناقصة", description: "اختر فوجاً ومادة ويوماً واحداً على الأقل", variant: "destructive" });
+      return;
+    }
+    const blockedSlots = blocked.split(/[\s,;]+/).filter(Boolean).map(value => {
+      const [day, period] = value.split(":").map(Number);
+      return { day, period };
+    }).filter(slot => Number.isInteger(slot.day) && Number.isInteger(slot.period));
+    setGenerating(true);
+    try {
+      const res = await fetch(`${BASE}api/timetable/generate`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          annee,
+          classes: selectedClasses.map(classe => ({ classe, subjects: activeSubjects })),
+          roomIds,
+          replace: true,
+          rules: {
+            workingDays: selectedDays,
+            periodsPerDay: periods,
+            maxDailyPeriodsPerClass: maxDaily,
+            avoidConsecutiveSameSubject: spread,
+            blockedSlots,
+          },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 207) throw new Error(data.error ?? "فشل التوليد");
+      toast({ title: `تم توليد ${data.generated?.length ?? 0} حصة`, description: data.unscheduled?.length ? `تعذر جدولة ${data.unscheduled.length} حصة` : "تم تطبيق كل الشروط" });
+      await onDone();
+    } catch (error) {
+      toast({ title: "فشل التوليد", description: error instanceof Error ? error.message : "تعذر إنشاء الجدول", variant: "destructive" });
+    } finally { setGenerating(false); }
+  };
+
+  return (
+    <Card className="border-cyan-200 dark:border-cyan-900">
+      <CardContent className="p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div><h2 className="font-bold">توليد جدول وفق الشروط</h2><p className="text-xs text-muted-foreground">سيتم استبدال جدول السنة المحددة للحصص المختارة</p></div>
+          <button onClick={onClose} aria-label="إغلاق"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {classes.map(classe => <button key={classe} onClick={() => toggleClass(classe)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${selectedClasses.includes(classe) ? "bg-cyan-500 text-white border-cyan-500" : "bg-background"}`}>{classe}</button>)}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+          <label>حصص/يوم<input type="number" min="1" max="10" value={periods} onChange={e => setPeriods(Number(e.target.value) || 1)} className="mt-1 w-full rounded-lg border px-2 py-1.5 bg-background" /></label>
+          <label>الحد الأقصى للفوج<input type="number" min="1" max="10" value={maxDaily} onChange={e => setMaxDaily(Number(e.target.value) || 1)} className="mt-1 w-full rounded-lg border px-2 py-1.5 bg-background" /></label>
+          <label className="col-span-2">خانات ممنوعة (اليوم:الحصة)<input value={blocked} onChange={e => setBlocked(e.target.value)} placeholder="0:5, 2:0" className="mt-1 w-full rounded-lg border px-2 py-1.5 bg-background" dir="ltr" /></label>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="font-semibold">أيام العمل:</span>
+          {["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس"].map((day, index) => <label key={day} className="flex items-center gap-1"><input type="checkbox" checked={selectedDays.includes(index)} onChange={() => toggleDay(index)} />{day}</label>)}
+          <label className="flex items-center gap-1 ms-auto"><input type="checkbox" checked={spread} onChange={e => setSpread(e.target.checked)} />تجنب تكرار المادة متتالياً</label>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+          {subjects.map(subject => <label key={subject} className="text-xs flex items-center gap-2"><span className="truncate flex-1">{subject}</span><input type="number" min="0" max="30" value={targets[subject] ?? 0} onChange={e => setTargets(current => ({ ...current, [subject]: Number(e.target.value) || 0 }))} className="w-14 rounded border px-1.5 py-1 bg-background" /></label>)}
+        </div>
+        <div className="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={onClose}>إلغاء</Button><Button size="sm" onClick={generate} disabled={generating} className="gap-2">{generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} توليد الجدول</Button></div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 type Tab = "teachers" | "rooms" | "schedule" | "print" | "hourly";
 
@@ -113,6 +208,7 @@ export default function TimetablePage() {
   // Filters
   const [annee,       setAnnee]       = useState("2025-2026");
   const [activeClasse, setActiveClasse] = useState("");
+  const [generatorOpen, setGeneratorOpen] = useState(false);
 
   // Loading
   const [loadingTeachers, setLoadingTeachers] = useState(false);
@@ -273,12 +369,26 @@ export default function TimetablePage() {
                   {cls}
                 </motion.button>
               ))}
+              <Button size="sm" onClick={() => setGeneratorOpen(true)} className="ms-auto gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-0">
+                <Wand2 className="w-4 h-4" /> توليد حسب الشروط
+              </Button>
             </div>
           ) : (
             <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 text-amber-700 dark:text-amber-400 text-sm flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               لا توجد أقسام لهذه السنة. استورد بيانات التلاميذ أولاً.
             </div>
+          )}
+
+          {generatorOpen && (
+            <TimetableGeneratorPanel
+              classes={classes}
+              subjects={availableSubjects}
+              roomIds={rooms.map(room => room.id)}
+              annee={annee}
+              onClose={() => setGeneratorOpen(false)}
+              onDone={async () => { setGeneratorOpen(false); await fetchClasses(); await fetchSlots(); }}
+            />
           )}
 
           {/* Conflict badge */}

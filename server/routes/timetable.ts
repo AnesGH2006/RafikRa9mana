@@ -9,7 +9,7 @@
  */
 
 import { Router } from "express";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import {
   db,
   timetableTeachersTable,
@@ -17,7 +17,11 @@ import {
   timetableSlotsTable,
   studentsTable,
 } from "../../shared/db.js";
-import { generateTimetable, type TimetableRequestClass } from "../services/timetableGenerator.js";
+import {
+  generateTimetable,
+  type TimetableGenerationRules,
+  type TimetableRequestClass,
+} from "../services/timetableGenerator.js";
 
 const router = Router();
 
@@ -189,11 +193,12 @@ router.post("/timetable/slots", async (req, res): Promise<void> => {
 
 router.post("/timetable/generate", async (req, res): Promise<void> => {
   if (!auth(req, res)) return;
-  const { annee = "2025-2026", classes, roomIds = [], replace = false } = req.body as {
+  const { annee = "2025-2026", classes, roomIds = [], replace = false, rules = {} } = req.body as {
     annee?: string;
     classes?: TimetableRequestClass[];
     roomIds?: string[];
     replace?: boolean;
+    rules?: TimetableGenerationRules;
   };
 
   if (!Array.isArray(classes) || classes.length === 0) {
@@ -205,11 +210,13 @@ router.post("/timetable/generate", async (req, res): Promise<void> => {
     return;
   }
 
-  const generated = generateTimetable(classes, Array.isArray(roomIds) ? roomIds : []);
+  const generated = generateTimetable(classes, Array.isArray(roomIds) ? roomIds : [], rules ?? {});
   if (replace) {
+    const replaceClasses = classes.map(entry => entry.classe.trim()).filter(Boolean);
     await db.delete(timetableSlotsTable).where(and(
       eq(timetableSlotsTable.userId, req.user!.id),
       eq(timetableSlotsTable.annee, annee),
+      ...(replaceClasses.length > 0 ? [inArray(timetableSlotsTable.classe, replaceClasses)] : []),
     ));
   }
 

@@ -36,16 +36,20 @@ export interface OcrResult {
 export async function prepareImage(buffer: Buffer): Promise<{ data: string; mimeType: string; tesseractBuffer: Buffer }> {
   const meta = await sharp(buffer).metadata();
   const w = meta.width ?? 800;
+  const targetWidth = Math.min(Math.max(w, 1600), 2400);
 
   const processed = await sharp(buffer)
-    .resize({ width: Math.min(w, 1920), withoutEnlargement: true, kernel: "lanczos3" })
+    .autoOrient()
+    .resize({ width: Math.min(Math.max(w, 1200), 1920), withoutEnlargement: false, kernel: "lanczos3" })
     .jpeg({ quality: 88 })
     .toBuffer();
 
   const tesseractBuffer = await sharp(buffer)
-    .resize({ width: Math.min(w, 2400), withoutEnlargement: true })
+    .autoOrient()
+    .resize({ width: targetWidth, withoutEnlargement: false, kernel: "lanczos3" })
     .grayscale()
     .normalize()
+    .sharpen({ sigma: 1.2 })
     .jpeg({ quality: 92 })
     .toBuffer();
 
@@ -126,11 +130,13 @@ async function extractWithVision(
 ): Promise<{ rows: OcrGradeRow[] | OcrAbsenceRow[]; rawText: string }> {
   const prompt = type === "absences" ? ABSENCES_PROMPT : GRADES_PROMPT;
   const content = await callGroqVision(imageB64, mimeType, prompt, apiKey);
-  const match = content.match(/\[[\s\S]*\]/);
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  const match = fenced?.match(/\[[\s\S]*\]/) ?? content.match(/\[[\s\S]*\]/);
   if (!match) return { rows: [], rawText: content };
 
   try {
-    const parsed = JSON.parse(match[0]) as Array<Record<string, unknown>>;
+    const parsed = JSON.parse(match[0]) as unknown;
+    if (!Array.isArray(parsed)) return { rows: [], rawText: content };
     if (type === "absences") {
       const rows = parsed
         .filter(r =>
@@ -171,23 +177,26 @@ async function extractWithVision(
 
 /** Parse a line like "محمد بن أحمد  14.5" or "14.5  محمد بن أحمد" */
 function parseGradeLine(line: string): OcrGradeRow | null {
-  const trimmed = line.replace(/\s+/g, " ").trim();
+  const trimmed = line.replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/\s+/g, " ").trim();
   if (!trimmed || trimmed.length < 3) return null;
 
-  const gradeMatch = trimmed.match(/(\d{1,2}(?:[.,]\d{1,2})?)\s*$/);
+  const candidates = [...trimmed.matchAll(/(?<!\d)(\d{1,2}(?:[.,]\d{1,2})?)(?!\d)/g)]
+    .map(match => ({ value: parseFloat(match[1]!.replace(",", ".")), index: match.index!, length: match[0].length }))
+    .filter(candidate => Number.isFinite(candidate.value) && candidate.value >= 0 && candidate.value <= 20);
+  const gradeMatch = candidates.at(-1);
   if (!gradeMatch) return null;
 
-  const grade = parseFloat(gradeMatch[1]!.replace(",", "."));
-  if (isNaN(grade) || grade < 0 || grade > 20) return null;
+  const grade = gradeMatch.value;
 
-  const name = trimmed.slice(0, gradeMatch.index).replace(/^\d+\s*/, "").trim();
+  const name = `${trimmed.slice(0, gradeMatch.index)} ${trimmed.slice(gradeMatch.index + gradeMatch.length)}`
+    .replace(/^\s*\d+\s*/, "").replace(/\s*\d+\s*$/, "").trim();
   if (!name || name.length < 2) return null;
 
   return { studentName: name, grade, confidence: 72 };
 }
 
 function parseAbsenceLine(line: string): OcrAbsenceRow | null {
-  const trimmed = line.replace(/\s+/g, " ").trim();
+  const trimmed = line.replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/\s+/g, " ").trim();
   if (!trimmed || trimmed.length < 3) return null;
 
   const numbers = [...trimmed.matchAll(/(\d{1,3})/g)].map(m => parseInt(m[1]!, 10));
@@ -196,11 +205,12 @@ function parseAbsenceLine(line: string): OcrAbsenceRow | null {
   const namePart = trimmed.replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
   if (!namePart || namePart.length < 2) return null;
 
-  if (numbers.length >= 2) {
+  const values = numbers.length > 2 ? numbers.slice(-2) : numbers;
+  if (values.length >= 2) {
     return {
       studentName: namePart,
-      justifiedHours: numbers[0]!,
-      unjustifiedHours: numbers[1]!,
+      justifiedHours: values[0]!,
+      unjustifiedHours: values[1]!,
       confidence: 68,
     };
   }
@@ -230,11 +240,20 @@ async function extractWithTesseract(
   const rawText = data.text ?? "";
   const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const rows: OcrGradeRow[] | OcrAbsenceRow[] = [];
+  const seen = new Set<string>();
 
   for (const line of lines) {
     if (/^(اسم|الاسم|اللقب|رقم|#|total|مجموع)/i.test(line)) continue;
     const parsed = type === "absences" ? parseAbsenceLine(line) : parseGradeLine(line);
-    if (parsed) (rows as Array<OcrGradeRow | OcrAbsenceRow>).push(parsed);
+    if (parsed) {
+      const key = type === "grades"
+        ? `${parsed.studentName}:${(parsed as OcrGradeRow).grade}`
+        : `${parsed.studentName}:${(parsed as OcrAbsenceRow).justifiedHours}:${(parsed as OcrAbsenceRow).unjustifiedHours}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        (rows as Array<OcrGradeRow | OcrAbsenceRow>).push(parsed);
+      }
+    }
   }
 
   return { rows, rawText };

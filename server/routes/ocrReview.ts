@@ -47,22 +47,35 @@ async function matchStudents(
     .where(and(eq(studentsTable.userId, userId), eq(studentsTable.annee, annee)));
 
   const nameMap = new Map<string, string>();
+
+  const normalizeName = (value: string) => value
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآا]/g, "ا")
+    .replace(/[ةه]/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
   
   for (const name of names) {
-    const cleaned = name.toLowerCase().trim();
+    const cleaned = normalizeName(name);
     
     // Exact match
-    const exact = students.find(s => s.nomPrenom.toLowerCase() === cleaned);
+    const exact = students.find(s => normalizeName(s.nomPrenom) === cleaned);
     if (exact) {
       nameMap.set(name, exact.id);
       continue;
     }
     
     // Partial match (contains)
-    const partial = students.find(s => 
-      s.nomPrenom.toLowerCase().includes(cleaned) ||
-      cleaned.includes(s.nomPrenom.toLowerCase())
-    );
+    const partial = students.find(s => {
+      const studentName = normalizeName(s.nomPrenom);
+      const extractedWords = cleaned.split(" ").filter(Boolean);
+      const studentWords = studentName.split(" ").filter(Boolean);
+      return studentName.includes(cleaned) || cleaned.includes(studentName) ||
+        (extractedWords.length > 0 && extractedWords.every(word => studentWords.some(candidate => candidate.includes(word))));
+    });
     if (partial) {
       nameMap.set(name, partial.id);
       continue;
