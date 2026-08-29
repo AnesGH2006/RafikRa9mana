@@ -122,6 +122,33 @@ const ABSENCES_PROMPT = `هذه صورة كشف غياب مدرسي جزائري
 - تجاهل أرقام التسلسل والعناوين والخانات الفارغة.
 - لا تخترع بيانات، استخرج ما هو موجود فقط.`;
 
+function extractJsonArrayCandidate(raw: string): string | null {
+  const candidates: string[] = [];
+
+  const codeFence = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  if (codeFence) candidates.push(codeFence);
+
+  const firstBracket = raw.indexOf("[");
+  const lastBracket = raw.lastIndexOf("]");
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    candidates.push(raw.slice(firstBracket, lastBracket + 1));
+  }
+
+  const fromObject = raw.match(/\[[\s\S]*\]/)?.[0];
+  if (fromObject) candidates.push(fromObject);
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) return candidate;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return null;
+}
+
 async function extractWithVision(
   imageB64: string,
   mimeType: string,
@@ -130,12 +157,11 @@ async function extractWithVision(
 ): Promise<{ rows: OcrGradeRow[] | OcrAbsenceRow[]; rawText: string }> {
   const prompt = type === "absences" ? ABSENCES_PROMPT : GRADES_PROMPT;
   const content = await callGroqVision(imageB64, mimeType, prompt, apiKey);
-  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
-  const match = fenced?.match(/\[[\s\S]*\]/) ?? content.match(/\[[\s\S]*\]/);
-  if (!match) return { rows: [], rawText: content };
+  const jsonCandidate = extractJsonArrayCandidate(content);
+  if (!jsonCandidate) return { rows: [], rawText: content };
 
   try {
-    const parsed = JSON.parse(match[0]) as unknown;
+    const parsed = JSON.parse(jsonCandidate) as unknown;
     if (!Array.isArray(parsed)) return { rows: [], rawText: content };
     if (type === "absences") {
       const rows = parsed
@@ -150,7 +176,7 @@ async function extractWithVision(
           studentName: String(r.studentName).trim(),
           justifiedHours: Math.round(Number(r.justifiedHours)),
           unjustifiedHours: Math.round(Number(r.unjustifiedHours)),
-          confidence: 95,
+          confidence: 90,
         }));
       return { rows, rawText: content };
     }
@@ -165,7 +191,7 @@ async function extractWithVision(
       .map(r => ({
         studentName: String(r.studentName).trim(),
         grade: Number(r.grade),
-        confidence: 95,
+        confidence: 90,
       }));
     return { rows, rawText: content };
   } catch {

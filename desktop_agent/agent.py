@@ -22,6 +22,7 @@ import base64
 import argparse
 import io
 import signal
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -239,13 +240,31 @@ def _type_arabic(text: str):
     """كتابة النص العربي عبر الحافظة (أسرع وأدق)."""
     import subprocess, platform
     if platform.system() == "Windows":
-        import win32clipboard  # type: ignore
-        win32clipboard.OpenClipboard()
-        win32clipboard.EmptyClipboard()
-        win32clipboard.SetClipboardText(text, win32clipboard.CF_UNICODETEXT)
-        win32clipboard.CloseClipboard()
+        try:
+            import win32clipboard  # type: ignore
+            win32clipboard.OpenClipboard()
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardText(text, win32clipboard.CF_UNICODETEXT)
+            win32clipboard.CloseClipboard()
+        except Exception as exc:
+            raise RuntimeError(f"فشل نسخ النص إلى الحافظة على Windows: {exc}") from exc
     else:
-        subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=False)
+        clipters = ["xclip", "xsel", "wl-paste"]
+        clipboard_ok = False
+        for cmd in clipters:
+            try:
+                if cmd == "xclip":
+                    subprocess.run([cmd, "-selection", "clipboard"], input=text.encode(), check=False)
+                elif cmd == "xsel":
+                    subprocess.run([cmd, "--clipboard", "--input"], input=text.encode(), check=False)
+                else:
+                    subprocess.run(["bash", "-lc", f"printf '%s' {shlex.quote(text)} | {cmd} --clipboard"], check=False)
+                clipboard_ok = True
+                break
+            except Exception:
+                continue
+        if not clipboard_ok:
+            raise RuntimeError("لا يوجد أداة للحافظة في هذا النظام (xclip/xsel/wl-paste). انسخ النص يدويًا أو ثبّت أداة الحافظة.")
     pyautogui.hotkey("ctrl", "v")
     time.sleep(0.1)
 
@@ -356,6 +375,8 @@ def fetch_grades_task() -> str:
 
 # ── الواجهة الرئيسية ──────────────────────────────────────────────────────────
 def main():
+    global MAX_STEPS
+
     parser = argparse.ArgumentParser(description="وكيل سطح المكتب — CEM Desktop Agent")
     parser.add_argument("--task",    type=str, help="المهمة المطلوبة")
     parser.add_argument("--grades",  action="store_true", help="وضع إدخال النقاط على موقع الوزارة")
@@ -363,7 +384,6 @@ def main():
     parser.add_argument("--steps",   type=int, default=MAX_STEPS, help=f"أقصى خطوات (افتراضي {MAX_STEPS})")
     args = parser.parse_args()
 
-    global MAX_STEPS
     MAX_STEPS = args.steps
 
     # اختر المهمة
@@ -387,9 +407,9 @@ def main():
             print("❌ لم تكتب مهمة.")
             sys.exit(1)
 
-    if not GROQ_API_KEY:
+    if not GROQ_API_KEY and not args.dry_run:
         print("\n❌ GROQ_API_KEY غير مضبوط!")
-        print("   أنشئ ملف .env وأضف:")
+        print("   أنشئ ملف .env أو انسخه من .env.example وأضف:")
         print("   GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxx")
         print("\n   احصل على مفتاح مجاني من: https://console.groq.com\n")
         sys.exit(1)
