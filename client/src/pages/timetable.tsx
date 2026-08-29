@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar, Users, Building2, Plus, Trash2, Edit3, X, Check,
@@ -46,6 +46,25 @@ const CEM_SUBJECTS = [
   "اللغة الأمازيغية", "الفنون", "الموسيقى", "التربية المدنية",
   "الفيزياء", "اللغة الإنجليزية",
 ];
+
+const parseClassList = (raw: string): string[] => {
+  const cleaned = raw
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[،;]+/g, " ")
+    .trim();
+
+  if (!cleaned) return [];
+
+  return Array.from(new Set(
+    cleaned
+      .split(/\s+/)
+      .map(value => value.trim())
+      .filter(Boolean)
+      .map(value => value.replace(/^["'“”]+|["'“”]+$/g, ""))
+      .filter(value => /^[0-9]+[A-Za-z]+[0-9]+$/.test(value))
+      .map(value => value.toUpperCase())
+  ));
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Teacher {
@@ -105,6 +124,8 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, annee, onClose, o
 }) {
   const { toast } = useToast();
   const [selectedClasses, setSelectedClasses] = useState<string[]>(classes);
+  const [prompt, setPrompt] = useState("");
+  const [classInput, setClassInput] = useState(classes.join(", "));
   const [periods, setPeriods] = useState(6);
   const [maxDaily, setMaxDaily] = useState(6);
   const [selectedDays, setSelectedDays] = useState([0, 1, 2, 3, 4]);
@@ -122,12 +143,17 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, annee, onClose, o
     current.includes(day) ? current.filter(item => item !== day) : [...current, day].sort(),
   );
 
+  const resolvedClasses = useMemo(() => {
+    if (classInput.trim()) return parseClassList(classInput);
+    return selectedClasses;
+  }, [classInput, selectedClasses]);
+
   const generate = async () => {
     const activeSubjects = Object.entries(targets)
       .filter(([, count]) => count > 0)
       .map(([subject, count]) => ({ subject, periods: count }));
-    if (!selectedClasses.length || !activeSubjects.length || !selectedDays.length) {
-      toast({ title: "شروط ناقصة", description: "اختر فوجاً ومادة ويوماً واحداً على الأقل", variant: "destructive" });
+    if (!resolvedClasses.length || !activeSubjects.length || !selectedDays.length) {
+      toast({ title: "شروط ناقصة", description: "أدخل الفوجات مثل 1AM1, 1AM2 أو اخترها ثم أضف مادة ويوماً واحداً على الأقل", variant: "destructive" });
       return;
     }
     const blockedSlots = blocked.split(/[\s,;]+/).filter(Boolean).map(value => {
@@ -139,8 +165,9 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, annee, onClose, o
       const res = await fetch(`${BASE}api/timetable/generate`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          prompt: prompt.trim() || undefined,
           annee,
-          classes: selectedClasses.map(classe => ({ classe, subjects: activeSubjects })),
+          classes: resolvedClasses.map((classe: string) => ({ classe, subjects: activeSubjects })),
           roomIds,
           replace: true,
           rules: {
@@ -167,6 +194,14 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, annee, onClose, o
         <div className="flex items-center justify-between">
           <div><h2 className="font-bold">توليد جدول وفق الشروط</h2><p className="text-xs text-muted-foreground">سيتم استبدال جدول السنة المحددة للحصص المختارة</p></div>
           <button onClick={onClose} aria-label="إغلاق"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold text-muted-foreground">موجه/تلميح للتوليد</label>
+          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2} placeholder="مثال: أعطِ الأولوية للمواد الأساسية، ووزع الحصص بالتساوي بين الأقسام" className="w-full rounded-lg border px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-cyan-500/30" />
+        </div>
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold text-muted-foreground">الفوجات</label>
+          <input value={classInput} onChange={e => setClassInput(e.target.value)} placeholder="1AM1, 1AM2, 1AM3, 2AM1" className="w-full rounded-lg border px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-cyan-500/30" />
         </div>
         <div className="flex flex-wrap gap-2">
           {classes.map(classe => <button key={classe} onClick={() => toggleClass(classe)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${selectedClasses.includes(classe) ? "bg-cyan-500 text-white border-cyan-500" : "bg-background"}`}>{classe}</button>)}
@@ -596,10 +631,12 @@ function TeachersPanel({ teachers, loading, onRefresh, toast }: {
 
   const save = async () => {
     if (!form.name.trim()) { toast({ title: "الاسم مطلوب", variant: "destructive" }); return; }
+    const subjectList = form.subjects.split(",").map(s => s.trim()).filter(Boolean);
+    if (!subjectList.length) { toast({ title: "المواد مطلوبة", description: "يرجى إدخال مواد الأستاذ قبل الحفظ", variant: "destructive" }); return; }
     setSaving(true);
     const body = {
       name: form.name.trim(),
-      subjects: form.subjects.split(",").map(s => s.trim()).filter(Boolean),
+      subjects: subjectList,
       phone: form.phone.trim() || undefined,
       color: form.color,
     };
@@ -643,9 +680,9 @@ function TeachersPanel({ teachers, loading, onRefresh, toast }: {
               className="w-full text-sm px-3 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-violet-500/30" />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground">المواد (مفصولة بفاصلة)</label>
+            <label className="text-xs font-semibold text-muted-foreground">مواد الأستاذ (مطلوبة)</label>
             <input value={form.subjects} onChange={e => setForm(f => ({ ...f, subjects: e.target.value }))}
-              placeholder="مثال: الرياضيات، العلوم"
+              placeholder="مثال: الرياضيات، العلوم، اللغة العربية"
               className="w-full text-sm px-3 py-2 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-violet-500/30" />
           </div>
           <div className="space-y-1">
