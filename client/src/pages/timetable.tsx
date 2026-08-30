@@ -133,8 +133,17 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, annee, onClose, o
   const [spread, setSpread] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [targets, setTargets] = useState<Record<string, number>>(() =>
-    Object.fromEntries(subjects.slice(0, 13).map(subject => [subject, 1])),
+    Object.fromEntries(subjects.map(subject => [subject, 1])),
   );
+
+  useEffect(() => {
+    setSelectedClasses(classes);
+    setClassInput(classes.join(", "));
+    setTargets(current => {
+      const seeded = Object.fromEntries(subjects.map(subject => [subject, current[subject] ?? 1]));
+      return { ...current, ...seeded };
+    });
+  }, [classes, subjects]);
 
   const toggleClass = (classe: string) => setSelectedClasses(current =>
     current.includes(classe) ? current.filter(item => item !== classe) : [...current, classe],
