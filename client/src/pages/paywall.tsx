@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Lock, Phone, Mail, CheckCircle2, Clock, Shield, Zap, Crown, Star, Sparkles } from "lucide-react";
+import { BookOpen, Lock, Phone, Mail, CheckCircle2, Clock, Shield, Zap, Crown, Star, Sparkles, GraduationCap } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 
@@ -72,6 +73,18 @@ const steps = [
 
 export default function PaywallScreen() {
   const { user, logout } = useAuth();
+  const [schoolStage, setSchoolStage] = useState<"moyen" | "lycee">(() => {
+    if (typeof window === "undefined") return "moyen";
+    const stored = window.localStorage.getItem("selected-school-stage") || window.localStorage.getItem("cem-school-stage");
+    return stored === "lycee" ? "lycee" : "moyen";
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("selected-school-stage", schoolStage);
+      window.localStorage.setItem("cem-school-stage", schoolStage);
+    }
+  }, [schoolStage]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-start pt-0 overflow-hidden relative">
@@ -121,6 +134,51 @@ export default function PaywallScreen() {
           </h1>
           <p className="text-muted-foreground text-base max-w-lg mx-auto">
             حسابك مسجّل بنجاح. فعّل اشتراكك للوصول إلى جميع ميزات رفيق الرقمنة.
+          </p>
+        </motion.div>
+
+        {/* Choose school level before payment */}
+        <motion.div
+          className="rounded-2xl border bg-card/70 backdrop-blur p-5 md:p-6"
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <GraduationCap className="w-5 h-5 text-violet-600" />
+            <h2 className="font-extrabold text-base">اختر المستوى قبل الدفع</h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setSchoolStage("moyen")}
+              className={`rounded-2xl border p-4 text-right transition-all ${
+                schoolStage === "moyen"
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30 shadow-md"
+                  : "border-border bg-muted/40 hover:border-blue-300"
+              }`}
+            >
+              <div className="text-xs text-muted-foreground mb-1">CEM</div>
+              <div className="font-bold text-lg">المتوسطة</div>
+              <div className="text-xs text-muted-foreground mt-1">1AM → 4AM</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSchoolStage("lycee")}
+              className={`rounded-2xl border p-4 text-right transition-all ${
+                schoolStage === "lycee"
+                  ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30 shadow-md"
+                  : "border-border bg-muted/40 hover:border-violet-300"
+              }`}
+            >
+              <div className="text-xs text-muted-foreground mb-1">Lycée</div>
+              <div className="font-bold text-lg">الثانوي</div>
+              <div className="text-xs text-muted-foreground mt-1">1AS → 3AS</div>
+            </button>
+          </div>
+
+          <p className="mt-4 text-sm text-muted-foreground">
+            المستوى المختار: <span className="font-bold text-foreground">{schoolStage === "moyen" ? "CEM / المتوسطة" : "Lycée / الثانوي"}</span>
           </p>
         </motion.div>
 

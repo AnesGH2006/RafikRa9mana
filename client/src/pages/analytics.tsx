@@ -314,7 +314,10 @@ export default function AnalyticsPage() {
   const years = getAcademicYears();
 
   const [year, setYear] = useState(() => localStorage.getItem("cem-selected-year") || "2025-2026");
-  const [schoolStage, setSchoolStage] = useState<SchoolStage>(() => (localStorage.getItem("cem-school-stage") as SchoolStage) || "moyen");
+  const [schoolStage, setSchoolStage] = useState<SchoolStage>(() => {
+    const stored = localStorage.getItem("selected-school-stage") || localStorage.getItem("cem-school-stage");
+    return (stored as SchoolStage) === "lycee" ? "lycee" : "moyen";
+  });
   const [compareMode, setCompareMode] = useState(false);
   const [compareYear, setCompareYear] = useState(() => {
     const stored = localStorage.getItem("cem-selected-year") || "2025-2026";
@@ -325,7 +328,10 @@ export default function AnalyticsPage() {
   const { stats, loading } = useStats(year);
 
   useEffect(() => { localStorage.setItem("cem-selected-year", year); }, [year]);
-  useEffect(() => { localStorage.setItem("cem-school-stage", schoolStage); }, [schoolStage]);
+  useEffect(() => {
+    localStorage.setItem("cem-school-stage", schoolStage);
+    localStorage.setItem("selected-school-stage", schoolStage);
+  }, [schoolStage]);
 
   const visibleLevels = schoolStage === "lycee" ? ["1AS", "2AS", "3AS"] : ["1AM", "2AM", "3AM", "4AM"];
   const stageStats = stats?.byLevel.filter(l => visibleLevels.includes(l.niveau)) ?? [];
