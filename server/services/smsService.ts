@@ -99,7 +99,7 @@ export interface BulkSmsOptions {
 
 export interface BulkSmsResult {
   success: boolean;
-  channel: "twilio" | "gateway" | "none";
+  channel: "twilio" | "gateway" | "modem" | "socket" | "none";
   sent: number;
   failed: number;
   total: number;

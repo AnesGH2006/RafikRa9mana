@@ -415,7 +415,7 @@ router.get("/stats", async (req, res): Promise<void> => {
       return currentYear - year;
     };
 
-    const LEVELS = ["1AM","2AM","3AM","4AM"] as const;
+    const LEVELS = ["1AM","2AM","3AM","4AM","1AS","2AS","3AS"] as const;
     const byLevel = LEVELS.map(niveau => {
       const g = all.filter(s => s.niveau === niveau);
       const ages = g.map(s => calcAge(s.dateNaissance)).filter((a): a is number => a !== null);

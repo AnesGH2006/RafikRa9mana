@@ -17,8 +17,11 @@ import {
 } from "recharts";
 
 const BASE = import.meta.env.BASE_URL;
-const LEVELS: Niveau[] = ["1AM", "2AM", "3AM", "4AM"];
-const LEVEL_LABELS: Record<Niveau, string> = { "1AM": "1ère AM", "2AM": "2ème AM", "3AM": "3ème AM", "4AM": "4ème AM" };
+const LEVELS: Niveau[] = ["1AM", "2AM", "3AM", "4AM", "1AS", "2AS", "3AS"];
+const LEVEL_LABELS: Record<Niveau, string> = {
+  "1AM": "1ère AM", "2AM": "2ème AM", "3AM": "3ème AM", "4AM": "4ème AM",
+  "1AS": "1ère AS", "2AS": "2ème AS", "3AS": "3ème AS",
+};
 const LEVEL_COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
 const GENDER_COLORS = ["#3b82f6", "#ec4899"];
 const ACADEMIC_YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024", "2022-2023"];

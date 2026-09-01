@@ -7,9 +7,6 @@ import {
   LogoutMobileSessionResponse,
 } from "../../shared/schemas.js";
 import { db, usersTable, schoolMembersTable } from "../../shared/db.js";
-// The server build provides Drizzle at runtime, but some editor configurations
-// do not include its type declarations in the project graph.
-// @ts-expect-error -- drizzle-orm is available in the server dependency graph
 import { and, eq, isNull } from "drizzle-orm";
 import {
   clearSession,

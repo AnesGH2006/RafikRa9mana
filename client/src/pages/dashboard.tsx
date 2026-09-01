@@ -23,6 +23,7 @@ const BASE = import.meta.env.BASE_URL;
 
 const LEVEL_LABELS: Record<Niveau, string> = {
   "1AM": "1 AM", "2AM": "2 AM", "3AM": "3 AM", "4AM": "4 AM",
+  "1AS": "1 AS", "2AS": "2 AS", "3AS": "3 AS",
 };
 
 function getAcademicYears(): string[] {

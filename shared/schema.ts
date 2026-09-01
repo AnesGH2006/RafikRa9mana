@@ -53,7 +53,7 @@ export const schoolInfoTable = pgTable("school_info", {
 export type SchoolInfo = typeof schoolInfoTable.$inferSelect;
 export type InsertSchoolInfo = typeof schoolInfoTable.$inferInsert;
 
-export const niveauEnum = pgEnum("niveau", ["1AM", "2AM", "3AM", "4AM"]);
+export const niveauEnum = pgEnum("niveau", ["1AM", "2AM", "3AM", "4AM", "1AS", "2AS", "3AS"]);
 export const sexeEnum = pgEnum("sexe", ["M", "F"]);
 export const statutEnum = pgEnum("statut_eleve", ["nouveau", "redoublant"]);
 export const resultatEnum = pgEnum("resultat_eleve", ["admis", "non_admis", "mustarrak"]);
@@ -240,7 +240,7 @@ export type InsertPushSubscription = typeof pushSubscriptionsTable.$inferInsert;
 
 // ─── SMS Dispatch Log ──────────────────────────────────────────────────────────
 export const smsStatusEnum = pgEnum("sms_status", ["sent", "failed", "queued", "no_phone"]);
-export const smsChannelEnum = pgEnum("sms_channel", ["gateway", "modem", "socket"]);
+export const smsChannelEnum = pgEnum("sms_channel", ["twilio", "gateway", "modem", "socket", "none"]);
 
 export const smsLogsTable = pgTable("sms_logs", {
   id:          varchar("id").primaryKey().default(sql`gen_random_uuid()`),

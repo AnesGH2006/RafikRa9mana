@@ -39,7 +39,8 @@ export interface SchoolInfo {
   smsGatewayApiKey?: string | null;
 }
 
-export type Niveau = "1AM" | "2AM" | "3AM" | "4AM";
+export type Niveau = "1AM" | "2AM" | "3AM" | "4AM" | "1AS" | "2AS" | "3AS";
+export type SchoolStage = "moyen" | "lycee";
 export type Sexe = "M" | "F";
 export type Statut = "nouveau" | "redoublant";
 export type Resultat = "admis" | "non_admis" | null;

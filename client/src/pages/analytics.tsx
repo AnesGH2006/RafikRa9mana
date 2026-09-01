@@ -28,7 +28,15 @@ function getAcademicYears(): string[] {
 
 const LEVEL_LABELS: Record<string, string> = {
   "1AM": "1 AM", "2AM": "2 AM", "3AM": "3 AM", "4AM": "4 AM",
+  "1AS": "1 AS", "2AS": "2 AS", "3AS": "3 AS",
 };
+
+const SCHOOL_STAGE_LABELS = {
+  moyen: "المتوسطة",
+  lycee: "الثانوي / lycée",
+} as const;
+
+type SchoolStage = keyof typeof SCHOOL_STAGE_LABELS;
 
 const GENDER_COLORS = ["#3b82f6", "#ec4899"];
 const LEVEL_COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
@@ -90,15 +98,14 @@ function useStats(year: string) {
 }
 
 // ── Comparison section ────────────────────────────────────────────────────────
-function ComparisonSection({ yearA, yearB }: { yearA: string; yearB: string }) {
+function ComparisonSection({ yearA, yearB, schoolStage }: { yearA: string; yearB: string; schoolStage: SchoolStage }) {
   const { stats: sA, loading: lA } = useStats(yearA);
   const { stats: sB, loading: lB } = useStats(yearB);
   const loading = lA || lB;
 
   const hasData = !loading && (sA?.total || sB?.total);
 
-  // Build per-level comparison data
-  const levels = ["1AM", "2AM", "3AM", "4AM"];
+  const levels = schoolStage === "lycee" ? ["1AS", "2AS", "3AS"] : ["1AM", "2AM", "3AM", "4AM"];
   const levelCompare = levels.map(lvl => {
     const la = sA?.byLevel.find(l => l.niveau === lvl);
     const lb = sB?.byLevel.find(l => l.niveau === lvl);
@@ -307,6 +314,7 @@ export default function AnalyticsPage() {
   const years = getAcademicYears();
 
   const [year, setYear] = useState(() => localStorage.getItem("cem-selected-year") || "2025-2026");
+  const [schoolStage, setSchoolStage] = useState<SchoolStage>(() => (localStorage.getItem("cem-school-stage") as SchoolStage) || "moyen");
   const [compareMode, setCompareMode] = useState(false);
   const [compareYear, setCompareYear] = useState(() => {
     const stored = localStorage.getItem("cem-selected-year") || "2025-2026";
@@ -317,28 +325,36 @@ export default function AnalyticsPage() {
   const { stats, loading } = useStats(year);
 
   useEffect(() => { localStorage.setItem("cem-selected-year", year); }, [year]);
+  useEffect(() => { localStorage.setItem("cem-school-stage", schoolStage); }, [schoolStage]);
+
+  const visibleLevels = schoolStage === "lycee" ? ["1AS", "2AS", "3AS"] : ["1AM", "2AM", "3AM", "4AM"];
+  const stageStats = stats?.byLevel.filter(l => visibleLevels.includes(l.niveau)) ?? [];
 
   const genderData = stats ? [
     { name: t("analytics.boys"), value: stats.boys },
     { name: t("analytics.girls"), value: stats.girls },
   ] : [];
 
-  const levelData = stats?.byLevel.map((l, i) => ({
+  const levelData = stageStats.map((l, i) => ({
     name: LEVEL_LABELS[l.niveau] || l.niveau,
     [t("analytics.boys")]: l.boys,
     [t("analytics.girls")]: l.girls,
     color: LEVEL_COLORS[i % LEVEL_COLORS.length],
-  })) || [];
+  }));
 
-  const successData = stats?.byLevel.filter(l => l.admis > 0 || l.nonAdmis > 0).map(l => ({
+  const successData = stageStats.filter(l => l.admis > 0 || l.nonAdmis > 0).map(l => ({
     name: LEVEL_LABELS[l.niveau] || l.niveau,
     [t("analytics.passed")]: l.admis,
     [t("analytics.failed")]: l.nonAdmis,
-  })) || [];
+  }));
 
-  const successRate = stats && (stats.admis + stats.nonAdmis) > 0
-    ? Math.round((stats.admis / (stats.admis + stats.nonAdmis)) * 100)
-    : null;
+  const stageTotal = stageStats.reduce((sum, l) => sum + l.total, 0);
+  const stagePassed = stageStats.reduce((sum, l) => sum + l.admis, 0);
+  const stageFailed = stageStats.reduce((sum, l) => sum + l.nonAdmis, 0);
+  const successRate = stageTotal > 0 ? Math.round((stagePassed / (stageTotal || 1)) * 100) : null;
+  const schoolAverage = stageStats.length > 0
+    ? (stageStats.reduce((sum, l) => sum + (l.avgAge ?? 0), 0) / stageStats.length).toFixed(1)
+    : "0.0";
 
   const radialData = successRate !== null
     ? [{ name: t("analytics.passed"), value: successRate, fill: "#10b981" }]
@@ -358,13 +374,24 @@ export default function AnalyticsPage() {
             </span>
             {t("analytics.title")}
           </h1>
-          <p className="text-xs text-muted-foreground mt-1 ms-11">{t("analytics.overview")}</p>
+          <p className="text-xs text-muted-foreground mt-1 ms-11">{SCHOOL_STAGE_LABELS[schoolStage]} · {t("analytics.overview")}</p>
         </motion.div>
 
         <motion.div
           className="flex flex-wrap items-center gap-2"
           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.1 }}
         >
+          <Select value={schoolStage} onValueChange={(value) => setSchoolStage(value as SchoolStage)}>
+            <SelectTrigger className="w-36 bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-0 shadow-lg shadow-cyan-500/25 font-semibold text-xs h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(SCHOOL_STAGE_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Select value={year} onValueChange={setYear}>
             <SelectTrigger className="w-40 bg-gradient-to-r from-violet-500 to-purple-600 text-white border-0 shadow-lg shadow-violet-500/25 font-semibold text-xs h-9">
               <SelectValue />
@@ -446,7 +473,7 @@ export default function AnalyticsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ComparisonSection yearA={year} yearB={compareYear} />
+                <ComparisonSection yearA={year} yearB={compareYear} schoolStage={schoolStage} />
               </CardContent>
             </Card>
           </motion.div>
@@ -480,9 +507,9 @@ export default function AnalyticsPage() {
             variants={{ animate: { transition: { staggerChildren: 0.07 } } }}
           >
             {[
-              { label: t("stats.total"), value: stats.total, icon: Users, bg: "from-blue-500 to-blue-700", shadow: "shadow-blue-500/30" },
-              { label: t("analytics.boys"), value: stats.boys, icon: Users, bg: "from-sky-500 to-cyan-600", shadow: "shadow-sky-500/30" },
-              { label: t("analytics.girls"), value: stats.girls, icon: Users, bg: "from-pink-500 to-rose-600", shadow: "shadow-pink-500/30" },
+              { label: t("stats.total"), value: stageTotal || stats.total, icon: Users, bg: "from-blue-500 to-blue-700", shadow: "shadow-blue-500/30" },
+              { label: t("analytics.boys"), value: stageStats.reduce((sum, l) => sum + l.boys, 0) || stats.boys, icon: Users, bg: "from-sky-500 to-cyan-600", shadow: "shadow-sky-500/30" },
+              { label: t("analytics.girls"), value: stageStats.reduce((sum, l) => sum + l.girls, 0) || stats.girls, icon: Users, bg: "from-pink-500 to-rose-600", shadow: "shadow-pink-500/30" },
               ...(successRate !== null ? [{
                 label: t("analytics.successRate"), value: successRate, icon: Award,
                 bg: "from-emerald-500 to-green-700", shadow: "shadow-emerald-500/30", suffix: "%",
@@ -557,11 +584,14 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="flex gap-4 text-xs mt-1">
                       <span className="flex items-center gap-1.5 text-emerald-600 font-semibold">
-                        <UserCheck className="w-3.5 h-3.5" />{stats.admis}
+                        <UserCheck className="w-3.5 h-3.5" />{stagePassed || stats.admis}
                       </span>
                       <span className="flex items-center gap-1.5 text-red-500 font-semibold">
-                        <UserX className="w-3.5 h-3.5" />{stats.nonAdmis}
+                        <UserX className="w-3.5 h-3.5" />{stageFailed || stats.nonAdmis}
                       </span>
+                    </div>
+                    <div className="mt-3 rounded-xl bg-muted/60 px-3 py-2 text-center text-[11px] text-muted-foreground">
+                      متوسط العمر في {SCHOOL_STAGE_LABELS[schoolStage]}: <span className="font-bold text-foreground">{schoolAverage} سنة</span>
                     </div>
                   </CardContent>
                 </Card>

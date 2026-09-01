@@ -1,4 +1,4 @@
-// Algerian middle school (CEM) subject coefficients
+// Algerian middle school (CEM) and lycée (secondary) subject coefficients
 // Source: Official Algerian Ministry of Education grading system
 
 export interface Subject {
@@ -7,6 +7,19 @@ export interface Subject {
   frLabel: string;
   coef: number;
 }
+
+const SUBJECTS_LYCEE: Subject[] = [
+  { key: "arabe", arLabel: "اللغة العربية", frLabel: "Langue Arabe", coef: 4 },
+  { key: "francais", arLabel: "اللغة الفرنسية", frLabel: "Langue Française", coef: 3 },
+  { key: "anglais", arLabel: "اللغة الإنجليزية", frLabel: "Langue Anglaise", coef: 2 },
+  { key: "maths", arLabel: "الرياضيات", frLabel: "Mathématiques", coef: 4 },
+  { key: "physique", arLabel: "العلوم الفيزيائية", frLabel: "Physique", coef: 3 },
+  { key: "svt", arLabel: "العلوم الطبيعية", frLabel: "SVT", coef: 3 },
+  { key: "histoire_geo", arLabel: "التاريخ والجغرافيا", frLabel: "Histoire-Géographie", coef: 2 },
+  { key: "islam", arLabel: "التربية الإسلامية", frLabel: "Éducation Islamique", coef: 2 },
+  { key: "civique", arLabel: "التربية المدنية", frLabel: "Éducation Civique", coef: 1 },
+  { key: "eps", arLabel: "التربية البدنية", frLabel: "EPS", coef: 1 },
+];
 
 // ── 1AM & 2AM ─────────────────────────────────────────────────────────────────
 const SUBJECTS_1_2AM: Subject[] = [
@@ -57,7 +70,7 @@ const SUBJECTS_4AM: Subject[] = [
 ];
 
 // ── Lookup ────────────────────────────────────────────────────────────────────
-export type Niveau = "1AM" | "2AM" | "3AM" | "4AM";
+export type Niveau = "1AM" | "2AM" | "3AM" | "4AM" | "1AS" | "2AS" | "3AS";
 
 export function getSubjectsForLevel(niveau: Niveau): Subject[] {
   switch (niveau) {
@@ -65,6 +78,9 @@ export function getSubjectsForLevel(niveau: Niveau): Subject[] {
     case "2AM": return SUBJECTS_1_2AM;
     case "3AM": return SUBJECTS_3AM;
     case "4AM": return SUBJECTS_4AM;
+    case "1AS":
+    case "2AS":
+    case "3AS": return SUBJECTS_LYCEE;
     default:    return SUBJECTS_3AM;
   }
 }
