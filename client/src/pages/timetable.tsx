@@ -118,9 +118,8 @@ function EditableField({ value, onSave, placeholder = "", className = "" }: {
 // FIXED:
 //   1. targets now seed to 0 (not 1) — nothing is scheduled unless the user
 //      explicitly asks for it.
-//   2. `teachers` is now a required prop, used to auto-match each subject to
-//      a teacher who is qualified to teach it (subjectsWithoutTeacher warns
-//      when no match exists).
+//   2. Teacher assignment is optional: subject generation does not require a
+//      teacher match, and the timetable can be created without entering one.
 //   3. The free-text "prompt" hint has been removed since the backend never
 //      read it — it was pure UI decoration that misled users into thinking
 //      their instructions were applied.
@@ -167,40 +166,16 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, teachers, annee, 
     return selectedClasses;
   }, [classInput, selectedClasses]);
 
-  // Map each subject to the first teacher qualified to teach it.
-  const teacherForSubject = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const t of teachers) {
-      for (const subj of t.subjects) {
-        if (!map[subj]) map[subj] = t.id;
-      }
-    }
-    return map;
-  }, [teachers]);
-
-  // Subjects the user wants (target > 0) that have no qualified teacher on file.
-  const subjectsWithoutTeacher = useMemo(
-    () => Object.keys(targets).filter(s => (targets[s] ?? 0) > 0 && !teacherForSubject[s]),
-    [targets, teacherForSubject],
-  );
-
   const generate = async () => {
     const activeSubjects = Object.entries(targets)
       .filter(([, count]) => count > 0)
       .map(([subject, count]) => ({
         subject,
         periods: count,
-        teacherId: teacherForSubject[subject] ?? null,
       }));
     if (!resolvedClasses.length || !activeSubjects.length || !selectedDays.length) {
       toast({ title: "شروط ناقصة", description: "أدخل الفوجات مثل 1AM1, 1AM2 أو اخترها ثم أضف مادة ويوماً واحداً على الأقل", variant: "destructive" });
       return;
-    }
-    if (subjectsWithoutTeacher.length > 0) {
-      toast({
-        title: "تنبيه",
-        description: `لا يوجد أستاذ مطابق لـ: ${subjectsWithoutTeacher.join("، ")} — ستُجدول بدون أستاذ`,
-      });
     }
     const blockedSlots = blocked.split(/[\s,;]+/).filter(Boolean).map(value => {
       const [day, period] = value.split(":").map(Number);
@@ -258,25 +233,13 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, teachers, annee, 
           <label className="flex items-center gap-1 ms-auto"><input type="checkbox" checked={spread} onChange={e => setSpread(e.target.checked)} />تجنب تكرار المادة متتالياً</label>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-40 overflow-y-auto">
-          {subjects.map(subject => {
-            const wanted = (targets[subject] ?? 0) > 0;
-            const missingTeacher = wanted && !teacherForSubject[subject];
-            return (
-              <label key={subject} className="text-xs flex items-center gap-2">
-                <span className={`truncate flex-1 ${missingTeacher ? "text-amber-600 dark:text-amber-400" : ""}`} title={missingTeacher ? "لا يوجد أستاذ مطابق لهذه المادة" : undefined}>
-                  {subject}{missingTeacher && " ⚠️"}
-                </span>
-                <input type="number" min="0" max="30" value={targets[subject] ?? 0} onChange={e => setTargets(current => ({ ...current, [subject]: Number(e.target.value) || 0 }))} className="w-14 rounded border px-1.5 py-1 bg-background" />
-              </label>
-            );
-          })}
+          {subjects.map(subject => (
+            <label key={subject} className="text-xs flex items-center gap-2">
+              <span className="truncate flex-1">{subject}</span>
+              <input type="number" min="0" max="30" value={targets[subject] ?? 0} onChange={e => setTargets(current => ({ ...current, [subject]: Number(e.target.value) || 0 }))} className="w-14 rounded border px-1.5 py-1 bg-background" />
+            </label>
+          ))}
         </div>
-        {subjectsWithoutTeacher.length > 0 && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 text-amber-700 dark:text-amber-400 text-xs">
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <span>لا يوجد أستاذ مطابق لـ: {subjectsWithoutTeacher.join("، ")} — تحقق من صفحة الأساتذة أو ستُجدول الحصص بدون أستاذ</span>
-          </div>
-        )}
         <div className="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={onClose}>إلغاء</Button><Button size="sm" onClick={generate} disabled={generating} className="gap-2">{generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} توليد الجدول</Button></div>
       </CardContent>
     </Card>
