@@ -47,6 +47,39 @@ const CEM_SUBJECTS = [
   "الفيزياء", "اللغة الإنجليزية",
 ];
 
+const LYCEE_SUBJECTS = [
+  "اللغة العربية", "اللغة الفرنسية", "الرياضيات", "الفيزياء", "الكيمياء",
+  "الأحياء", "الإنجليزية", "التاريخ والجغرافيا", "الفلسفة", "الإعلام الآلي",
+  "التربية الإسلامية", "التربية البدنية", "التربية المدنية", "الاقتصاد",
+  "العلوم الاجتماعية", "العلوم الطبيعية", "الفنون", "اللغة الأمازيغية",
+];
+
+const CEM_CLASS_DEFAULTS = ["1AM1", "1AM2", "2AM1", "2AM2", "3AM1", "3AM2", "4AM1", "4AM2"];
+const LYCEE_CLASS_DEFAULTS = ["1AS1", "1AS2", "2AS1", "2AS2", "3AS1", "3AS2"];
+
+function getStageSubjects(stage: "moyen" | "lycee") {
+  return stage === "lycee" ? LYCEE_SUBJECTS : CEM_SUBJECTS;
+}
+
+function getStageClasses(stage: "moyen" | "lycee") {
+  return stage === "lycee" ? LYCEE_CLASS_DEFAULTS : CEM_CLASS_DEFAULTS;
+}
+
+function filterClassesForStage(stage: "moyen" | "lycee", rawClasses: string[]) {
+  const defaults = getStageClasses(stage);
+  if (!rawClasses.length) return defaults;
+
+  const filtered = rawClasses.filter((classe) => {
+    const normalized = classe.trim();
+    if (!normalized) return false;
+    const isLycee = /AS/i.test(normalized);
+    const isCem = /AM/i.test(normalized);
+    return stage === "lycee" ? isLycee : isCem;
+  });
+
+  return filtered.length ? filtered : rawClasses;
+}
+
 const parseClassList = (raw: string): string[] => {
   const cleaned = raw
     .replace(/[\r\n]+/g, " ")
@@ -258,7 +291,12 @@ export default function TimetablePage() {
   const [rooms,    setRooms]    = useState<Room[]>([]);
   const [slots,    setSlots]    = useState<Slot[]>([]);
   const [classes,  setClasses]  = useState<string[]>([]);
-  const [availableSubjects, setAvailableSubjects] = useState<string[]>(CEM_SUBJECTS);
+  const [schoolStage, setSchoolStage] = useState<"moyen" | "lycee">(() => {
+    if (typeof window === "undefined") return "moyen";
+    const stored = window.localStorage.getItem("selected-school-stage") || window.localStorage.getItem("cem-school-stage");
+    return stored === "lycee" ? "lycee" : "moyen";
+  });
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>(() => getStageSubjects("moyen"));
   const [conflictIds, setConflictIds] = useState<Set<string>>(new Set());
 
   // Filters
@@ -296,11 +334,13 @@ export default function TimetablePage() {
   const fetchClasses = useCallback(async () => {
     const res = await fetch(`${BASE}api/timetable/classes?annee=${encodeURIComponent(annee)}`, { credentials: "include" });
     if (res.ok) {
-      const list: string[] = await res.json();
+      const list: string[] = filterClassesForStage(schoolStage, await res.json());
       setClasses(list);
-      if (list.length > 0 && !activeClasse) setActiveClasse(list[0]!);
+      if (list.length > 0 && (!activeClasse || !list.includes(activeClasse))) {
+        setActiveClasse(list[0]!);
+      }
     }
-  }, [annee, activeClasse]);
+  }, [annee, activeClasse, schoolStage]);
 
   const fetchSlots = useCallback(async () => {
     if (!activeClasse) return;
@@ -310,8 +350,9 @@ export default function TimetablePage() {
       if (res.ok) {
         const loadedSlots: Slot[] = await res.json();
         setSlots(loadedSlots);
+        const baseSubjects = getStageSubjects(schoolStage);
         setAvailableSubjects(current => [...new Set([
-          ...CEM_SUBJECTS,
+          ...baseSubjects,
           ...current,
           ...loadedSlots.map(slot => slot.subject).filter(Boolean),
         ])]);
@@ -323,11 +364,22 @@ export default function TimetablePage() {
         setConflictIds(new Set(cd.conflictingSlotIds as string[]));
       }
     } finally { setLoadingSlots(false); }
-  }, [annee, activeClasse]);
+  }, [annee, activeClasse, schoolStage]);
 
-  useEffect(() => { fetchTeachers(); fetchRooms(); fetchClasses(); }, []);
-  useEffect(() => { fetchClasses(); }, [annee]);
-  useEffect(() => { fetchSlots(); }, [activeClasse, annee]);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("selected-school-stage", schoolStage);
+      window.localStorage.setItem("cem-school-stage", schoolStage);
+    }
+  }, [schoolStage]);
+
+  useEffect(() => {
+    setAvailableSubjects(current => [...new Set([...getStageSubjects(schoolStage), ...current])]);
+  }, [schoolStage]);
+
+  useEffect(() => { fetchTeachers(); fetchRooms(); fetchClasses(); }, [fetchClasses]);
+  useEffect(() => { fetchClasses(); }, [annee, fetchClasses]);
+  useEffect(() => { fetchSlots(); }, [activeClasse, annee, schoolStage]);
 
   // ── Slot helpers ──────────────────────────────────────────────────────────────
   const getSlot = (day: number, period: number) =>
@@ -383,7 +435,12 @@ export default function TimetablePage() {
           <h1 className="text-xl font-extrabold">جدول الأوقات وتنظيم الأساتذة</h1>
           <p className="text-xs text-muted-foreground mt-0.5">بناء الجداول الزمنية، توزيع الأساتذة والقاعات، كشف التعارضات</p>
         </div>
-        <div className="ms-auto">
+        <div className="ms-auto flex items-center gap-2">
+          <select value={schoolStage} onChange={e => setSchoolStage(e.target.value as "moyen" | "lycee")}
+            className="text-xs px-2.5 py-1.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-cyan-500/30">
+            <option value="moyen">CEM / المتوسطة</option>
+            <option value="lycee">Lycée / الثانوي</option>
+          </select>
           <select value={annee} onChange={e => setAnnee(e.target.value)}
             className="text-xs px-2.5 py-1.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-cyan-500/30">
             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
@@ -607,6 +664,7 @@ export default function TimetablePage() {
             teachers={teachers}
             rooms={rooms}
             subjects={availableSubjects}
+            schoolStage={schoolStage}
             onClose={() => setSlotModal(null)}
             onSave={async (data) => {
               const method = slotModal.slot ? "PUT" : "POST";
@@ -997,11 +1055,12 @@ function PrintPanel({ classes, annee, teachers, rooms, slots, activeClasse, onCl
 }
 
 // ── Slot Modal ────────────────────────────────────────────────────────────────
-function SlotModal({ day, period, slot, classe, annee, teachers, rooms, subjects, onClose, onSave }: {
+function SlotModal({ day, period, slot, classe, annee, teachers, rooms, subjects, schoolStage, onClose, onSave }: {
   day: number; period: number; slot?: Slot;
   classe: string; annee: string;
   teachers: Teacher[]; rooms: Room[];
   subjects: string[];
+  schoolStage: "moyen" | "lycee";
   onClose: () => void;
   onSave: (data: { subject: string; teacherId?: string; roomId?: string; notes?: string }) => void;
 }) {
@@ -1043,7 +1102,7 @@ function SlotModal({ day, period, slot, classe, annee, teachers, rooms, subjects
               <option value="">— اختر أو اكتب —</option>
               {subjects.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            {!CEM_SUBJECTS.includes(subject) && (
+            {!getStageSubjects(schoolStage).includes(subject) && (
               <input value={subject} onChange={e => setSubject(e.target.value)}
                 placeholder="أو أدخل اسم المادة مباشرة"
                 className="w-full text-sm px-3 py-1.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-cyan-500/30 mt-1" />
