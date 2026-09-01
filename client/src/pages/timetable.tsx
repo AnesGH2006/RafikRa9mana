@@ -47,39 +47,6 @@ const CEM_SUBJECTS = [
   "الفيزياء", "اللغة الإنجليزية",
 ];
 
-const LYCEE_SUBJECTS = [
-  "اللغة العربية", "اللغة الفرنسية", "الرياضيات", "الفيزياء", "الكيمياء",
-  "الأحياء", "الإنجليزية", "التاريخ والجغرافيا", "الفلسفة", "الإعلام الآلي",
-  "التربية الإسلامية", "التربية البدنية", "التربية المدنية", "الاقتصاد",
-  "العلوم الاجتماعية", "العلوم الطبيعية", "الفنون", "اللغة الأمازيغية",
-];
-
-const CEM_CLASS_DEFAULTS = ["1AM1", "1AM2", "2AM1", "2AM2", "3AM1", "3AM2", "4AM1", "4AM2"];
-const LYCEE_CLASS_DEFAULTS = ["1AS1", "1AS2", "2AS1", "2AS2", "3AS1", "3AS2"];
-
-function getStageSubjects(stage: "moyen" | "lycee") {
-  return stage === "lycee" ? LYCEE_SUBJECTS : CEM_SUBJECTS;
-}
-
-function getStageClasses(stage: "moyen" | "lycee") {
-  return stage === "lycee" ? LYCEE_CLASS_DEFAULTS : CEM_CLASS_DEFAULTS;
-}
-
-function filterClassesForStage(stage: "moyen" | "lycee", rawClasses: string[]) {
-  const defaults = getStageClasses(stage);
-  if (!rawClasses.length) return defaults;
-
-  const filtered = rawClasses.filter((classe) => {
-    const normalized = classe.trim();
-    if (!normalized) return false;
-    const isLycee = /AS/i.test(normalized);
-    const isCem = /AM/i.test(normalized);
-    return stage === "lycee" ? isLycee : isCem;
-  });
-
-  return filtered.length ? filtered : rawClasses;
-}
-
 const parseClassList = (raw: string): string[] => {
   const cleaned = raw
     .replace(/[\r\n]+/g, " ")
@@ -148,14 +115,23 @@ function EditableField({ value, onSave, placeholder = "", className = "" }: {
 }
 
 // ── Timetable Generator Panel ───────────────────────────────────────────────
-// FIXED:
-//   1. targets now seed to 0 (not 1) — nothing is scheduled unless the user
-//      explicitly asks for it.
-//   2. Teacher assignment is optional: subject generation does not require a
-//      teacher match, and the timetable can be created without entering one.
-//   3. The free-text "prompt" hint has been removed since the backend never
-//      read it — it was pure UI decoration that misled users into thinking
-//      their instructions were applied.
+// Generates for ALL classes across ALL levels in a single backend call, so
+// teacher/room consistency is guaranteed across the whole school (the
+// generator tracks busy slots globally, not per-class).
+//
+//   • Each level (1AM, 2AM, 3AM, 4AM, ...) gets its own curriculum
+//     (subject → periods/week), since levels don't share the same program.
+//   • Each subject is auto-matched to the first teacher qualified to teach
+//     it (via Teacher.subjects); unmatched subjects are flagged before
+//     generating.
+//   • Each teacher can be marked unavailable on specific day/period cells —
+//     this is the "director's instructions" layer — which is sent as
+//     rules.teacherAvailability and enforced by the generator.
+const getLevel = (classe: string): string => {
+  const match = classe.match(/^([0-9]+[A-Za-z]+)/);
+  return match ? match[1]!.toUpperCase() : classe;
+};
+
 function TimetableGeneratorPanel({ classes, subjects, roomIds, teachers, annee, onClose, onDone }: {
   classes: string[];
   subjects: string[];
@@ -166,61 +142,144 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, teachers, annee, 
   onDone: () => Promise<void>;
 }) {
   const { toast } = useToast();
-  const [selectedClasses, setSelectedClasses] = useState<string[]>(classes);
-  const [classInput, setClassInput] = useState(classes.join(", "));
+
+  const levels = useMemo(
+    () => Array.from(new Set(classes.map(getLevel))).sort(),
+    [classes],
+  );
+  const [selectedLevels, setSelectedLevels] = useState<string[]>(levels);
+  const [activeLevelTab, setActiveLevelTab] = useState<string>(levels[0] ?? "");
+
+  useEffect(() => {
+    setSelectedLevels(levels);
+    if (!levels.includes(activeLevelTab)) setActiveLevelTab(levels[0] ?? "");
+  }, [levels]);
+
   const [periods, setPeriods] = useState(6);
   const [maxDaily, setMaxDaily] = useState(6);
   const [selectedDays, setSelectedDays] = useState([0, 1, 2, 3, 4]);
   const [blocked, setBlocked] = useState("");
   const [spread, setSpread] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [targets, setTargets] = useState<Record<string, number>>(() =>
-    Object.fromEntries(subjects.map(subject => [subject, 0])),
-  );
+
+  // Per-level curriculum: { level: { subject: periods/week } }
+  const [levelTargets, setLevelTargets] = useState<Record<string, Record<string, number>>>({});
 
   useEffect(() => {
-    setSelectedClasses(classes);
-    setClassInput(classes.join(", "));
-    setTargets(current => {
-      const seeded = Object.fromEntries(subjects.map(subject => [subject, current[subject] ?? 0]));
-      return { ...current, ...seeded };
+    setLevelTargets(current => {
+      const next = { ...current };
+      for (const level of levels) {
+        const existing = next[level] ?? {};
+        next[level] = Object.fromEntries(subjects.map(s => [s, existing[s] ?? 0]));
+      }
+      return next;
     });
-  }, [classes, subjects]);
+  }, [levels, subjects]);
 
-  const toggleClass = (classe: string) => setSelectedClasses(current =>
-    current.includes(classe) ? current.filter(item => item !== classe) : [...current, classe],
+  const toggleLevel = (level: string) => setSelectedLevels(current =>
+    current.includes(level) ? current.filter(l => l !== level) : [...current, level],
   );
   const toggleDay = (day: number) => setSelectedDays(current =>
     current.includes(day) ? current.filter(item => item !== day) : [...current, day].sort(),
   );
 
-  const resolvedClasses = useMemo(() => {
-    if (classInput.trim()) return parseClassList(classInput);
-    return selectedClasses;
-  }, [classInput, selectedClasses]);
+  const updateLevelTarget = (level: string, subject: string, value: number) =>
+    setLevelTargets(current => ({
+      ...current,
+      [level]: { ...current[level], [subject]: Math.max(0, value) },
+    }));
+
+  // ── Teacher availability ────────────────────────────────────────────────
+  // Default: fully available. Only teachers with at least one cell marked
+  // unavailable get a constraint sent to the backend.
+  const [expandedTeacherId, setExpandedTeacherId] = useState<string | null>(null);
+  const [teacherUnavailable, setTeacherUnavailable] = useState<Record<string, Set<string>>>({});
+
+  const toggleTeacherSlot = (teacherId: string, day: number, period: number) => {
+    setTeacherUnavailable(current => {
+      const key = `${day}:${period}`;
+      const set = new Set(current[teacherId] ?? []);
+      if (set.has(key)) set.delete(key); else set.add(key);
+      return { ...current, [teacherId]: set };
+    });
+  };
+
+  // subject → teacherId (first qualified teacher, regardless of level)
+  const teacherForSubject = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const t of teachers) {
+      for (const subj of t.subjects) {
+        if (!map[subj]) map[subj] = t.id;
+      }
+    }
+    return map;
+  }, [teachers]);
+
+  const subjectsWithoutTeacher = useMemo(() => {
+    const set = new Set<string>();
+    for (const level of selectedLevels) {
+      for (const [subject, count] of Object.entries(levelTargets[level] ?? {})) {
+        if (count > 0 && !teacherForSubject[subject]) set.add(subject);
+      }
+    }
+    return [...set];
+  }, [levelTargets, selectedLevels, teacherForSubject]);
+
+  const levelsWithNoSubjects = useMemo(
+    () => selectedLevels.filter(level =>
+      !Object.values(levelTargets[level] ?? {}).some(count => count > 0)),
+    [levelTargets, selectedLevels],
+  );
 
   const generate = async () => {
-    const activeSubjects = Object.entries(targets)
-      .filter(([, count]) => count > 0)
-      .map(([subject, count]) => ({
-        subject,
-        periods: count,
-      }));
-    if (!resolvedClasses.length || !activeSubjects.length || !selectedDays.length) {
-      toast({ title: "شروط ناقصة", description: "أدخل الفوجات مثل 1AM1, 1AM2 أو اخترها ثم أضف مادة ويوماً واحداً على الأقل", variant: "destructive" });
+    const includedClasses = classes.filter(c => selectedLevels.includes(getLevel(c)));
+    const classesPayload = includedClasses.map(classe => {
+      const level = getLevel(classe);
+      const activeSubjects = Object.entries(levelTargets[level] ?? {})
+        .filter(([, count]) => count > 0)
+        .map(([subject, count]) => ({
+          subject,
+          periods: count,
+          teacherId: teacherForSubject[subject] ?? null,
+        }));
+      return { classe, subjects: activeSubjects };
+    }).filter(entry => entry.subjects.length > 0);
+
+    if (!classesPayload.length || !selectedDays.length) {
+      toast({ title: "شروط ناقصة", description: "حدد حجماً ساعياً لمادة واحدة على الأقل في مستوى واحد على الأقل، ويوماً واحداً على الأقل", variant: "destructive" });
       return;
     }
+    if (subjectsWithoutTeacher.length > 0) {
+      toast({ title: "تنبيه", description: `لا يوجد أستاذ مطابق لـ: ${subjectsWithoutTeacher.join("، ")} — ستُجدول بدون أستاذ` });
+    }
+
     const blockedSlots = blocked.split(/[\s,;]+/).filter(Boolean).map(value => {
       const [day, period] = value.split(":").map(Number);
       return { day, period };
     }).filter(slot => Number.isInteger(slot.day) && Number.isInteger(slot.period));
+
+    // Invert "marked unavailable" cells into the allowed-slots list the
+    // backend expects. Teachers with no marked cells are omitted entirely,
+    // which the generator treats as "always available".
+    const teacherAvailability: Record<string, Array<{ day: number; period: number }>> = {};
+    for (const [teacherId, unavailable] of Object.entries(teacherUnavailable)) {
+      if (unavailable.size === 0) continue;
+      const allowed: Array<{ day: number; period: number }> = [];
+      for (const day of selectedDays) {
+        for (let period = 0; period < periods; period += 1) {
+          if (!unavailable.has(`${day}:${period}`)) allowed.push({ day, period });
+        }
+      }
+      teacherAvailability[teacherId] = allowed;
+    }
+
     setGenerating(true);
     try {
       const res = await fetch(`${BASE}api/timetable/generate`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           annee,
-          classes: resolvedClasses.map((classe: string) => ({ classe, subjects: activeSubjects })),
+          classes: classesPayload,
           roomIds,
           replace: true,
           rules: {
@@ -229,12 +288,16 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, teachers, annee, 
             maxDailyPeriodsPerClass: maxDaily,
             avoidConsecutiveSameSubject: spread,
             blockedSlots,
+            ...(Object.keys(teacherAvailability).length > 0 ? { teacherAvailability } : {}),
           },
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok && res.status !== 207) throw new Error(data.error ?? "فشل التوليد");
-      toast({ title: `تم توليد ${data.generated?.length ?? 0} حصة`, description: data.unscheduled?.length ? `تعذر جدولة ${data.unscheduled.length} حصة` : "تم تطبيق كل الشروط" });
+      toast({
+        title: `تم توليد ${data.generated?.length ?? 0} حصة عبر ${classesPayload.length} قسم`,
+        description: data.unscheduled?.length ? `تعذر جدولة ${data.unscheduled.length} حصة` : "تم تطبيق كل الشروط لكل الأقسام والمستويات",
+      });
       await onDone();
     } catch (error) {
       toast({ title: "فشل التوليد", description: error instanceof Error ? error.message : "تعذر إنشاء الجدول", variant: "destructive" });
@@ -245,35 +308,145 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, teachers, annee, 
     <Card className="border-cyan-200 dark:border-cyan-900">
       <CardContent className="p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <div><h2 className="font-bold">توليد جدول وفق الشروط</h2><p className="text-xs text-muted-foreground">سيتم استبدال جدول السنة المحددة للحصص المختارة</p></div>
+          <div>
+            <h2 className="font-bold">توليد جدول شامل لكل الأقسام والمستويات</h2>
+            <p className="text-xs text-muted-foreground">سيتم استبدال جدول السنة {annee} لكل الأقسام المختارة أدناه، بشكل متناسق (بدون تعارض أستاذ أو قاعة بين الأقسام)</p>
+          </div>
           <button onClick={onClose} aria-label="إغلاق"><X className="w-4 h-4" /></button>
         </div>
-        <div className="space-y-2">
-          <label className="block text-xs font-semibold text-muted-foreground">الفوجات</label>
-          <input value={classInput} onChange={e => setClassInput(e.target.value)} placeholder="1AM1, 1AM2, 1AM3, 2AM1" className="w-full rounded-lg border px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-cyan-500/30" />
+
+        {/* Levels */}
+        <div className="space-y-1.5">
+          <label className="block text-xs font-semibold text-muted-foreground">المستويات المشمولة بالتوليد</label>
+          <div className="flex flex-wrap gap-2">
+            {levels.map(level => (
+              <button key={level} onClick={() => toggleLevel(level)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${selectedLevels.includes(level) ? "bg-cyan-500 text-white border-cyan-500" : "bg-background"}`}>
+                {level} ({classes.filter(c => getLevel(c) === level).length} أقسام)
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {classes.map(classe => <button key={classe} onClick={() => toggleClass(classe)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${selectedClasses.includes(classe) ? "bg-cyan-500 text-white border-cyan-500" : "bg-background"}`}>{classe}</button>)}
-        </div>
+
+        {/* Global rules */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <label>حصص/يوم<input type="number" min="1" max="10" value={periods} onChange={e => setPeriods(Number(e.target.value) || 1)} className="mt-1 w-full rounded-lg border px-2 py-1.5 bg-background" /></label>
-          <label>الحد الأقصى للفوج<input type="number" min="1" max="10" value={maxDaily} onChange={e => setMaxDaily(Number(e.target.value) || 1)} className="mt-1 w-full rounded-lg border px-2 py-1.5 bg-background" /></label>
-          <label className="col-span-2">خانات ممنوعة (اليوم:الحصة)<input value={blocked} onChange={e => setBlocked(e.target.value)} placeholder="0:5, 2:0" className="mt-1 w-full rounded-lg border px-2 py-1.5 bg-background" dir="ltr" /></label>
+          <label>الحد الأقصى للقسم/يوم<input type="number" min="1" max="10" value={maxDaily} onChange={e => setMaxDaily(Number(e.target.value) || 1)} className="mt-1 w-full rounded-lg border px-2 py-1.5 bg-background" /></label>
+          <label className="col-span-2">خانات ممنوعة على الجميع (اليوم:الحصة)<input value={blocked} onChange={e => setBlocked(e.target.value)} placeholder="0:5, 2:0" className="mt-1 w-full rounded-lg border px-2 py-1.5 bg-background" dir="ltr" /></label>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <span className="font-semibold">أيام العمل:</span>
           {["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس"].map((day, index) => <label key={day} className="flex items-center gap-1"><input type="checkbox" checked={selectedDays.includes(index)} onChange={() => toggleDay(index)} />{day}</label>)}
           <label className="flex items-center gap-1 ms-auto"><input type="checkbox" checked={spread} onChange={e => setSpread(e.target.checked)} />تجنب تكرار المادة متتالياً</label>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-40 overflow-y-auto">
-          {subjects.map(subject => (
-            <label key={subject} className="text-xs flex items-center gap-2">
-              <span className="truncate flex-1">{subject}</span>
-              <input type="number" min="0" max="30" value={targets[subject] ?? 0} onChange={e => setTargets(current => ({ ...current, [subject]: Number(e.target.value) || 0 }))} className="w-14 rounded border px-1.5 py-1 bg-background" />
-            </label>
-          ))}
+
+        {/* Per-level curriculum */}
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold text-muted-foreground">المنهاج (حصة/أسبوع) لكل مستوى</label>
+          <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit flex-wrap">
+            {levels.map(level => (
+              <button key={level} onClick={() => setActiveLevelTab(level)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  activeLevelTab === level ? "bg-background shadow-sm" : "text-muted-foreground"
+                } ${levelsWithNoSubjects.includes(level) && selectedLevels.includes(level) ? "ring-1 ring-amber-400" : ""}`}>
+                {level}
+              </button>
+            ))}
+          </div>
+          {activeLevelTab && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-40 overflow-y-auto border rounded-lg p-2">
+              {subjects.map(subject => {
+                const target = levelTargets[activeLevelTab]?.[subject] ?? 0;
+                const missingTeacher = target > 0 && !teacherForSubject[subject];
+                return (
+                  <label key={subject} className="text-xs flex items-center gap-2">
+                    <span className={`truncate flex-1 ${missingTeacher ? "text-amber-600 dark:text-amber-400" : ""}`} title={missingTeacher ? "لا يوجد أستاذ مطابق" : undefined}>
+                      {subject}{missingTeacher && " ⚠️"}
+                    </span>
+                    <input type="number" min="0" max="30" value={target}
+                      onChange={e => updateLevelTarget(activeLevelTab, subject, Number(e.target.value) || 0)}
+                      className="w-14 rounded border px-1.5 py-1 bg-background" />
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {levelsWithNoSubjects.length > 0 && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400">مستويات بدون منهاج محدد بعد: {levelsWithNoSubjects.join("، ")} — لن تُولّد لها حصص</p>
+          )}
         </div>
-        <div className="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={onClose}>إلغاء</Button><Button size="sm" onClick={generate} disabled={generating} className="gap-2">{generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} توليد الجدول</Button></div>
+
+        {/* Teacher availability — "director's instructions" per teacher */}
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold text-muted-foreground">توفر الأساتذة (تعليمات المدير الخاصة بكل أستاذ)</label>
+          <div className="border rounded-lg divide-y max-h-52 overflow-y-auto">
+            {teachers.map(t => {
+              const unavailable = teacherUnavailable[t.id] ?? new Set<string>();
+              const isExpanded = expandedTeacherId === t.id;
+              return (
+                <div key={t.id}>
+                  <button onClick={() => setExpandedTeacherId(isExpanded ? null : t.id)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-muted/30">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
+                      {t.name}
+                      {unavailable.size > 0 && <span className="text-amber-600 dark:text-amber-400">({unavailable.size} خانة محظورة)</span>}
+                    </span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                  </button>
+                  {isExpanded && (
+                    <div className="p-2 bg-muted/20 overflow-x-auto">
+                      <table className="text-[10px] border-collapse mx-auto">
+                        <thead>
+                          <tr>
+                            <th className="px-1"></th>
+                            {selectedDays.map(day => <th key={day} className="px-1.5 py-1 font-semibold">{DAYS_AR[day]}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Array.from({ length: periods }, (_, period) => (
+                            <tr key={period}>
+                              <td className="px-1 font-semibold text-muted-foreground">{PERIODS[period]?.label ?? period + 1}</td>
+                              {selectedDays.map(day => {
+                                const key = `${day}:${period}`;
+                                const isUnavailable = unavailable.has(key);
+                                return (
+                                  <td key={day} className="p-0.5">
+                                    <button onClick={() => toggleTeacherSlot(t.id, day, period)}
+                                      className={`w-6 h-6 rounded ${isUnavailable ? "bg-red-400 dark:bg-red-700" : "bg-emerald-200 dark:bg-emerald-900"}`}
+                                      title={isUnavailable ? "غير متاح" : "متاح"} />
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <p className="text-[10px] text-muted-foreground text-center mt-1">اضغط لتبديل: أخضر = متاح، أحمر = غير متاح</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {teachers.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4">لا يوجد أساتذة مضافون بعد</p>
+            )}
+          </div>
+        </div>
+
+        {subjectsWithoutTeacher.length > 0 && (
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 text-amber-700 dark:text-amber-400 text-xs">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>لا يوجد أستاذ مطابق لـ: {subjectsWithoutTeacher.join("، ")} عبر كل المستويات — تحقق من صفحة الأساتذة أو ستُجدول الحصص بدون أستاذ</span>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose}>إلغاء</Button>
+          <Button size="sm" onClick={generate} disabled={generating} className="gap-2">
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} توليد لكل الأقسام والمستويات
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -291,12 +464,7 @@ export default function TimetablePage() {
   const [rooms,    setRooms]    = useState<Room[]>([]);
   const [slots,    setSlots]    = useState<Slot[]>([]);
   const [classes,  setClasses]  = useState<string[]>([]);
-  const [schoolStage, setSchoolStage] = useState<"moyen" | "lycee">(() => {
-    if (typeof window === "undefined") return "moyen";
-    const stored = window.localStorage.getItem("selected-school-stage") || window.localStorage.getItem("cem-school-stage");
-    return stored === "lycee" ? "lycee" : "moyen";
-  });
-  const [availableSubjects, setAvailableSubjects] = useState<string[]>(() => getStageSubjects("moyen"));
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>(CEM_SUBJECTS);
   const [conflictIds, setConflictIds] = useState<Set<string>>(new Set());
 
   // Filters
@@ -334,13 +502,11 @@ export default function TimetablePage() {
   const fetchClasses = useCallback(async () => {
     const res = await fetch(`${BASE}api/timetable/classes?annee=${encodeURIComponent(annee)}`, { credentials: "include" });
     if (res.ok) {
-      const list: string[] = filterClassesForStage(schoolStage, await res.json());
+      const list: string[] = await res.json();
       setClasses(list);
-      if (list.length > 0 && (!activeClasse || !list.includes(activeClasse))) {
-        setActiveClasse(list[0]!);
-      }
+      if (list.length > 0 && !activeClasse) setActiveClasse(list[0]!);
     }
-  }, [annee, activeClasse, schoolStage]);
+  }, [annee, activeClasse]);
 
   const fetchSlots = useCallback(async () => {
     if (!activeClasse) return;
@@ -350,9 +516,8 @@ export default function TimetablePage() {
       if (res.ok) {
         const loadedSlots: Slot[] = await res.json();
         setSlots(loadedSlots);
-        const baseSubjects = getStageSubjects(schoolStage);
         setAvailableSubjects(current => [...new Set([
-          ...baseSubjects,
+          ...CEM_SUBJECTS,
           ...current,
           ...loadedSlots.map(slot => slot.subject).filter(Boolean),
         ])]);
@@ -364,22 +529,11 @@ export default function TimetablePage() {
         setConflictIds(new Set(cd.conflictingSlotIds as string[]));
       }
     } finally { setLoadingSlots(false); }
-  }, [annee, activeClasse, schoolStage]);
+  }, [annee, activeClasse]);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("selected-school-stage", schoolStage);
-      window.localStorage.setItem("cem-school-stage", schoolStage);
-    }
-  }, [schoolStage]);
-
-  useEffect(() => {
-    setAvailableSubjects(current => [...new Set([...getStageSubjects(schoolStage), ...current])]);
-  }, [schoolStage]);
-
-  useEffect(() => { fetchTeachers(); fetchRooms(); fetchClasses(); }, [fetchClasses]);
-  useEffect(() => { fetchClasses(); }, [annee, fetchClasses]);
-  useEffect(() => { fetchSlots(); }, [activeClasse, annee, schoolStage]);
+  useEffect(() => { fetchTeachers(); fetchRooms(); fetchClasses(); }, []);
+  useEffect(() => { fetchClasses(); }, [annee]);
+  useEffect(() => { fetchSlots(); }, [activeClasse, annee]);
 
   // ── Slot helpers ──────────────────────────────────────────────────────────────
   const getSlot = (day: number, period: number) =>
@@ -435,12 +589,7 @@ export default function TimetablePage() {
           <h1 className="text-xl font-extrabold">جدول الأوقات وتنظيم الأساتذة</h1>
           <p className="text-xs text-muted-foreground mt-0.5">بناء الجداول الزمنية، توزيع الأساتذة والقاعات، كشف التعارضات</p>
         </div>
-        <div className="ms-auto flex items-center gap-2">
-          <select value={schoolStage} onChange={e => setSchoolStage(e.target.value as "moyen" | "lycee")}
-            className="text-xs px-2.5 py-1.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-cyan-500/30">
-            <option value="moyen">CEM / المتوسطة</option>
-            <option value="lycee">Lycée / الثانوي</option>
-          </select>
+        <div className="ms-auto">
           <select value={annee} onChange={e => setAnnee(e.target.value)}
             className="text-xs px-2.5 py-1.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-cyan-500/30">
             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
@@ -664,7 +813,6 @@ export default function TimetablePage() {
             teachers={teachers}
             rooms={rooms}
             subjects={availableSubjects}
-            schoolStage={schoolStage}
             onClose={() => setSlotModal(null)}
             onSave={async (data) => {
               const method = slotModal.slot ? "PUT" : "POST";
@@ -1055,12 +1203,11 @@ function PrintPanel({ classes, annee, teachers, rooms, slots, activeClasse, onCl
 }
 
 // ── Slot Modal ────────────────────────────────────────────────────────────────
-function SlotModal({ day, period, slot, classe, annee, teachers, rooms, subjects, schoolStage, onClose, onSave }: {
+function SlotModal({ day, period, slot, classe, annee, teachers, rooms, subjects, onClose, onSave }: {
   day: number; period: number; slot?: Slot;
   classe: string; annee: string;
   teachers: Teacher[]; rooms: Room[];
   subjects: string[];
-  schoolStage: "moyen" | "lycee";
   onClose: () => void;
   onSave: (data: { subject: string; teacherId?: string; roomId?: string; notes?: string }) => void;
 }) {
@@ -1102,7 +1249,7 @@ function SlotModal({ day, period, slot, classe, annee, teachers, rooms, subjects
               <option value="">— اختر أو اكتب —</option>
               {subjects.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            {!getStageSubjects(schoolStage).includes(subject) && (
+            {!CEM_SUBJECTS.includes(subject) && (
               <input value={subject} onChange={e => setSubject(e.target.value)}
                 placeholder="أو أدخل اسم المادة مباشرة"
                 className="w-full text-sm px-3 py-1.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-cyan-500/30 mt-1" />
