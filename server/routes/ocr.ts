@@ -63,11 +63,17 @@ router.post(
       const result = await processOcr(req.file.buffer, ocrType, engine, await getUserGroqKey(userId));
 
       if (result.rows.length === 0) {
+        const suggestions = [
+          "تأكد من أن الصورة تحتوي على بيانات واضحة",
+          "حاول صورة بجودة أعلى أو بضاءة أفضل",
+          "جرّب محرك Tesseract إذا كان المحرك المختار يستخدم Vision",
+        ];
         res.status(422).json({
           error: ocrType === "absences"
-            ? "لم يتم العثور على بيانات غياب في الصورة. تأكد من جودة الصورة وحاول مرة أخرى."
-            : "لم يتم العثور على أي درجات في الصورة. تأكد من جودة الصورة وحاول مرة أخرى.",
+            ? "لم يتم العثور على بيانات غياب في الصورة. جرّب مرة أخرى."
+            : "لم يتم العثور على أي درجات في الصورة. جرّب مرة أخرى.",
           engine: result.engine,
+          suggestions,
           rawText: result.rawText?.slice(0, 500),
         });
         return;
@@ -78,7 +84,7 @@ router.post(
           rowNumber: i + 1,
           studentName: r.studentName,
           confidence: r.confidence,
-          lowConfidence: r.confidence < 75,
+          lowConfidence: r.confidence < 80,
         };
         if (ocrType === "absences" && "justifiedHours" in r) {
           return {
@@ -118,9 +124,14 @@ router.post(
       });
     } catch (err: any) {
       logger.error({ err }, "OCR processing failed");
+      const errorMessage = err?.message ?? "Unknown error";
+      
       res.status(500).json({
         error: "فشل معالجة الصورة",
-        details: err?.message ?? "Unknown error",
+        details: errorMessage,
+        suggestion: errorMessage.includes("GROQ_API_KEY")
+          ? "تأكد من تكوين مفتاح Groq في الإعدادات"
+          : "جرّب صورة أخرى أو تحقق من جودة الصورة",
       });
     }
   },

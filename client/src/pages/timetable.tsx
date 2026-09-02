@@ -231,6 +231,13 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, teachers, annee, 
     [levelTargets, selectedLevels],
   );
 
+  // Validation checks
+  const hasEmptyFormFields = !selectedLevels.length || !selectedDays.length;
+  const hasInvalidHourly = selectedLevels.some(level =>
+    !Object.values(levelTargets[level] ?? {}).some(count => count > 0)
+  );
+  const canGenerate = !hasEmptyFormFields && !hasInvalidHourly;
+
   const generate = async () => {
     const includedClasses = classes.filter(c => selectedLevels.includes(getLevel(c)));
     const classesPayload = includedClasses.map(classe => {
@@ -294,13 +301,22 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, teachers, annee, 
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok && res.status !== 207) throw new Error(data.error ?? "فشل التوليد");
+      
+      const successMessage = data.unscheduled?.length > 0
+        ? `✓ تم توليد ${data.generated?.length ?? 0} حصة. لم يتمكن النظام من جدولة ${data.unscheduled.length} حصة بسبب تعارضات`
+        : `✓ تم توليد ${data.generated?.length ?? 0} حصة بنجاح!`;
+      
       toast({
-        title: `تم توليد ${data.generated?.length ?? 0} حصة عبر ${classesPayload.length} قسم`,
-        description: data.unscheduled?.length ? `تعذر جدولة ${data.unscheduled.length} حصة` : "تم تطبيق كل الشروط لكل الأقسام والمستويات",
+        title: "نجح التوليد",
+        description: successMessage,
       });
       await onDone();
     } catch (error) {
-      toast({ title: "فشل التوليد", description: error instanceof Error ? error.message : "تعذر إنشاء الجدول", variant: "destructive" });
+      toast({ 
+        title: "فشل التوليد", 
+        description: error instanceof Error ? error.message : "تعذر إنشاء الجدول. تحقق من الشروط وحاول مجدداً",
+        variant: "destructive" 
+      });
     } finally { setGenerating(false); }
   };
 
@@ -441,10 +457,38 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, teachers, annee, 
           </div>
         )}
 
+        {hasEmptyFormFields && (
+          <div className="text-[12px] text-amber-600 dark:text-amber-400 flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200/50">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span>يجب اختيار مستوى واحد على الأقل ويوم واحد على الأقل</span>
+          </div>
+        )}
+
+        {hasInvalidHourly && (
+          <div className="text-[12px] text-amber-600 dark:text-amber-400 flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200/50">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span>كل مستوى مختار يجب أن يحتوي على مادة واحدة على الأقل مع حصص</span>
+          </div>
+        )}
+
         <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={onClose}>إلغاء</Button>
-          <Button size="sm" onClick={generate} disabled={generating} className="gap-2">
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} توليد لكل الأقسام والمستويات
+          <Button variant="outline" size="sm" onClick={onClose} disabled={generating}>إلغاء</Button>
+          <Button 
+            size="sm" 
+            onClick={generate} 
+            disabled={generating || !canGenerate}
+            className="gap-2"
+            title={!canGenerate ? "تحقق من الشروط المطلوبة أعلاه" : ""}
+          >
+            {generating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> جارٍ التوليد...
+              </>
+            ) : (
+              <>
+                <Wand2 className="w-4 h-4" /> توليد الجدول
+              </>
+            )}
           </Button>
         </div>
       </CardContent>

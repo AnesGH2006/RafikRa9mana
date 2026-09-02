@@ -56,7 +56,9 @@ export async function sendDesktopCommand(
 ): Promise<unknown> {
   const socket = agentSockets.get(userId);
   if (!socket?.connected) {
-    throw new Error("لا يوجد وكيل سطح مكتب متصل لهذا المستخدم");
+    const errorMsg = "الوكيل غير متصل. تأكد من تشغيل تطبيق الوكيل على الحاسوب المحلي وتسجيل الدخول";
+    logger.warn({ userId, action }, errorMsg);
+    throw new Error(errorMsg);
   }
 
   // Reject any stale waiter for this user (commands must be sequential)
@@ -64,13 +66,15 @@ export async function sendDesktopCommand(
   if (stale) {
     clearTimeout(stale.timer);
     taskResultWaiters.delete(userId);
-    stale.reject(new Error("أُلغي الأمر السابق — تم إرسال أمر جديد"));
+    stale.reject(new Error("تم إرسال أمر جديد — تم إلغاء الأمر السابق"));
   }
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       taskResultWaiters.delete(userId);
-      reject(new Error(`انتهت مهلة الانتظار — لم يرد وكيل سطح المكتب خلال ${Math.round(timeoutMs / 1000)} ثانية`));
+      const timeoutMsg = `انتهت مهلة الانتظار (${Math.round(timeoutMs / 1000)}ث) — قد لا يكون الوكيل نشطاً أو قد حدثت مشكلة في الاتصال`;
+      logger.warn({ userId, action, timeoutMs }, timeoutMsg);
+      reject(new Error(timeoutMsg));
     }, timeoutMs);
 
     taskResultWaiters.set(userId, { action, resolve, reject, timer });
@@ -85,7 +89,7 @@ export async function sendDesktopCommand(
       // (execute_desktop_command) for the existing desktop command protocol.
       socket.emit("agent:command", { action, payload });
       socket.emit("execute_desktop_command", { action, payload });
-      logger.info({ userId, action, payload }, "Desktop command sent → agent:command + execute_desktop_command");
+      logger.info({ userId, action }, `Desktop command sent: ${action}`);
     }
   });
 }
@@ -229,9 +233,12 @@ export function agentHandler(io: SocketIOServer, socket: Socket): void {
         clearTimeout(waiter.timer);
         taskResultWaiters.delete(userId);
         if (payload.status === "success") {
+          logger.info({ userId, action: payload.action }, `Task completed: ${payload.action}`);
           waiter.resolve(payload.details ?? { ok: true, action: payload.action });
         } else {
-          waiter.reject(new Error(`فشل تنفيذ "${payload.action}" على الجهاز المحلي`));
+          const errorMsg = `فشل تنفيذ المهمة "${payload.action}" على الجهاز المحلي. تفاصيل: ${JSON.stringify(payload.details)}`;
+          logger.warn({ userId, action: payload.action, details: payload.details }, errorMsg);
+          waiter.reject(new Error(errorMsg));
         }
       }
     }

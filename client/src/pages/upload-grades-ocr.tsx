@@ -137,6 +137,7 @@ export default function UploadGradesOcrPage() {
   const [preview,  setPreview]  = useState<string | null>(null);
   const [overallConf, setOverallConf] = useState<number | null>(null);
   const [errMsg,   setErrMsg]   = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
 
   // ── Save state ────────────────────────────────────────────────────────────────
@@ -150,16 +151,54 @@ export default function UploadGradesOcrPage() {
     setPhase("idle");
     setRows([]);
     setPreview(null);
+    setErrMsg("");
+    setSuggestions([]);
     setSaveState({ phase: "idle", saved: 0, failed: 0, errors: [] });
     if (m === "absences") setSubject("");
   };
 
   // ── Upload handler ─────────────────────────────────────────────────────────────
   const handleFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast({ variant: "destructive", title: "خطأ", description: "يجب رفع ملف صورة (JPEG، PNG، WebP)" });
+    // Validation
+    const MAX_SIZE = 15 * 1024 * 1024; // 15 MB
+    const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/bmp"];
+    
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toast({ 
+        variant: "destructive", 
+        title: "نوع ملف غير صحيح", 
+        description: `الملفات المدعومة: JPEG, PNG, WebP, BMP` 
+      });
       return;
     }
+
+    if (file.size > MAX_SIZE) {
+      toast({ 
+        variant: "destructive", 
+        title: "الملف كبير جداً", 
+        description: `الحد الأقصى: 15 MB (الملف الحالي: ${(file.size / 1024 / 1024).toFixed(1)} MB)` 
+      });
+      return;
+    }
+
+    if (mode === "grades" && !subject) {
+      toast({ 
+        variant: "destructive", 
+        title: "بيانات ناقصة", 
+        description: "يجب اختيار المادة قبل رفع الصورة" 
+      });
+      return;
+    }
+
+    if (!niveau || !classe) {
+      toast({ 
+        variant: "destructive", 
+        title: "بيانات ناقصة", 
+        description: "يجب ملء المستوى والفوج" 
+      });
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = e => setPreview(e.target?.result as string);
     reader.readAsDataURL(file);
@@ -167,6 +206,7 @@ export default function UploadGradesOcrPage() {
     setPhase("uploading");
     setRows([]);
     setErrMsg("");
+    setSuggestions([]);
     setSaveState({ phase: "idle", saved: 0, failed: 0, errors: [] });
 
     const form = new FormData();
@@ -181,21 +221,30 @@ export default function UploadGradesOcrPage() {
 
       if (!res.ok) {
         setErrMsg(data.error ?? "فشل معالجة الصورة");
+        setSuggestions(data.suggestions ?? []);
         setPhase("error");
         return;
       }
 
       if (!data.rows || data.rows.length === 0) {
-        setErrMsg("لم يتم العثور على أي بيانات في الصورة. تأكد من جودة الصورة وحاول مرة أخرى.");
+        setErrMsg("لم يتم العثور على أي بيانات في الصورة. جرّب صورة أخرى بجودة أفضل.");
+        setSuggestions([
+          "تأكد من وضوح الصورة وخلوها من الظلال",
+          "حاول صورة بإضاءة أفضل",
+          "جرّب تقريب الصورة أو أخذ صورة جديدة",
+          "إذا استمرت المشكلة، جرّب محرك OCR الآخر"
+        ]);
         setPhase("error");
         return;
       }
 
       setRows(data.rows.map((r: OcrRow) => ({ ...r })));
       setOverallConf(data.overallConfidence ?? null);
+      setSuggestions([]);
       setPhase("done");
     } catch (e: any) {
       setErrMsg(e?.message ?? "حدث خطأ غير متوقع");
+      setSuggestions(["جرّب مرة أخرى", "تحقق من اتصال الإنترنت"]);
       setPhase("error");
     }
   }, [toast, mode]);
@@ -465,11 +514,25 @@ export default function UploadGradesOcrPage() {
           )}
 
           {phase === "error" && (
-            <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-4">
               <AlertCircle className="w-10 h-10 text-red-500" />
-              <p className="text-sm text-red-600 dark:text-red-400">{errMsg}</p>
+              <div className="text-center">
+                <p className="text-sm font-semibold text-red-600 dark:text-red-400">{errMsg}</p>
+                {suggestions.length > 0 && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    <p className="font-medium mb-1">جرّب:</p>
+                    <ul className="space-y-0.5">
+                      {suggestions.map((s, i) => (
+                        <li key={i} className="flex items-center gap-2">
+                          <span className="text-violet-500">•</span> {s}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
               <Button size="sm" variant="outline" className="gap-2"
-                onClick={e => { e.stopPropagation(); setPhase("idle"); setPreview(null); }}>
+                onClick={e => { e.stopPropagation(); setPhase("idle"); setPreview(null); setErrMsg(""); setSuggestions([]); }}>
                 <RotateCcw className="w-4 h-4" />
                 حاول مرة أخرى
               </Button>

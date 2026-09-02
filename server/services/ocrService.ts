@@ -62,35 +62,72 @@ export async function prepareImage(buffer: Buffer): Promise<{ data: string; mime
 
 // ── Groq Vision ─────────────────────────────────────────────────────────────────
 
-async function callGroqVision(imageB64: string, mimeType: string, prompt: string, apiKey: string | null): Promise<string> {
+async function callGroqVision(imageB64: string, mimeType: string, prompt: string, apiKey: string | null, retries = 3): Promise<string> {
   if (!apiKey) throw new Error("GROQ_API_KEY not configured");
 
-  const body = JSON.stringify({
-    model: "meta-llama/llama-4-scout-17b-16e-instruct",
-    messages: [{
-      role: "user",
-      content: [
-        { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageB64}` } },
-        { type: "text", text: prompt },
-      ],
-    }],
-    max_tokens: 4096,
-    temperature: 0,
-  });
+  let lastError: Error | null = null;
 
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body,
-  });
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const body = JSON.stringify({
+        model: "meta-llama/llama-4-scout-17b-16e-instruct",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageB64}` } },
+            { type: "text", text: prompt },
+          ],
+        }],
+        max_tokens: 4096,
+        temperature: 0,
+      });
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText);
-    throw new Error(`Groq API ${res.status}: ${err}`);
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body,
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!res.ok) {
+        const err = await res.text().catch(() => res.statusText);
+        lastError = new Error(`Groq API ${res.status}: ${err}`);
+        
+        if (res.status === 429 || res.status >= 500) {
+          if (attempt < retries) {
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+        }
+        throw lastError;
+      }
+
+      const json = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const content = json.choices?.[0]?.message?.content;
+      
+      if (!content || content.trim().length === 0) {
+        lastError = new Error("Groq Vision returned empty response");
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
+        throw lastError;
+      }
+
+      return content;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      logger.warn({ attempt, error: lastError.message }, "Groq Vision attempt failed");
+      
+      if (attempt < retries) {
+        const delay = Math.min(500 * Math.pow(2, attempt - 1), 5000);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
   }
 
-  const json = await res.json() as { choices: Array<{ message: { content: string } }> };
-  return json.choices?.[0]?.message?.content ?? "";
+  throw lastError || new Error("Groq Vision failed after retries");
 }
 
 const GRADES_PROMPT = `هذه صورة كشف درجات مدرسي جزائري، وقد تكون مطبوعة أو مكتوبة بخط اليد، بالعربية أو الفرنسية، وبأي اتجاه للأعمدة.
@@ -162,11 +199,14 @@ async function extractWithVision(
 
   try {
     const parsed = JSON.parse(jsonCandidate) as unknown;
-    if (!Array.isArray(parsed)) return { rows: [], rawText: content };
+    if (!Array.isArray(parsed) || parsed.length === 0) return { rows: [], rawText: content };
+    
     if (type === "absences") {
       const rows = parsed
         .filter(r =>
+          r && typeof r === "object" &&
           typeof r.studentName === "string" &&
+          String(r.studentName).trim().length > 0 &&
           Number.isFinite(Number(r.justifiedHours)) &&
           Number.isFinite(Number(r.unjustifiedHours)) &&
           Number(r.justifiedHours) >= 0 &&
@@ -176,14 +216,16 @@ async function extractWithVision(
           studentName: String(r.studentName).trim(),
           justifiedHours: Math.round(Number(r.justifiedHours)),
           unjustifiedHours: Math.round(Number(r.unjustifiedHours)),
-          confidence: 90,
+          confidence: 95,
         }));
       return { rows, rawText: content };
     }
 
     const rows = parsed
       .filter(r =>
+        r && typeof r === "object" &&
         typeof r.studentName === "string" &&
+        String(r.studentName).trim().length > 0 &&
         Number.isFinite(Number(r.grade)) &&
         Number(r.grade) >= 0 &&
         Number(r.grade) <= 20,
@@ -191,10 +233,11 @@ async function extractWithVision(
       .map(r => ({
         studentName: String(r.studentName).trim(),
         grade: Number(r.grade),
-        confidence: 90,
+        confidence: 95,
       }));
     return { rows, rawText: content };
-  } catch {
+  } catch (err) {
+    logger.warn({ err, type }, "Failed to parse Vision OCR JSON");
     return { rows: [], rawText: content };
   }
 }
@@ -255,34 +298,45 @@ async function extractWithTesseract(
 ): Promise<{ rows: OcrGradeRow[] | OcrAbsenceRow[]; rawText: string }> {
   logger.info("OCR: running Tesseract.js (ara+fra)");
 
-  const { data } = await Tesseract.recognize(buffer, "ara+fra", {
-    logger: m => {
-      if (m.status === "recognizing text") {
-        logger.debug({ progress: Math.round(m.progress * 100) }, "Tesseract progress");
-      }
-    },
-  });
+  try {
+    const { data } = await Tesseract.recognize(buffer, "ara+fra", {
+      logger: m => {
+        if (m.status === "recognizing text") {
+          logger.debug({ progress: Math.round(m.progress * 100) }, "Tesseract progress");
+        }
+      },
+    });
 
-  const rawText = data.text ?? "";
-  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const rows: OcrGradeRow[] | OcrAbsenceRow[] = [];
-  const seen = new Set<string>();
+    const rawText = data.text ?? "";
+    if (!rawText || rawText.trim().length === 0) {
+      logger.warn("Tesseract returned empty text");
+      return { rows: [], rawText };
+    }
 
-  for (const line of lines) {
-    if (/^(اسم|الاسم|اللقب|رقم|#|total|مجموع)/i.test(line)) continue;
-    const parsed = type === "absences" ? parseAbsenceLine(line) : parseGradeLine(line);
-    if (parsed) {
-      const key = type === "grades"
-        ? `${parsed.studentName}:${(parsed as OcrGradeRow).grade}`
-        : `${parsed.studentName}:${(parsed as OcrAbsenceRow).justifiedHours}:${(parsed as OcrAbsenceRow).unjustifiedHours}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        (rows as Array<OcrGradeRow | OcrAbsenceRow>).push(parsed);
+    const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const rows: OcrGradeRow[] | OcrAbsenceRow[] = [];
+    const seen = new Set<string>();
+
+    for (const line of lines) {
+      if (/^(اسم|الاسم|اللقب|رقم|#|total|مجموع|nombre|note)/i.test(line)) continue;
+      const parsed = type === "absences" ? parseAbsenceLine(line) : parseGradeLine(line);
+      if (parsed) {
+        const key = type === "grades"
+          ? `${parsed.studentName}:${(parsed as OcrGradeRow).grade}`
+          : `${parsed.studentName}:${(parsed as OcrAbsenceRow).justifiedHours}:${(parsed as OcrAbsenceRow).unjustifiedHours}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          (rows as Array<OcrGradeRow | OcrAbsenceRow>).push(parsed);
+        }
       }
     }
-  }
 
-  return { rows, rawText };
+    logger.info({ rowCount: rows.length }, "Tesseract extraction complete");
+    return { rows, rawText };
+  } catch (err) {
+    logger.error({ err }, "Tesseract recognition failed");
+    return { rows: [], rawText: "" };
+  }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────────
@@ -317,23 +371,42 @@ export async function processOcr(
       rawText = result.rawText;
 
       if (rows.length === 0) {
-        logger.warn("Vision OCR returned no rows — falling back to Tesseract");
+        logger.warn({ type }, "Vision OCR returned no rows — falling back to Tesseract");
+        usedEngine = "tesseract";
+        const fallback = await extractWithTesseract(tesseractBuffer, type);
+        rows = fallback.rows;
+        rawText = fallback.rawText || rawText;
+      }
+    } catch (err) {
+      logger.warn({ err, type }, "Vision OCR failed — falling back to Tesseract");
+      usedEngine = "tesseract";
+      try {
         const fallback = await extractWithTesseract(tesseractBuffer, type);
         rows = fallback.rows;
         rawText = fallback.rawText;
-        usedEngine = "tesseract";
+      } catch (fallbackErr) {
+        logger.error({ fallbackErr }, "Both Vision and Tesseract failed");
       }
-    } catch (err) {
-      logger.warn({ err }, "Vision OCR failed — falling back to Tesseract");
-      const fallback = await extractWithTesseract(tesseractBuffer, type);
-      rows = fallback.rows;
-      rawText = fallback.rawText;
-      usedEngine = "tesseract";
     }
   } else {
-    const result = await extractWithTesseract(tesseractBuffer, type);
-    rows = result.rows;
-    rawText = result.rawText;
+    try {
+      const result = await extractWithTesseract(tesseractBuffer, type);
+      rows = result.rows;
+      rawText = result.rawText;
+    } catch (err) {
+      logger.error({ err, type }, "Tesseract extraction failed");
+      if (apiKey) {
+        logger.info("Attempting Vision as fallback");
+        try {
+          usedEngine = "vision";
+          const visionFallback = await extractWithVision(data, mimeType, type, apiKey);
+          rows = visionFallback.rows;
+          rawText = visionFallback.rawText;
+        } catch (visionErr) {
+          logger.error({ visionErr }, "Vision fallback also failed");
+        }
+      }
+    }
   }
 
   const confidences = rows.map(r => r.confidence);
@@ -348,4 +421,5 @@ export async function processOcr(
     rawText,
     overallConfidence,
   };
+}
 }
