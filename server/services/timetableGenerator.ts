@@ -47,6 +47,51 @@ function slotKey(day: number, period: number): string {
   return `${day}:${period}`;
 }
 
+interface PendingLesson {
+  classe: string;
+  subject: string;
+  teacherId: string | null;
+  roomId: string | null;
+}
+
+/**
+ * Builds the ordered list of individual lesson placements, interleaving
+ * subjects round-robin WITHIN each class (one period of subject A, one of
+ * subject B, one of subject C, then back to A, ...) instead of scheduling
+ * one subject to completion before starting the next.
+ *
+ * This matters when total requested periods exceed available capacity: with
+ * a subject-by-subject ordering, the first subjects in the input list would
+ * consume all available slots and later subjects would get none at all.
+ * Round-robin spreads any shortage evenly across every subject instead.
+ */
+function buildLessonQueue(classes: TimetableRequestClass[]): PendingLesson[] {
+  const lessons: PendingLesson[] = [];
+
+  for (const entry of classes) {
+    const classe = entry.classe.trim();
+    const queues = entry.subjects.map((subject) => ({
+      subject: subject.subject.trim(),
+      teacherId: subject.teacherId ?? null,
+      roomId: subject.roomId ?? null,
+      remaining: Math.max(1, Math.min(30, Math.floor(subject.periods ?? 1))),
+    }));
+
+    let anyRemaining = queues.some((q) => q.remaining > 0);
+    while (anyRemaining) {
+      anyRemaining = false;
+      for (const q of queues) {
+        if (q.remaining <= 0) continue;
+        lessons.push({ classe, subject: q.subject, teacherId: q.teacherId, roomId: q.roomId });
+        q.remaining -= 1;
+        if (q.remaining > 0) anyRemaining = true;
+      }
+    }
+  }
+
+  return lessons;
+}
+
 /**
  * Greedily places the most constrained lessons first. A lesson is accepted
  * only when its class, teacher, and room are all free at the same slot.
@@ -73,15 +118,9 @@ export function generateTimetable(
     return rules.teacherAvailability[teacherId]!.some(slot => slot.day === day && slot.period === period);
   };
 
-  const lessons = classes.flatMap((entry) => entry.subjects.flatMap((subject) => {
-    const periods = Math.max(1, Math.min(30, Math.floor(subject.periods ?? 1)));
-    return Array.from({ length: periods }, () => ({
-      classe: entry.classe.trim(),
-      subject: subject.subject.trim(),
-      teacherId: subject.teacherId ?? null,
-      roomId: subject.roomId ?? null,
-    }));
-  })).sort((a, b) => {
+  // Round-robin across subjects within each class, instead of exhausting
+  // one subject before starting the next — see buildLessonQueue() above.
+  const lessons = buildLessonQueue(classes).sort((a, b) => {
     if (a.teacherId !== b.teacherId) return a.teacherId ? -1 : 1;
     if (a.roomId !== b.roomId) return a.roomId ? -1 : 1;
     return a.classe.localeCompare(b.classe);

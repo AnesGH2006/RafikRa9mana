@@ -422,4 +422,3 @@ export async function processOcr(
     overallConfidence,
   };
 }
-}
