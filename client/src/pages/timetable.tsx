@@ -548,15 +548,15 @@ export default function TimetablePage() {
     if (res.ok) {
       const list: string[] = await res.json();
       setClasses(list);
-      if (list.length > 0 && !activeClasse) setActiveClasse(list[0]!);
+      setActiveClasse(current => list.includes(current) ? current : list[0] ?? "");
     }
   }, [annee, activeClasse]);
 
-  const fetchSlots = useCallback(async () => {
-    if (!activeClasse) return;
+  const fetchSlots = useCallback(async (classe = activeClasse) => {
+    if (!classe) return;
     setLoadingSlots(true);
     try {
-      const res = await fetch(`${BASE}api/timetable/slots?annee=${encodeURIComponent(annee)}&classe=${encodeURIComponent(activeClasse)}`, { credentials: "include" });
+      const res = await fetch(`${BASE}api/timetable/slots?annee=${encodeURIComponent(annee)}&classe=${encodeURIComponent(classe)}`, { credentials: "include" });
       if (res.ok) {
         const loadedSlots: Slot[] = await res.json();
         setSlots(loadedSlots);
@@ -1365,6 +1365,10 @@ function HourlyVolumePanel({ slots, classes, annee, onFetchSlots }: HourlyVolume
   const [distributing, setDistributing] = useState(false);
   const [newSubject, setNewSubject] = useState("");
 
+  useEffect(() => {
+    setSelectedClass(current => classes.includes(current) ? current : classes[0] ?? "");
+  }, [classes]);
+
   const saveTargets = (t: SubjectTargets) => {
     setTargets(t);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
@@ -1397,8 +1401,8 @@ function HourlyVolumePanel({ slots, classes, annee, onFetchSlots }: HourlyVolume
     saveTargets({ ...targets, [s]: Math.max(0, v) });
 
   // ── Auto-distribute greedy fill ────────────────────────────────────────────
-  const DAYS  = ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"];
-  const SLOTS_PER_DAY = 6;
+  const DAYS = [0, 1, 2, 3, 4];
+  const PERIODS_PER_DAY = 7;
 
   const handleAutoDistribute = async () => {
     if (!selectedClass) return;
@@ -1419,28 +1423,25 @@ function HourlyVolumePanel({ slots, classes, annee, onFetchSlots }: HourlyVolume
 
     // Find empty slots
     const occupiedSet = new Set(classSlots.map(s => `${s.day}-${s.period}`));
-    const emptySlots: Array<{ day: string; slot: number }> = [];
+    const emptySlots: Array<{ day: number; period: number }> = [];
     for (const day of DAYS)
-      for (let sl = 1; sl <= SLOTS_PER_DAY; sl++)
-        if (!occupiedSet.has(`${day}-${sl}`)) emptySlots.push({ day, slot: sl });
+      for (let period = 0; period < PERIODS_PER_DAY; period += 1)
+        if (!occupiedSet.has(`${day}-${period}`)) emptySlots.push({ day, period });
 
     let filled = 0;
-    const needIdx: Record<string, number> = {};
 
     for (const empty of emptySlots) {
-      // Pick subject with most remaining need
       const next = needs.find(n => n.remaining > 0);
       if (!next) break;
 
       try {
-        const res = await fetch(`${(import.meta as any).env.BASE_URL ?? "/"}api/timetable`, {
+        const res = await fetch(`${BASE}api/timetable/slots`, {
           method: "POST", credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             annee, classe: selectedClass,
-            day: empty.day, slot: empty.slot,
-            subject: next.subject,
-            teacherName: "", roomName: "", notes: "",
+            day: empty.day, period: empty.period,
+            subject: next.subject, notes: "",
           }),
         });
         if (res.ok) {
