@@ -112,6 +112,7 @@ export function generateTimetable(
   const blocked = new Set((rules.blockedSlots ?? []).map(slot => slotKey(slot.day, slot.period)));
   const dailyPeriods = new Map<string, number>();
   const subjectAt = new Map<string, string>();
+  const subjectDailyPeriods = new Map<string, number>();
 
   const teacherCanTeach = (teacherId: string | null, day: number, period: number) => {
     if (!teacherId || !rules.teacherAvailability?.[teacherId]) return true;
@@ -133,8 +134,8 @@ export function generateTimetable(
     }
 
     let placed = false;
+    let bestCandidate: { day: number; period: number; roomId: string | null; score: number } | null = null;
     for (const day of workingDays) {
-      if (placed) break;
       for (let period = 0; period < periodsPerDay; period += 1) {
         const key = slotKey(day, period);
         if (blocked.has(key)) continue;
@@ -152,14 +153,29 @@ export function generateTimetable(
         if (lesson.roomId && roomBusy.has(`${lesson.roomId}:${key}`)) continue;
         if (availableRoomIds.length > 0 && !roomId) continue;
 
-        slots.push({ ...lesson, roomId, day, period });
-        classBusy.add(`${lesson.classe}:${key}`);
-        dailyPeriods.set(classDayKey, (dailyPeriods.get(classDayKey) ?? 0) + 1);
-        subjectAt.set(`${lesson.classe}:${day}:${period}`, lesson.subject);
-        if (lesson.teacherId) teacherBusy.add(`${lesson.teacherId}:${key}`);
-        if (roomId) roomBusy.add(`${roomId}:${key}`);
-        placed = true;
+        const subjectDayKey = `${lesson.classe}:${lesson.subject}:${day}`;
+        const subjectDayCount = subjectDailyPeriods.get(subjectDayKey) ?? 0;
+        const dayLoad = dailyPeriods.get(classDayKey) ?? 0;
+        const score = subjectDayCount * 1000 + dayLoad * 10 + period;
+        if (!bestCandidate || score < bestCandidate.score) {
+          bestCandidate = { day, period, roomId, score };
+        }
       }
+    }
+
+    if (bestCandidate) {
+      const { day, period, roomId } = bestCandidate;
+      const key = slotKey(day, period);
+      const classDayKey = `${lesson.classe}:${day}`;
+      const subjectDayKey = `${lesson.classe}:${lesson.subject}:${day}`;
+      slots.push({ ...lesson, roomId, day, period });
+      classBusy.add(`${lesson.classe}:${key}`);
+      dailyPeriods.set(classDayKey, (dailyPeriods.get(classDayKey) ?? 0) + 1);
+      subjectDailyPeriods.set(subjectDayKey, (subjectDailyPeriods.get(subjectDayKey) ?? 0) + 1);
+      subjectAt.set(`${lesson.classe}:${day}:${period}`, lesson.subject);
+      if (lesson.teacherId) teacherBusy.add(`${lesson.teacherId}:${key}`);
+      if (roomId) roomBusy.add(`${roomId}:${key}`);
+      placed = true;
     }
 
     if (!placed) {
