@@ -2,9 +2,10 @@
  * OCR Grade Sheet & Absence Sheet Processing
  *
  * POST /api/ocr/parse-grades?type=grades|absences&engine=auto|vision|tesseract
+ *
+ * Pipeline: Sharp preprocess → Groq Vision (primary) → Tesseract.js (fallback)
  */
-
-import { Router, type Request, type Response, type NextFunction } from "express";
+import { Router } from "express";
 import multer from "multer";
 import { logger } from "../lib/logger.js";
 import { processOcr, type OcrEngine } from "../services/ocrService.js";
@@ -12,229 +13,125 @@ import { db, ocrUploadsTable } from "../../shared/db.js";
 import { getUserGroqKey } from "../lib/groq-key.js";
 
 const router = Router();
-
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 15 * 1024 * 1024,
-  },
-  fileFilter: (_req, file, callback) => {
-    const isImage = file.mimetype.startsWith("image/");
-    const isPdf = file.mimetype === "application/pdf";
-
-    if (!isImage && !isPdf) {
-      callback(
-        new Error("يجب أن يكون الملف صورة JPEG أو PNG أو WebP أو ملف PDF"),
-      );
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = file.mimetype.startsWith("image/") || file.mimetype === "application/pdf";
+    if (!allowed) {
+      cb(new Error("يجب أن يكون الملف صورة (JPEG, PNG, WebP) أو PDF"));
       return;
     }
-
-    callback(null, true);
+    cb(null, true);
   },
 });
 
 router.post(
   "/ocr/parse-grades",
-  (req: Request, res: Response, next: NextFunction) => {
-    upload.single("image")(req, res, (err: unknown) => {
-      if (err instanceof multer.MulterError) {
-        if (err.code === "LIMIT_FILE_SIZE") {
-          res.status(413).json({
-            error: "حجم الملف كبير جداً",
-            details: "الحد الأقصى لحجم الملف هو 15MB",
-          });
-          return;
-        }
+  upload.single("image"),
+  async (req, res): Promise<void> => {
+    if (!req.isAuthenticated()) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    if (req.memberContext || (req.user!.role !== "admin" && req.user!.subscriptionStatus !== "active")) {
+      res.status(403).json({ error: "ميزة OCR متاحة لصاحب الاشتراك فقط" });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ error: "لم يتم رفع أي صورة. أرفق الصورة في حقل 'image'." });
+      return;
+    }
 
-        res.status(400).json({
-          error: "فشل رفع الملف",
-          details: err.message,
-        });
-        return;
-      }
+    const userId = req.user!.id;
+    const ocrType = (req.query.type as string) === "absences" ? "absences" : "grades";
+    if (req.file.mimetype === "application/pdf") {
+      res.status(415).json({
+        error: "ملفات PDF تحتاج إلى تحويل صفحاتها إلى صور قبل OCR. ارفع PNG أو JPG لكل صفحة.",
+      });
+      return;
+    }
 
-      if (err) {
-        res.status(400).json({
-          error: "نوع الملف غير مدعوم",
-          details: err instanceof Error ? err.message : String(err),
-        });
-        return;
-      }
+    const engineParam = String(req.query.engine ?? "auto") as OcrEngine;
+    const engine: OcrEngine = ["auto", "vision", "tesseract"].includes(engineParam)
+      ? engineParam
+      : "auto";
 
-      next();
-    });
-  },
-
-  async (req: Request, res: Response): Promise<void> => {
     try {
-      if (!req.isAuthenticated()) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-      }
+      logger.info({ size: req.file.size, mime: req.file.mimetype, ocrType, engine }, "OCR: processing");
 
-      /*
-       * Do not reject every request merely because memberContext exists.
-       * Only reject non-admin users without an active subscription.
-       */
-      const user = req.user as {
-        id: string | number;
-        role?: string;
-        subscriptionStatus?: string;
-      };
+      const result = await processOcr(req.file.buffer, ocrType, engine, await getUserGroqKey(userId));
 
-      const isAdmin = user.role === "admin";
-      const hasActiveSubscription = user.subscriptionStatus === "active";
-
-      if (!isAdmin && !hasActiveSubscription) {
-        res.status(403).json({
-          error: "ميزة OCR متاحة لصاحب الاشتراك فقط",
+      if (result.rows.length === 0) {
+        const suggestions = [
+          "تأكد من أن الصورة تحتوي على بيانات واضحة",
+          "حاول صورة بجودة أعلى أو بضاءة أفضل",
+          "جرّب محرك Tesseract إذا كان المحرك المختار يستخدم Vision",
+        ];
+        res.status(422).json({
+          error: ocrType === "absences"
+            ? "لم يتم العثور على بيانات غياب في الصورة. جرّب مرة أخرى."
+            : "لم يتم العثور على أي درجات في الصورة. جرّب مرة أخرى.",
+          engine: result.engine,
+          suggestions,
+          rawText: result.rawText?.slice(0, 500),
         });
         return;
       }
 
-      if (!req.file) {
-        res.status(400).json({
-          error: "لم يتم رفع أي صورة. أرسل الملف في حقل FormData باسم image.",
-        });
-        return;
-      }
-
-      if (req.file.mimetype === "application/pdf") {
-        res.status(415).json({
-          error:
-            "ملفات PDF تحتاج إلى تحويل صفحاتها إلى صور قبل OCR. ارفع PNG أو JPG لكل صفحة.",
-        });
-        return;
-      }
-
-      const ocrType =
-        String(req.query.type ?? "grades").toLowerCase() === "absences"
-          ? "absences"
-          : "grades";
-
-      const requestedEngine = String(
-        req.query.engine ?? "auto",
-      ).toLowerCase();
-
-      const engine: OcrEngine = ["auto", "vision", "tesseract"].includes(
-        requestedEngine,
-      )
-        ? (requestedEngine as OcrEngine)
-        : "auto";
-
-      logger.info(
-        {
-          userId: user.id,
-          size: req.file.size,
-          mime: req.file.mimetype,
-          originalName: req.file.originalname,
-          ocrType,
-          engine,
-        },
-        "OCR processing started",
-      );
-
-      const groqKey = await getUserGroqKey(user.id);
-
-      const result = await processOcr(
-        req.file.buffer,
-        ocrType,
-        engine,
-        groqKey,
-      );
-
-      if (!result || !Array.isArray(result.rows)) {
-        throw new Error("OCR service returned an invalid response");
-      }
-
-      const rows = result.rows.map((row: any, index: number) => {
-        const confidence =
-          typeof row.confidence === "number" ? row.confidence : 0;
-
+      const rows = result.rows.map((r, i) => {
         const base = {
-          rowNumber: index + 1,
-          studentName: String(row.studentName ?? "").trim(),
-          confidence,
-          lowConfidence: confidence < 80,
+          rowNumber: i + 1,
+          studentName: r.studentName,
+          confidence: r.confidence,
+          lowConfidence: r.confidence < 80,
         };
-
-        if (ocrType === "absences") {
+        if (ocrType === "absences" && "justifiedHours" in r) {
           return {
             ...base,
-            justifiedHours: Number(row.justifiedHours ?? 0),
-            unjustifiedHours: Number(row.unjustifiedHours ?? 0),
+            justifiedHours: r.justifiedHours,
+            unjustifiedHours: r.unjustifiedHours,
           };
         }
-
-        return {
-          ...base,
-          grade: row.grade ?? null,
-        };
+        if ("grade" in r) {
+          return { ...base, grade: r.grade };
+        }
+        return base;
       });
 
-      if (rows.length === 0) {
-        res.status(422).json({
-          error:
-            ocrType === "absences"
-              ? "لم يتم العثور على بيانات غياب في الصورة."
-              : "لم يتم العثور على أي درجات في الصورة.",
-          engine: result.engine ?? engine,
-          suggestions: [
-            "استخدم صورة واضحة وعالية الدقة",
-            "تأكد من أن الجدول ظاهر بالكامل",
-            "تأكد من وجود إضاءة جيدة وعدم وجود انعكاس",
-            "جرّب engine=tesseract أو engine=vision",
-          ],
-          rawText: result.rawText?.slice(0, 1000) ?? "",
-        });
-        return;
-      }
-
+      // Audit log
       try {
         await db.insert(ocrUploadsTable).values({
-          userId: user.id,
+          userId,
           type: ocrType,
-          engine: result.engine ?? engine,
-          fileName: req.file.originalname || null,
+          engine: result.engine,
+          fileName: req.file.originalname ?? null,
           rows,
           rowCount: rows.length,
         });
-      } catch (auditError) {
-        logger.warn({ auditError }, "OCR audit insert failed");
+      } catch (logErr) {
+        logger.warn({ logErr }, "OCR audit insert failed");
       }
 
-      res.status(200).json({
+      res.json({
         success: true,
         type: ocrType,
-        engine: result.engine ?? engine,
+        engine: result.engine,
         rows,
         totalLines: rows.length,
-        overallConfidence: result.overallConfidence ?? 0,
-        rawText: result.rawText?.slice(0, 2000) ?? "",
+        overallConfidence: result.overallConfidence,
+        rawText: result.rawText?.slice(0, 2000),
       });
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : String(error);
-
-      logger.error(
-        {
-          error,
-          message,
-        },
-        "OCR processing failed",
-      );
-
-      const isGroqError =
-        message.toLowerCase().includes("groq") ||
-        message.toLowerCase().includes("api key") ||
-        message.toLowerCase().includes("401");
-
+    } catch (err: any) {
+      logger.error({ err }, "OCR processing failed");
+      const errorMessage = err?.message ?? "Unknown error";
+      
       res.status(500).json({
         error: "فشل معالجة الصورة",
-        details: message,
-        suggestion: isGroqError
-          ? "تأكد من وجود GROQ_API_KEY أو اختر engine=tesseract"
-          : "جرّب صورة أوضح أو اختر محرك OCR آخر",
+        details: errorMessage,
+        suggestion: errorMessage.includes("GROQ_API_KEY")
+          ? "تأكد من تكوين مفتاح Groq في الإعدادات"
+          : "جرّب صورة أخرى أو تحقق من جودة الصورة",
       });
     }
   },
