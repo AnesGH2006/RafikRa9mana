@@ -224,7 +224,7 @@ router.post("/assistant/chat", async (req, res) => {
       ...recentMessages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
     ];
 
-    const model = "llama-3.3-70b-versatile";
+    const model = "openai/gpt-oss-120b";
 
     const completion = await client.chat.completions.create({
       model,
