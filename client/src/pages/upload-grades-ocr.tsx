@@ -181,22 +181,21 @@ export default function UploadGradesOcrPage() {
       return;
     }
 
-    if (mode === "grades" && !subject) {
-      toast({ 
-        variant: "destructive", 
-        title: "بيانات ناقصة", 
-        description: "يجب اختيار المادة قبل رفع الصورة" 
-      });
-      return;
-    }
-
     if (!niveau || !classe) {
       toast({ 
         variant: "destructive", 
         title: "بيانات ناقصة", 
-        description: "يجب ملء المستوى والفوج" 
+        description: "يجب ملء المستوى والفوج قبل بدء المعالجة" 
       });
       return;
+    }
+
+    if (mode === "grades" && !subject) {
+      toast({
+        variant: "default",
+        title: "تنبيه",
+        description: "لم يتم اختيار المادة بعد؛ يمكنك رفع الصورة الآن ثم اختيار المادة قبل الحفظ",
+      });
     }
 
     const reader = new FileReader();
@@ -434,7 +433,7 @@ export default function UploadGradesOcrPage() {
       </div>
 
       {/* Form fields */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
         <Select value={annee} onValueChange={setAnnee}>
           <SelectTrigger><SelectValue placeholder="السنة" /></SelectTrigger>
           <SelectContent>{ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
