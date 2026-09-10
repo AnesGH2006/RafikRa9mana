@@ -212,12 +212,17 @@ async function extractWithVision(
           Number(r.justifiedHours) >= 0 &&
           Number(r.unjustifiedHours) >= 0,
         )
-        .map(r => ({
-          studentName: String(r.studentName).trim(),
-          justifiedHours: Math.round(Number(r.justifiedHours)),
-          unjustifiedHours: Math.round(Number(r.unjustifiedHours)),
-          confidence: 95,
-        }));
+        .map(r => {
+          const justifiedHours = Math.round(Number(r.justifiedHours));
+          const unjustifiedHours = Math.round(Number(r.unjustifiedHours));
+          const studentName = String(r.studentName).trim();
+          return {
+            studentName,
+            justifiedHours,
+            unjustifiedHours,
+            confidence: estimateLineConfidence(studentName, { justifiedHours, unjustifiedHours }, "absences"),
+          };
+        });
       return { rows, rawText: content };
     }
 
@@ -233,7 +238,7 @@ async function extractWithVision(
       .map(r => ({
         studentName: String(r.studentName).trim(),
         grade: Number(r.grade),
-        confidence: 95,
+        confidence: estimateLineConfidence(String(r.studentName).trim(), Number(r.grade), "grades"),
       }));
     return { rows, rawText: content };
   } catch (err) {
@@ -245,6 +250,43 @@ async function extractWithVision(
 // ── Tesseract.js ──────────────────────────────────────────────────────────────────
 
 /** Parse a line like "محمد بن أحمد  14.5" or "14.5  محمد بن أحمد" */
+export function estimateLineConfidence(
+  studentName: string,
+  value: number | { justifiedHours: number; unjustifiedHours: number },
+  type: OcrType,
+): number {
+  let score = 65;
+
+  const cleanedName = String(studentName ?? "").replace(/\s+/g, " ").trim();
+  const words = cleanedName.split(/\s+/).filter(Boolean);
+  const alphabeticWords = words.filter(word => /[\p{L}]/u.test(word));
+
+  if (alphabeticWords.length >= 2) score += 10;
+  if (alphabeticWords.length >= 3) score += 5;
+  if (cleanedName.length >= 6 && cleanedName.length <= 60) score += 8;
+  if (alphabeticWords.some(word => word.length >= 3)) score += 5;
+
+  if (type === "grades") {
+    const grade = typeof value === "number" ? value : NaN;
+    if (Number.isFinite(grade) && grade >= 0 && grade <= 20) {
+      score += 15;
+      if (Number.isInteger(grade * 4) || grade % 0.5 === 0) score += 5;
+    }
+  } else {
+    const absence = typeof value === "object" ? value : null;
+    if (absence) {
+      const justified = Number(absence.justifiedHours ?? 0);
+      const unjustified = Number(absence.unjustifiedHours ?? 0);
+      if (justified >= 0 && unjustified >= 0 && (justified + unjustified) <= 100) {
+        score += 15;
+      }
+      if (justified <= 30 && unjustified <= 30) score += 5;
+    }
+  }
+
+  return Math.max(50, Math.min(96, Math.round(score)));
+}
+
 function parseGradeLine(line: string): OcrGradeRow | null {
   const trimmed = line.replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/\s+/g, " ").trim();
   if (!trimmed || trimmed.length < 3) return null;
@@ -261,7 +303,7 @@ function parseGradeLine(line: string): OcrGradeRow | null {
     .replace(/^\s*\d+\s*/, "").replace(/\s*\d+\s*$/, "").trim();
   if (!name || name.length < 2) return null;
 
-  return { studentName: name, grade, confidence: 72 };
+  return { studentName: name, grade, confidence: estimateLineConfidence(name, grade, "grades") };
 }
 
 function parseAbsenceLine(line: string): OcrAbsenceRow | null {
@@ -276,19 +318,22 @@ function parseAbsenceLine(line: string): OcrAbsenceRow | null {
 
   const values = numbers.length > 2 ? numbers.slice(-2) : numbers;
   if (values.length >= 2) {
+    const justified = values[0]!;
+    const unjustified = values[1]!;
     return {
       studentName: namePart,
-      justifiedHours: values[0]!,
-      unjustifiedHours: values[1]!,
-      confidence: 68,
+      justifiedHours: justified,
+      unjustifiedHours: unjustified,
+      confidence: estimateLineConfidence(namePart, { justifiedHours: justified, unjustifiedHours: unjustified }, "absences"),
     };
   }
 
+  const uncovered = numbers[0]!;
   return {
     studentName: namePart,
     justifiedHours: 0,
-    unjustifiedHours: numbers[0]!,
-    confidence: 65,
+    unjustifiedHours: uncovered,
+    confidence: estimateLineConfidence(namePart, { justifiedHours: 0, unjustifiedHours: uncovered }, "absences"),
   };
 }
 

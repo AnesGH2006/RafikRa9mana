@@ -121,7 +121,7 @@ export async function runReActAgent(params: {
 
   // ✅ Fixed model names to prevent decommissioned error:
   // ✅ جديد (سياق ضخم يتسع لكافة البيانات)
-  const model = "openai/gpt-oss-120b"
+  const model = "openai/gpt-oss-120b";
 
   logger.info({ model, estTokens, userId: params.userId }, "ReAct agent starting");
 
