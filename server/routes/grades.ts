@@ -185,7 +185,13 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
     .where(eq(studentsTable.userId, userId));
 
   const normalize = (n: string) => n.replace(/\s+/g, " ").trim();
-  const studentByName = new Map(allStudents.map(s => [normalize(s.nomPrenom), s]));
+  const studentLookup = new Map<string, typeof allStudents[number]>();
+  for (const s of allStudents) {
+    const nameKey = normalize(s.nomPrenom);
+    const compositeKey = normalize(`${s.nomPrenom}||${s.niveau ?? ""}||${s.classe ?? ""}`);
+    if (nameKey) studentLookup.set(nameKey, s);
+    if (compositeKey) studentLookup.set(compositeKey, s);
+  }
 
   // ── 2. Build insert rows ───────────────────────────────────────────────────
   const toDelete: Array<{ studentId: string; trimestre: number }> = [];
@@ -200,7 +206,9 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
   const errors: string[] = [];
 
   for (const s of students) {
-    let student = studentByName.get(normalize(s.studentName));
+    const nameKey = normalize(s.studentName);
+    const compositeKey = normalize(`${s.studentName}||${s.niveau ?? ""}||${s.classe ?? ""}`);
+    let student = studentLookup.get(compositeKey) ?? studentLookup.get(nameKey);
     if (!student) {
       // Auto-create student if we have enough info (niveau + classe from parsed file)
       if (s.niveau && s.classe) {
@@ -223,7 +231,8 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
             dateNaissance: null,
           };
           autoCreated.push(newStudent);
-          studentByName.set(normalize(s.studentName), newStudent as typeof allStudents[0]);
+          studentLookup.set(nameKey, newStudent as typeof allStudents[0]);
+          studentLookup.set(compositeKey, newStudent as typeof allStudents[0]);
           student = newStudent as typeof allStudents[0];
         }
       }

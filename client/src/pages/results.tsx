@@ -12,7 +12,7 @@ import {
   Pencil, ClipboardList, Search, Upload, CheckCircle2, AlertCircle,
   X, FileSpreadsheet, Loader2, Printer, Trophy, TrendingUp, TrendingDown,
   BarChart3, Users, Target, GraduationCap, XCircle, ArrowUpDown, Star,
-  MessageSquare,
+  MessageSquare, Trash2,
 } from "lucide-react";
 import { SmsNoticeModal, type SmsRecipient } from "@/components/sms-notice-modal";
 import { getSubjectsForLevel, calcWeightedAvg } from "@shared/subjects";
@@ -2834,6 +2834,7 @@ function GradeModal({ result, annee, onClose, onSaved }: {
 // ════════════════════════════════════════════════════════════════════════════════
 export default function Results() {
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [results, setResults] = useState<StudentResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected]       = useState<StudentResult | null>(null);
@@ -2891,6 +2892,25 @@ export default function Results() {
     // Always print ALL loaded results (all classes), organised per class
     if (results.length === 0) return;
     printResults(results, niveauLabel, filters.classe, t);
+  };
+
+  const handleDeleteStudent = async (studentId: string) => {
+    if (!window.confirm("هل تريد حذف هذا التلميذ؟")) return;
+    try {
+      const res = await fetch(`${BASE}api/students/${studentId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to delete student");
+      }
+      setResults(prev => prev.filter(r => r.student.id !== studentId));
+      setSelected(null);
+      setSubjectDetail(null);
+      toast({ title: "تم حذف التلميذ" });
+    } catch {
+      toast({ variant: "destructive", title: "فشل حذف التلميذ" });
+    }
   };
 
   return (
@@ -3104,12 +3124,20 @@ export default function Results() {
                            );
                          })()}
                         <td className="px-3 py-3">
-                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
-                              onClick={e => { e.stopPropagation(); setSelected(r); }}>
-                              <Pencil className="w-3.5 h-3.5" />
-                            </Button>
-                          </motion.div>
+                          <div className="flex items-center gap-1">
+                            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                                onClick={e => { e.stopPropagation(); setSelected(r); }}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                            </motion.div>
+                            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                onClick={e => { e.stopPropagation(); void handleDeleteStudent(r.student.id); }}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </motion.div>
+                          </div>
                         </td>
                       </motion.tr>
                     ))}

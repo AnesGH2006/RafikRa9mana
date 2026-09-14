@@ -556,6 +556,18 @@ router.post("/students/preview", upload.single("file"), async (req, res): Promis
   res.json({ headerRow: headerRowIdx, headers, samples });
 });
 
+router.delete("/students/:id", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+  const { id } = req.params;
+  const [deleted] = await db.delete(studentsTable)
+    .where(and(eq(studentsTable.id, id), eq(studentsTable.userId, userId)))
+    .returning({ id: studentsTable.id });
+
+  if (!deleted) { res.status(404).json({ error: "Student not found" }); return; }
+  res.json({ success: true, deletedId: deleted.id });
+});
+
 router.delete("/students", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
