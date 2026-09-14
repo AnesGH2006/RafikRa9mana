@@ -100,6 +100,32 @@ function MiniTooltip({ active, payload, label }: any) {
   );
 }
 
+function InsightCard({
+  label,
+  value,
+  accent,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+  icon: React.ElementType;
+}) {
+  return (
+    <motion.div whileHover={{ y: -3 }} className="surface-panel p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
+          <p className={`mt-2 text-2xl font-black ${accent}`}>{value}</p>
+        </div>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${accent.includes("blue") ? "bg-blue-500/10 text-blue-600" : accent.includes("emerald") ? "bg-emerald-500/10 text-emerald-600" : accent.includes("red") ? "bg-red-500/10 text-red-600" : "bg-violet-500/10 text-violet-600"}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Trimestre-filter helpers ─────────────────────────────────────────────────
 type TriFilter = "" | "1" | "2" | "1+2" | "3" | "1+2+3";
 
@@ -2854,6 +2880,11 @@ export default function Results() {
     });
 
   const niveauLabel = filters.niveau ? LEVEL_LABELS[filters.niveau as Niveau] : "جميع المستويات";
+  const passCount = displayed.filter(r => getTriPassed(r, filters.tri) === true).length;
+  const failCount = displayed.filter(r => getTriPassed(r, filters.tri) === false).length;
+  const avgScore = displayed.length
+    ? displayed.reduce((sum, r) => sum + (getTriAvg(r, filters.tri) ?? r.annualAvg ?? 0), 0) / displayed.length
+    : 0;
 
   const handlePrint = () => {
     // Always print ALL loaded results (all classes), organised per class
@@ -2892,59 +2923,70 @@ export default function Results() {
         </motion.div>
       </div>
 
-      {/* Filters */}
-      <motion.div className="flex flex-wrap gap-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <Input className="ps-9" placeholder={t("students.search")} value={filters.q}
-            onChange={e => setFilters(p => ({ ...p, q: e.target.value }))} />
+      {!loading && results.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <InsightCard label="إجمالي النتائج" value={String(displayed.length)} accent="text-blue-600" icon={ClipboardList} />
+          <InsightCard label="الناجحون" value={String(passCount)} accent="text-emerald-600" icon={CheckCircle2} />
+          <InsightCard label="الراسبون" value={String(failCount)} accent="text-red-600" icon={XCircle} />
+          <InsightCard label="المعدل" value={avgScore.toFixed(2)} accent="text-violet-600" icon={BarChart3} />
         </div>
-        <Select value={annee} onValueChange={setAnnee}>
-          <SelectTrigger className="w-36 font-semibold border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filters.niveau || "__all__"}
-          onValueChange={v => setFilters(p => ({ ...p, niveau: v === "__all__" ? "" : v }))}>
-          <SelectTrigger className="w-36"><SelectValue placeholder={t("students.filterLevel")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">{t("students.allLevels")}</SelectItem>
-            {LEVELS.map(l => <SelectItem key={l} value={l}>{LEVEL_LABELS[l]}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filters.classe || "__all__"}
-          onValueChange={v => setFilters(p => ({ ...p, classe: v === "__all__" ? "" : v }))}>
-          <SelectTrigger className="w-32"><SelectValue placeholder={t("students.filterClass")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">{t("students.allClasses")}</SelectItem>
-            {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filters.sexe || "__all__"}
-          onValueChange={v => setFilters(p => ({ ...p, sexe: v === "__all__" ? "" : v }))}>
-          <SelectTrigger className="w-28">
-            <SelectValue placeholder="الجنس" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">كل الجنسين</SelectItem>
-            <SelectItem value="M">ذكور</SelectItem>
-            <SelectItem value="F">إناث</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filters.tri || "__all__"}
-          onValueChange={v => setFilters(p => ({ ...p, tri: (v === "__all__" ? "" : v) as TriFilter }))}>
-          <SelectTrigger className={`w-32 transition-all ${filters.tri ? "border-violet-400 dark:border-violet-600 text-violet-700 dark:text-violet-300 bg-violet-50/50 dark:bg-violet-950/30 font-semibold" : ""}`}>
-            <SelectValue placeholder="الفصل" />
-          </SelectTrigger>
-          <SelectContent>
-            {TRI_OPTIONS.map(o => (
-              <SelectItem key={o.value || "__all__"} value={o.value || "__all__"}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      )}
+
+      {/* Filters */}
+      <motion.div className="surface-panel p-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input className="ps-9" placeholder={t("students.search")} value={filters.q}
+              onChange={e => setFilters(p => ({ ...p, q: e.target.value }))} />
+          </div>
+          <Select value={annee} onValueChange={setAnnee}>
+            <SelectTrigger className="w-36 font-semibold border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filters.niveau || "__all__"}
+            onValueChange={v => setFilters(p => ({ ...p, niveau: v === "__all__" ? "" : v }))}>
+            <SelectTrigger className="w-36"><SelectValue placeholder={t("students.filterLevel")} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("students.allLevels")}</SelectItem>
+              {LEVELS.map(l => <SelectItem key={l} value={l}>{LEVEL_LABELS[l]}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filters.classe || "__all__"}
+            onValueChange={v => setFilters(p => ({ ...p, classe: v === "__all__" ? "" : v }))}>
+            <SelectTrigger className="w-32"><SelectValue placeholder={t("students.filterClass")} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t("students.allClasses")}</SelectItem>
+              {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filters.sexe || "__all__"}
+            onValueChange={v => setFilters(p => ({ ...p, sexe: v === "__all__" ? "" : v }))}>
+            <SelectTrigger className="w-28">
+              <SelectValue placeholder="الجنس" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">كل الجنسين</SelectItem>
+              <SelectItem value="M">ذكور</SelectItem>
+              <SelectItem value="F">إناث</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filters.tri || "__all__"}
+            onValueChange={v => setFilters(p => ({ ...p, tri: (v === "__all__" ? "" : v) as TriFilter }))}>
+            <SelectTrigger className={`w-32 transition-all ${filters.tri ? "border-violet-400 dark:border-violet-600 text-violet-700 dark:text-violet-300 bg-violet-50/50 dark:bg-violet-950/30 font-semibold" : ""}`}>
+              <SelectValue placeholder="الفصل" />
+            </SelectTrigger>
+            <SelectContent>
+              {TRI_OPTIONS.map(o => (
+                <SelectItem key={o.value || "__all__"} value={o.value || "__all__"}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </motion.div>
 
       {/* ── ANALYTICS DASHBOARD ── */}

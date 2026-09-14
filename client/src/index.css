@@ -202,8 +202,42 @@
     @apply border-border;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-sans antialiased text-foreground;
+    background:
+      radial-gradient(1200px 700px at 50% -20%, rgba(99, 102, 241, 0.11), transparent 50%),
+      radial-gradient(1000px 700px at 100% 0%, rgba(14, 165, 233, 0.09), transparent 45%),
+      hsl(var(--background));
+  }
+
+  ::selection {
+    background: rgba(59, 130, 246, 0.2);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.55);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.8);
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
 
   /* Subtle dot-grid background texture */
@@ -233,6 +267,14 @@
     backdrop-filter: blur(16px) saturate(160%);
     -webkit-backdrop-filter: blur(16px) saturate(160%);
     border: 1px solid rgba(255,255,255,0.07);
+  }
+
+  .surface-panel {
+    @apply rounded-2xl border border-border/80 bg-card/80 shadow-sm backdrop-blur-sm;
+  }
+
+  .dark .surface-panel {
+    @apply border-white/5 bg-slate-900/70;
   }
 
   /* Glow utilities */

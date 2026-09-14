@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "wouter";
 import { useLanguage } from "@/contexts/language-provider";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -11,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Users, UserCheck, UserX, Pencil, School, MapPin, Calendar,
   GraduationCap, TrendingUp, BarChart3, Award, Baby, LayoutDashboard,
+  ArrowUpLeft,
 } from "lucide-react";
 import { CountUp } from "@/components/count-up";
 import {
@@ -104,6 +106,41 @@ function StatCard({
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function QuickActionCard({
+  title,
+  description,
+  href,
+  icon: Icon,
+  gradient,
+}: {
+  title: string;
+  description: string;
+  href: string;
+  icon: React.ElementType;
+  gradient: string;
+}) {
+  return (
+    <Link href={href}>
+      <motion.div
+        whileHover={{ y: -4, scale: 1.01 }}
+        whileTap={{ scale: 0.98 }}
+        className="surface-panel p-4 h-full cursor-pointer transition-all"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-md`}>
+            <Icon className="h-4 w-4" />
+          </div>
+          <ArrowUpLeft className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="mt-4 space-y-1">
+          <h3 className="text-sm font-bold text-foreground">{title}</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
+        </div>
+      </motion.div>
+    </Link>
   );
 }
 
@@ -227,6 +264,38 @@ export default function Dashboard() {
         </motion.div>
       </div>
 
+      {/* Quick actions */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <QuickActionCard
+          title="إدارة الطلبة"
+          description="عرض، البحث، متابعة الحالة التعليمية لكل التلاميذ."
+          href="/students"
+          icon={Users}
+          gradient="from-blue-500 to-indigo-600"
+        />
+        <QuickActionCard
+          title="النتائج"
+          description="مراجعة الدرجات، المعدلات، والوضعية العامة حسب السنة."
+          href="/results"
+          icon={BarChart3}
+          gradient="from-violet-500 to-purple-600"
+        />
+        <QuickActionCard
+          title="الاستيراد"
+          description="رفع الملفات والنتائج بسرعة وبسيطة مع مراقبة كل خطوة."
+          href="/import"
+          icon={School}
+          gradient="from-cyan-500 to-blue-600"
+        />
+        <QuickActionCard
+          title="معلومات المؤسسة"
+          description="تحديث اسم المؤسسة، الولاية، مدير المدرسة، وبيانات التواصل."
+          href="#school-info"
+          icon={Pencil}
+          gradient="from-emerald-500 to-teal-600"
+        />
+      </div>
+
       {/* School Info Card */}
       <AnimatePresence mode="wait">
         {!loadingSchool && (
@@ -238,7 +307,7 @@ export default function Dashboard() {
             transition={{ duration: 0.4 }}
           >
             {school ? (
-              <Card className="border-0 overflow-hidden relative shadow-md"
+              <Card id="school-info" className="border-0 overflow-hidden relative shadow-md"
                 style={{
                   background: "linear-gradient(135deg, rgba(219,234,254,0.8) 0%, rgba(237,233,254,0.6) 50%, rgba(240,249,255,0.7) 100%)",
                   boxShadow: "0 4px 24px rgba(99,149,255,0.12), 0 1px 3px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.85)"

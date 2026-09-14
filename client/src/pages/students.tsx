@@ -44,6 +44,32 @@ function MiniTooltip({ active, payload }: any) {
   );
 }
 
+function SummaryMetricCard({
+  label,
+  value,
+  tone,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  tone: string;
+  icon: React.ElementType;
+}) {
+  return (
+    <motion.div whileHover={{ y: -3 }} className="surface-panel p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
+          <p className={`mt-2 text-2xl font-black ${tone}`}>{value}</p>
+        </div>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone.includes("blue") ? "bg-blue-500/10 text-blue-600" : tone.includes("pink") ? "bg-pink-500/10 text-pink-600" : tone.includes("emerald") ? "bg-emerald-500/10 text-emerald-600" : "bg-violet-500/10 text-violet-600"}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function StudentAnalytics({ students }: { students: Student[] }) {
   if (students.length === 0) return null;
 
@@ -482,56 +508,66 @@ export default function Students() {
         )}
       </AnimatePresence>
 
-      {/* Filters */}
-      <motion.div className="flex flex-wrap gap-3 items-center"
-        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.15 }}>
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <Input className="ps-9 transition-shadow focus:shadow-md" placeholder={t("students.search")}
-            value={filters.q} onChange={e => setFilters(p => ({ ...p, q: e.target.value }))} />
+      {!loading && students.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryMetricCard label="إجمالي الطلبة" value={students.length} tone="text-blue-600" icon={Users} />
+          <SummaryMetricCard label="ذكور" value={students.filter(s => s.sexe === "M").length} tone="text-sky-600" icon={Users} />
+          <SummaryMetricCard label="إناث" value={students.filter(s => s.sexe === "F").length} tone="text-pink-600" icon={Users} />
+          <SummaryMetricCard label="الأقسام" value={new Set(students.map(s => s.classe)).size} tone="text-emerald-600" icon={FileSpreadsheet} />
         </div>
-        <Select value={filters.annee || DEFAULT_YEAR} onValueChange={v => setFilter("annee", v)}>
-          <SelectTrigger className="w-36 font-semibold border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {([
-          { key: "niveau", placeholder: t("students.filterLevel"), opts: LEVELS.map(l => ({ v: l, label: LEVEL_LABELS[l] })), allLabel: t("students.allLevels"), w: "w-36" },
-          { key: "sexe", placeholder: t("students.filterGender"), opts: [{ v: "M", label: t("val.male") }, { v: "F", label: t("val.female") }], allLabel: t("students.allGenders"), w: "w-28" },
-          { key: "statut", placeholder: t("students.filterStatus"), opts: [{ v: "nouveau", label: t("val.nouveau") }, { v: "redoublant", label: t("val.redoublant") }], allLabel: t("students.allStatuts"), w: "w-32" },
-        ] as const).map(f => (
-          <Select key={f.key} value={(filters as any)[f.key] || "__all__"} onValueChange={v => setFilter(f.key, v)}>
-            <SelectTrigger className={`${f.w} transition-shadow focus:shadow-md`}><SelectValue placeholder={f.placeholder} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">{f.allLabel}</SelectItem>
-              {f.opts.map((o: { v: string; label: string }) => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        ))}
-        {classes.length > 1 && (
-          <Select value={filters.classe || "__all__"} onValueChange={v => setFilter("classe", v)}>
-            <SelectTrigger className="w-28 transition-shadow focus:shadow-md">
-              <SelectValue placeholder="القسم" />
+      )}
+
+      {/* Filters */}
+      <motion.div className="surface-panel p-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.15 }}>
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input className="ps-9 transition-shadow focus:shadow-md" placeholder={t("students.search")}
+              value={filters.q} onChange={e => setFilters(p => ({ ...p, q: e.target.value }))} />
+          </div>
+          <Select value={filters.annee || DEFAULT_YEAR} onValueChange={v => setFilter("annee", v)}>
+            <SelectTrigger className="w-36 font-semibold border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">كل الأقسام</SelectItem>
-              {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
             </SelectContent>
           </Select>
-        )}
-        <AnimatePresence>
-          {(activeFilters > 0 || filters.q) && (
-            <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
-              <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground h-9"
-                onClick={() => setFilters({ q: "", niveau: "", classe: "", sexe: "", statut: "", annee: "" })}>
-                <X className="w-3.5 h-3.5" /> Reset
-              </Button>
-            </motion.div>
+          {([
+            { key: "niveau", placeholder: t("students.filterLevel"), opts: LEVELS.map(l => ({ v: l, label: LEVEL_LABELS[l] })), allLabel: t("students.allLevels"), w: "w-36" },
+            { key: "sexe", placeholder: t("students.filterGender"), opts: [{ v: "M", label: t("val.male") }, { v: "F", label: t("val.female") }], allLabel: t("students.allGenders"), w: "w-28" },
+            { key: "statut", placeholder: t("students.filterStatus"), opts: [{ v: "nouveau", label: t("val.nouveau") }, { v: "redoublant", label: t("val.redoublant") }], allLabel: t("students.allStatuts"), w: "w-32" },
+          ] as const).map(f => (
+            <Select key={f.key} value={(filters as any)[f.key] || "__all__"} onValueChange={v => setFilter(f.key, v)}>
+              <SelectTrigger className={`${f.w} transition-shadow focus:shadow-md`}><SelectValue placeholder={f.placeholder} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{f.allLabel}</SelectItem>
+                {f.opts.map((o: { v: string; label: string }) => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          ))}
+          {classes.length > 1 && (
+            <Select value={filters.classe || "__all__"} onValueChange={v => setFilter("classe", v)}>
+              <SelectTrigger className="w-28 transition-shadow focus:shadow-md">
+                <SelectValue placeholder="القسم" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">كل الأقسام</SelectItem>
+                {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
           )}
-        </AnimatePresence>
+          <AnimatePresence>
+            {(activeFilters > 0 || filters.q) && (
+              <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
+                <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground h-9"
+                  onClick={() => setFilters({ q: "", niveau: "", classe: "", sexe: "", statut: "", annee: "" })}>
+                  <X className="w-3.5 h-3.5" /> Reset
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </motion.div>
 
       {/* Count */}
