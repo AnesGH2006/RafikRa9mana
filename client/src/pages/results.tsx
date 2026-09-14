@@ -2882,6 +2882,7 @@ export default function Results() {
   const niveauLabel = filters.niveau ? LEVEL_LABELS[filters.niveau as Niveau] : "جميع المستويات";
   const passCount = displayed.filter(r => getTriPassed(r, filters.tri) === true).length;
   const failCount = displayed.filter(r => getTriPassed(r, filters.tri) === false).length;
+  const classifiedCount = passCount + failCount;
   const avgScore = displayed.length
     ? displayed.reduce((sum, r) => sum + (getTriAvg(r, filters.tri) ?? r.annualAvg ?? 0), 0) / displayed.length
     : 0;
@@ -2896,48 +2897,50 @@ export default function Results() {
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
       className="p-6 space-y-5 max-w-7xl mx-auto">
 
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <motion.h1 className="text-2xl font-bold" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          {t("results.title")}
-        </motion.h1>
-        <motion.div className="flex items-center gap-2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-          <Button variant="outline" className="gap-2" onClick={handlePrint} disabled={results.length === 0}>
-            <Printer className="w-4 h-4" /> طباعة
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2 border-emerald-500/40 text-emerald-600 hover:bg-emerald-50/10 hover:border-emerald-500"
-            onClick={() => setShowImport(true)}>
-            <FileSpreadsheet className="w-4 h-4" /> استيراد Excel
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2 border-amber-500/40 text-amber-600 hover:bg-amber-50/10 hover:border-amber-500"
-            onClick={() => setSmsOpen(true)}
-            disabled={results.filter(r => (r.annualAvg ?? 0) < 10).length === 0}
-          >
-            <MessageSquare className="w-4 h-4" />
-            إشعار SMS الراسبين ({results.filter(r => (r.annualAvg ?? 0) < 10).length})
-          </Button>
-        </motion.div>
+      <div className="rounded-[22px] border border-sky-400/20 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.18),_transparent_35%),linear-gradient(135deg,#0b1326_0%,#0f1d35_35%,#0b1326_100%)] p-4 shadow-[0_20px_60px_rgba(15,23,42,0.5)]">
+        {/* Header */}
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <motion.h1 className="text-3xl font-black text-white" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+            {t("results.title")}
+          </motion.h1>
+          <motion.div className="flex flex-wrap items-center gap-2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+            <Button variant="outline" className="gap-2 rounded-xl border-amber-400/40 bg-white/5 text-amber-300 hover:bg-amber-400/10 hover:text-amber-200" onClick={handlePrint} disabled={results.length === 0}>
+              <Printer className="w-4 h-4" /> طباعة
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-2 rounded-xl border-emerald-400/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-200"
+              onClick={() => setShowImport(true)}>
+              <FileSpreadsheet className="w-4 h-4" /> استيراد Excel
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-2 rounded-xl border-orange-400/40 bg-orange-500/10 text-orange-300 hover:bg-orange-500/15 hover:text-orange-200"
+              onClick={() => setSmsOpen(true)}
+              disabled={results.filter(r => (r.annualAvg ?? 0) < 10).length === 0}
+            >
+              <MessageSquare className="w-4 h-4" />
+              إشعار SMS الراسبين ({results.filter(r => (r.annualAvg ?? 0) < 10).length})
+            </Button>
+          </motion.div>
+        </div>
+
+        {!loading && results.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <InsightCard label="إجمالي النتائج" value={String(classifiedCount)} accent="text-violet-300" icon={ClipboardList} />
+            <InsightCard label="الناجحون" value={String(passCount)} accent="text-emerald-300" icon={CheckCircle2} />
+            <InsightCard label="الراسبون" value={String(failCount)} accent="text-red-300" icon={XCircle} />
+            <InsightCard label="المعدل" value={avgScore.toFixed(2)} accent="text-sky-300" icon={BarChart3} />
+          </div>
+        )}
       </div>
 
-      {!loading && results.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <InsightCard label="إجمالي النتائج" value={String(displayed.length)} accent="text-blue-600" icon={ClipboardList} />
-          <InsightCard label="الناجحون" value={String(passCount)} accent="text-emerald-600" icon={CheckCircle2} />
-          <InsightCard label="الراسبون" value={String(failCount)} accent="text-red-600" icon={XCircle} />
-          <InsightCard label="المعدل" value={avgScore.toFixed(2)} accent="text-violet-600" icon={BarChart3} />
-        </div>
-      )}
-
       {/* Filters */}
-      <motion.div className="surface-panel p-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+      <motion.div className="rounded-[20px] border border-sky-400/20 bg-slate-900/60 p-3 shadow-[0_12px_30px_rgba(15,23,42,0.45)]" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <Input className="ps-9" placeholder={t("students.search")} value={filters.q}
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <Input className="ps-9 border-slate-700 bg-slate-950/40 text-white placeholder:text-slate-400" placeholder={t("students.search")} value={filters.q}
               onChange={e => setFilters(p => ({ ...p, q: e.target.value }))} />
           </div>
           <Select value={annee} onValueChange={setAnnee}>
