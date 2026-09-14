@@ -28,6 +28,15 @@ import { CountUp } from "@/components/count-up";
 
 const BASE = import.meta.env.BASE_URL;
 const LEVELS: Niveau[] = ["1AM", "2AM", "3AM", "4AM", "1AS", "2AS", "3AS"];
+const SCHOOL_STAGE_LABELS = {
+  moyen: "المتوسطة",
+  lycee: "الثانوي",
+} as const;
+type SchoolStage = keyof typeof SCHOOL_STAGE_LABELS;
+const STAGE_LEVELS: Record<SchoolStage, Niveau[]> = {
+  moyen: ["1AM", "2AM", "3AM", "4AM"],
+  lycee: ["1AS", "2AS", "3AS"],
+};
 const LEVEL_LABELS: Record<Niveau, string> = {
   "1AM": "1ère AM", "2AM": "2ème AM", "3AM": "3ème AM", "4AM": "4ème AM",
   "1AS": "1ère AS", "2AS": "2ème AS", "3AS": "3ème AS",
@@ -2842,9 +2851,26 @@ export default function Results() {
   const [showImport, setShowImport]   = useState(false);
   const [smsOpen,    setSmsOpen]      = useState(false);
   const [annee, setAnnee]             = useState(DEFAULT_YEAR);
+  const [schoolStage, setSchoolStage] = useState<SchoolStage>(() => {
+    if (typeof window === "undefined") return "moyen";
+    const stored = localStorage.getItem("selected-school-stage") || localStorage.getItem("cem-school-stage");
+    return stored === "lycee" ? "lycee" : "moyen";
+  });
   const [filters, setFilters]         = useState({ niveau: "", classe: "", sexe: "", q: "", tri: "" as TriFilter });
   const [listKey, setListKey]         = useState(0);
   const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTabId>("general");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("selected-school-stage", schoolStage);
+      localStorage.setItem("cem-school-stage", schoolStage);
+    }
+    setFilters(prev => ({
+      ...prev,
+      niveau: prev.niveau && STAGE_LEVELS[schoolStage].includes(prev.niveau as Niveau) ? prev.niveau : "",
+      classe: "",
+    }));
+  }, [schoolStage]);
 
   const fetchResults = useCallback(async () => {
     setLoading(true);
@@ -2865,10 +2891,12 @@ export default function Results() {
 
   useEffect(() => { fetchResults(); }, [fetchResults]);
 
-  const classes  = [...new Set(results.map(r => r.student.classe))].sort();
+  const stageResults = results.filter(r => STAGE_LEVELS[schoolStage].includes(r.student.niveau as Niveau));
+  const classes  = [...new Set(stageResults.map(r => r.student.classe))].sort();
   // ✅ FIX: apply classe filter client-side; also sort by selected trimestre avg.
-  const displayed = results
+  const displayed = stageResults
     .filter(r => {
+      if (filters.niveau && r.student.niveau !== filters.niveau) return false;
       if (filters.classe && r.student.classe !== filters.classe) return false;
       if (filters.q && !r.student.nomPrenom.toLowerCase().includes(filters.q.toLowerCase())) return false;
       return true;
@@ -2971,12 +2999,22 @@ export default function Results() {
               {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={schoolStage} onValueChange={v => setSchoolStage(v as SchoolStage)}>
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(SCHOOL_STAGE_LABELS) as SchoolStage[]).map(stage => (
+                <SelectItem key={stage} value={stage}>{SCHOOL_STAGE_LABELS[stage]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={filters.niveau || "__all__"}
             onValueChange={v => setFilters(p => ({ ...p, niveau: v === "__all__" ? "" : v }))}>
             <SelectTrigger className="w-36"><SelectValue placeholder={t("students.filterLevel")} /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">{t("students.allLevels")}</SelectItem>
-              {LEVELS.map(l => <SelectItem key={l} value={l}>{LEVEL_LABELS[l]}</SelectItem>)}
+              {STAGE_LEVELS[schoolStage].map(l => <SelectItem key={l} value={l}>{LEVEL_LABELS[l]}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filters.classe || "__all__"}
