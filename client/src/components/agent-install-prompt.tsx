@@ -39,22 +39,11 @@ export function AgentInstallPrompt() {
       return;
     }
 
-    const check = async () => {
-      try {
-        const res = await fetch("/api/agent/tokens", { credentials: "include" });
-        if (!res.ok) return;
-        const tokens: AgentToken[] = await res.json();
-        const anyConnected = tokens.some(t => isRecentlySeen(t.lastSeenAt));
-        if (anyConnected) return;
-        setShow(true);
-      } catch {
-        // silent fail for unauthenticated or unavailable status
-      } finally {
-        setChecked(true);
-      }
-    };
+    const id = setTimeout(() => {
+      setShow(true);
+      setChecked(true);
+    }, 2000);
 
-    const id = setTimeout(check, 3500);
     return () => clearTimeout(id);
   }, []);
 
