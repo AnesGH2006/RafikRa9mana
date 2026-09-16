@@ -312,11 +312,111 @@ export default function AgentSetupPage() {
         </div>
       </div>
 
-      <div className="relative min-h-[calc(100vh-44px)] bg-[#020d1d]">
+      <div className="relative min-h-[calc(100vh-44px)] bg-[#020d1d] px-4 pb-10 pt-6">
         <div className="absolute inset-0 opacity-25" style={{
           backgroundImage: "radial-gradient(circle at 1px 1px, rgba(96,165,250,0.12) 1px, transparent 0)",
           backgroundSize: "22px 22px",
         }} />
+
+        <div className="relative mx-auto max-w-[1100px]">
+          <div className="rounded-2xl border border-blue-500/20 bg-[#081b30]/95 p-5 shadow-[0_20px_60px_rgba(1,8,20,0.5)]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(serverUrl).catch(() => undefined)}
+                className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-500/15"
+              >
+                <Copy className="h-4 w-4" />
+                نسخ الرابط
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="text-xl font-bold text-white">Windows</div>
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-600 bg-slate-700/60 text-slate-200">
+                  <Monitor className="h-6 w-6" />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-700/70 bg-[#0b1f33] p-5 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl border border-amber-400/30 bg-amber-500/10 text-amber-300">
+                <Monitor className="h-8 w-8" />
+              </div>
+              <h2 className="text-3xl font-bold text-white">برنامج الوكيل</h2>
+              <p className="mx-auto mt-3 max-w-xl text-base leading-8 text-slate-300">
+                يُثبت على جهازك المحلي ليتولى المزامنة، التشغيل الآلي، وإدارة الملفات من الحاسوب.
+              </p>
+
+              <div className="mt-5 flex justify-center">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${BASE}api/agent/download`, { credentials: "include" });
+                      if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        toast({
+                          title: "المثبّت غير متوفر",
+                          description: data?.message || "يجب بناء المثبّت أولاً على جهاز Windows.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "SchoolManagerAgent-Setup.exe";
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                    } catch {
+                      toast({
+                        title: "تعذّر بدء التنزيل",
+                        description: "لم يتمكن التطبيق من الوصول إلى ملف المثبّت. حاول مرة أخرى لاحقاً.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-base font-bold text-slate-900 shadow-lg shadow-amber-500/25 transition hover:bg-amber-300"
+                >
+                  <Download className="h-5 w-5" />
+                  تثبيت الوكيل
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-xl border border-slate-700/70 bg-[#0d1d2d] p-4">
+              <div className="mb-2 text-right text-sm font-bold text-slate-200">عنوان الخادم</div>
+              <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#091a2d] px-2 py-2">
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(serverUrl).catch(() => undefined)}
+                  className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-700/80 text-slate-100 hover:bg-slate-600"
+                  aria-label="Copy server URL"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+                <span className="flex-1 overflow-hidden text-ellipsis text-right text-sm text-slate-100">{serverUrl}</span>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-2 text-right text-sm text-slate-200/90">
+              {[
+                "يُنشئ اتصالاً آمنًا مع المنصة",
+                "يتابع الملفات والمجلدات المسموح بها فقط",
+                "يعمل في الخلفية دون تدخل يدوي",
+              ].map((item) => (
+                <div key={item} className="flex items-center justify-end gap-2">
+                  <span>{item}</span>
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] text-cyan-300">✓</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
         <div className="absolute bottom-4 right-4 text-right text-[11px] leading-4 text-slate-400">
           <div className="text-slate-200">Activate Windows</div>
