@@ -275,290 +275,203 @@ export default function AgentSetupPage() {
   };
 
   return (
-    <motion.div variants={pageVariants} initial="initial" animate="animate"
-      className="p-6 space-y-6 max-w-3xl mx-auto" dir="rtl">
+    <motion.div
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      className="min-h-screen bg-[#020b18] text-slate-100"
+      dir="rtl"
+    >
+      <div className="absolute inset-0 opacity-30" style={{
+        backgroundImage: "radial-gradient(circle at 1px 1px, rgba(96,165,250,0.12) 1px, transparent 0)",
+        backgroundSize: "22px 22px",
+      }} />
 
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-        className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
-          <Bot className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">وكيل سطح المكتب</h1>
-          <p className="text-sm text-muted-foreground">اربط حاسوب الإدارة بالمنصة مباشرةً</p>
-        </div>
-      </motion.div>
-
-      {/* How it works */}
-      <motion.div custom={0} variants={cardVariants} initial="initial" animate="animate">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <div className="w-7 h-7 rounded-lg bg-indigo-500 flex items-center justify-center">
-                <CheckCircle2 className="w-4 h-4 text-white" />
+      <div className="relative mx-auto flex min-h-screen max-w-[1200px] items-center justify-center px-4 py-8">
+        <div className="w-full max-w-[820px] rounded-[26px] border border-slate-700/70 bg-[#061a2e]/90 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-sm">
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-slate-700/60 bg-[#0a1d2f] px-3 py-2">
+            <div className="flex items-center gap-2 text-slate-300">
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-slate-700 text-[10px]">◌</div>
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-slate-700 text-[10px]">◍</div>
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-slate-700 text-[10px]">◐</div>
+            </div>
+            <div className="flex flex-1 items-center justify-center">
+              <div className="flex min-w-[260px] max-w-[500px] items-center gap-2 rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-xs text-slate-200">
+                <span className="text-blue-300">🔒</span>
+                <span className="truncate">{serverUrl}</span>
               </div>
-              كيف يعمل الوكيل؟
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Steps */}
-            <div className="space-y-3">
-              {STEPS.map((step, i) => (
-                <motion.div key={i}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.15 + i * 0.07 }}
-                  className="flex items-start gap-3 p-3 rounded-xl bg-muted/40 hover:bg-muted/60 transition-colors">
-                  <div className={`w-8 h-8 rounded-lg ${step.color} flex items-center justify-center shrink-0 mt-0.5`}>
-                    <step.icon className="w-4 h-4 text-white" />
+            </div>
+            <button
+              type="button"
+              onClick={() => setNewToken(null)}
+              className="rounded-full bg-slate-800 px-2.5 py-1 text-[10px] text-slate-300 ring-1 ring-slate-700"
+            >
+              إغلاق
+            </button>
+          </div>
+
+          <div className="space-y-5">
+            <div className="rounded-xl border border-cyan-500/20 bg-[#0d2238] p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/20">
+                    <Bot className="h-6 w-6" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-[10px] font-bold text-muted-foreground">الخطوة {i + 1}</span>
-                    </div>
-                    <p className="text-sm font-semibold">{step.titleAr}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{step.descAr}</p>
+                  <div className="text-right">
+                    <div className="text-[11px] text-slate-300">وكيل سطح المكتب</div>
+                    <div className="text-2xl font-bold text-white">Windows</div>
                   </div>
-                </motion.div>
-              ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={createToken}
+                  className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-500/20 hover:bg-cyan-400"
+                >
+                  <Download className="h-4 w-4" />
+                  تثبيت الآن
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-amber-400/30 bg-[#111f31] p-5 text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-amber-500/10 text-amber-200 ring-1 ring-amber-400/15">
+                  <Monitor className="h-8 w-8" />
+                </div>
+                <div className="text-2xl font-bold text-white">برنامج الوكيل</div>
+                <div className="mx-auto mt-3 max-w-lg text-sm leading-7 text-slate-300">
+                  يُنقّل المهام الروتينية من جهازك إلى المنصة، ويُبقي الملفات والبيانات في Sync مستمر وآمن.
+                </div>
+                <button
+                  type="button"
+                  onClick={goSetup}
+                  className="mt-5 inline-flex items-center gap-2 rounded-lg bg-amber-400 px-6 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-amber-500/20 hover:bg-amber-300"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  تثبيت الوكيل
+                </button>
+              </div>
             </div>
 
-            {/* Features grid */}
-            <div className="pt-2 border-t">
-              <p className="text-xs font-semibold text-muted-foreground mb-3">ما يقدّمه الوكيل</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {FEATURES.map((f, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <f.icon className={`w-3.5 h-3.5 shrink-0 ${f.color}`} />
-                    <span>{f.label}</span>
+            <div className="rounded-xl border border-sky-500/20 bg-[#0b2036] p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-[11px] font-semibold text-cyan-300">عنوان الخادم</div>
+                <div className="text-[11px] text-slate-400">نسخ</div>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#0a1b2d] px-2 py-2">
+                <button
+                  type="button"
+                  onClick={copyUrl}
+                  className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-700/80 text-slate-100 hover:bg-slate-600"
+                  aria-label="Copy server URL"
+                >
+                  {copied ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
+                </button>
+                <span className="flex-1 overflow-hidden text-ellipsis text-right text-sm text-slate-100">{serverUrl}</span>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-700/50 bg-[#0b1d2f] p-4">
+              <div className="mb-3 text-right text-[12px] font-semibold text-white">خطوات التثبيت</div>
+              <div className="space-y-2">
+                {[
+                  "انقر على زر التثبيت وأكمل تثبيت التطبيق على جهاز Windows.",
+                  "افتح الوكيل من علبة النظام، ثم الصق عنوان الخادم من أعلى الصفحة.",
+                  "أنشئ رمزًا جديدًا من القسم التالي، والصق الرمز داخل الوكيل عند الطلب."
+                ].map((item, index) => (
+                  <div key={item} className="flex items-start gap-2 rounded-lg border border-slate-700/60 bg-[#0c2238] px-3 py-2 text-sm text-slate-200">
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/15 text-[10px] font-bold text-cyan-300">
+                      {index + 1}
+                    </div>
+                    <span>{item}</span>
                   </div>
                 ))}
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </motion.div>
 
-      {/* Install prompt */}
-      <motion.div custom={1} variants={cardVariants} initial="initial" animate="animate">
-        <Card className="border-blue-500/30 bg-blue-500/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center">
-                <Download className="w-4 h-4 text-white" />
-              </div>
-              تثبيت الوكيل على Windows
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-
-            {/* Download button */}
-            <AgentDownloadBlock base={BASE} />
-
-            {/* Server URL — copy to paste in the agent */}
-            <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 space-y-2">
-              <p className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
-                <Wifi className="w-3.5 h-3.5" />
-                عنوان الخادم — انسخه وألصقه في الوكيل عند تسجيل الدخول
-              </p>
-              <div className="flex items-center gap-2 rounded-lg bg-slate-900/80 border border-slate-700 px-3 py-2">
-                <code className="flex-1 text-sm font-mono text-indigo-300 break-all">{serverUrl}</code>
-                <CopyButton text={serverUrl} />
-              </div>
-            </div>
-
-            {/* Simple 3-step guide */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground">خطوات الإعداد</p>
-              {[
-                { n: "1", icon: Download,  text: "نزّل الملف أعلاه وشغّله — اتبع خطوات المثبّت حتى الانتهاء." },
-                { n: "2", icon: Wifi,      text: "افتح الوكيل من أيقونة علبة النظام (System Tray) وأدخل عنوان الخادم المذكور أعلاه." },
-                { n: "3", icon: Key,       text: "أنشئ رمز وكيل في القسم أدناه، انسخه والصقه في حقل الرمز بالوكيل ثم اضغط «اتصال»." },
-              ].map(({ n, icon: Icon, text }) => (
-                <div key={n} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
-                  <div className="w-6 h-6 rounded-full bg-blue-500/80 flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5">{n}</div>
-                  <Icon className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground leading-relaxed">{text}</p>
+            <div className="rounded-xl border border-slate-700/50 bg-[#0b1d2f] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-right text-[12px] font-semibold text-white">إنشاء رمز جديد</div>
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">
+                  <Key className="h-4 w-4" />
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Token generation */}
-      <motion.div custom={2} variants={cardVariants} initial="initial" animate="animate">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <div className="w-7 h-7 rounded-lg bg-emerald-500 flex items-center justify-center">
-                <Key className="w-4 h-4 text-white" />
               </div>
-              إنشاء رمز وكيل جديد
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              كل جهاز يحتاج رمزاً خاصاً. أعطِ الجهاز اسماً واضحاً (مثل: حاسوب مكتب المدير) ثم انسخ الرمز الناتج والصقه في الوكيل.
-            </p>
 
-            <div className="flex gap-2">
-              <div className="flex-1 space-y-1">
-                <Label htmlFor="device-name" className="text-xs">اسم الجهاز</Label>
+              <div className="flex gap-2">
                 <Input
                   id="device-name"
-                  placeholder="مثال: حاسوب مكتب الإدارة"
+                  placeholder="اسم الجهاز"
                   value={deviceName}
                   onChange={e => setDeviceName(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && createToken()}
-                  className="text-sm"
+                  className="h-11 border-slate-700 bg-[#0a1b2d] text-right text-sm text-white placeholder:text-slate-500"
                 />
-              </div>
-              <div className="flex items-end">
-                <Button onClick={createToken} disabled={creating || !deviceName.trim()} className="gap-2">
-                  {creating
-                    ? <motion.div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
-                        animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }} />
-                    : <Plus className="w-4 h-4" />}
-                  إنشاء
+                <Button onClick={createToken} disabled={creating || !deviceName.trim()} className="h-11 gap-2 rounded-lg bg-blue-500 px-4 text-sm hover:bg-blue-400">
+                  {creating ? "..." : "إنشاء"}
                 </Button>
               </div>
-            </div>
 
-            {/* Newly created token reveal */}
-            <AnimatePresence>
-              {newToken && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.96, y: -8 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.96 }}
-                  className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-500/10 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span className="text-sm font-semibold text-emerald-400">تم إنشاء الرمز — انسخه الآن!</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    لن يُعرض هذا الرمز مرة أخرى. انسخه والصقه في شاشة تسجيل الدخول بالوكيل.
-                  </p>
-                  <div className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700">
-                    <code className="flex-1 text-xs font-mono text-emerald-300 break-all">{newToken}</code>
-                    <CopyButton text={newToken} />
-                  </div>
-                  <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setNewToken(null)}>
-                    إغلاق
-                  </Button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Existing tokens */}
-      <motion.div custom={3} variants={cardVariants} initial="initial" animate="animate">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between text-base">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-slate-600 flex items-center justify-center">
-                  <Monitor className="w-4 h-4 text-white" />
-                </div>
-                الأجهزة المُصرَّح لها
-              </div>
-              <Badge variant="secondary" className="text-xs">{tokens.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loadingTokens ? (
-              <div className="flex justify-center py-8">
-                <motion.div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full"
-                  animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }} />
-              </div>
-            ) : tokens.length === 0 ? (
-              <div className="text-center py-8 space-y-2">
-                <Circle className="w-8 h-8 text-muted-foreground/30 mx-auto" />
-                <p className="text-sm text-muted-foreground">لا توجد أجهزة مُفعَّلة بعد</p>
-                <p className="text-xs text-muted-foreground">أنشئ رمزاً أعلاه للبدء</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <AnimatePresence>
-                  {tokens.map((token, i) => (
-                    <motion.div key={token.id}
-                      initial={{ opacity: 0, x: 16 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -16, height: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 hover:bg-muted/60 transition-colors group">
-                      <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center shrink-0">
-                        <Monitor className="w-4 h-4 text-slate-300" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{token.deviceName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          أُنشئ {fmtDate(token.createdAt)}
-                          {token.lastSeenAt && (
-                            <> · آخر اتصال {fmtDate(token.lastSeenAt)}</>
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400 hidden sm:flex">
-                          نشط
-                        </Badge>
-                        <Button
-                          size="sm" variant="ghost"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 opacity-0 group-hover:opacity-100 transition-all"
-                          onClick={() => revokeToken(token.id)}
-                          disabled={revoking === token.id}
-                          title="إلغاء الرمز">
-                          {revoking === token.id
-                            ? <motion.div className="w-3 h-3 border border-current border-t-transparent rounded-full"
-                                animate={{ rotate: 360 }} transition={{ duration: 0.6, repeat: Infinity }} />
-                            : <Trash2 className="w-3.5 h-3.5" />}
-                        </Button>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Architecture note */}
-      <motion.div custom={4} variants={cardVariants} initial="initial" animate="animate">
-        <Card className="border-muted/50">
-          <CardContent className="pt-4">
-            <p className="text-xs text-muted-foreground font-semibold mb-3">مخطط الاتصال</p>
-            <div className="flex items-center justify-center gap-2 flex-wrap text-xs">
-              {[
-                { icon: Monitor, label: "الوكيل (Windows)", color: "bg-slate-700" },
-                { arrow: "Websocket ←→" },
-                { icon: Wifi,    label: "Socket.IO /agent-socket", color: "bg-indigo-600" },
-                { arrow: "←→" },
-                { icon: Bot,     label: "الخادم (Replit)", color: "bg-violet-600" },
-              ].map((item, i) =>
-                "arrow" in item ? (
-                  <span key={i} className="text-muted-foreground font-mono text-[10px]">{item.arrow}</span>
-                ) : (
-                  <div key={i} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/60">
-                    <div className={`w-5 h-5 rounded ${item.color} flex items-center justify-center`}>
-                      <item.icon className="w-3 h-3 text-white" />
+              <AnimatePresence>
+                {newToken && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3"
+                  >
+                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-emerald-300">
+                      <CheckCircle2 className="h-4 w-4" />
+                      تم إنشاء الرمز
                     </div>
-                    <span className="text-muted-foreground">{item.label}</span>
-                  </div>
-                )
+                    <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#101f31] p-2">
+                      <code className="flex-1 break-all text-right text-xs text-emerald-300">{newToken}</code>
+                      <CopyButton text={newToken} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <div className="rounded-xl border border-slate-700/50 bg-[#0b1d2f] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-right text-[12px] font-semibold text-white">الأجهزة المفعلة</div>
+                <Badge variant="secondary" className="text-xs">{tokens.length}</Badge>
+              </div>
+
+              {loadingTokens ? (
+                <div className="flex justify-center py-6">
+                  <motion.div className="h-6 w-6 rounded-full border-2 border-cyan-400 border-t-transparent" animate={{ rotate: 360 }} transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }} />
+                </div>
+              ) : tokens.length === 0 ? (
+                <div className="py-6 text-center text-sm text-slate-400">لا توجد أجهزة مفعلة بعد.</div>
+              ) : (
+                <div className="space-y-2">
+                  {tokens.map((token) => (
+                    <div key={token.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-[#0d2134] px-3 py-2">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-700">
+                          <Monitor className="h-4 w-4 text-slate-300" />
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-medium text-white">{token.deviceName}</div>
+                          <div className="text-[11px] text-slate-400">{fmtDate(token.createdAt)}</div>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                        onClick={() => revokeToken(token.id)}
+                        disabled={revoking === token.id}
+                      >
+                        {revoking === token.id ? "..." : "إلغاء"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-            <p className="text-[11px] text-muted-foreground/70 text-center mt-3 leading-relaxed">
-              الوكيل يُصادق بـ Bearer Token · يرسل ping كل 30 ثانية · يعيد الاتصال تلقائياً عند الانقطاع
-            </p>
-          </CardContent>
-        </Card>
-      </motion.div>
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 }
