@@ -24,6 +24,7 @@ import ocrReviewRouter from "./ocrReview.js";
 import smsBroadcastRouter from "./smsBroadcast.js";
 import qrScannerRouter from "./qrScanner.js";
 import aiSettingsRouter from "./ai-settings.js";
+import paymentsRouter from "./payments.js";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use(timetableRouter);
 router.use(smsBroadcastRouter);
 router.use(qrScannerRouter);
 router.use(aiSettingsRouter);
+router.use(paymentsRouter);
 
 export default router;

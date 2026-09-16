@@ -23,15 +23,17 @@ import argparse
 import io
 import signal
 import shlex
+import subprocess
+import importlib.util
 from pathlib import Path
 from typing import Any
 
 # ── المكتبات المطلوبة ────────────────────────────────────────────────────────
+pyautogui = None
+PIL = None
+ImageGrab = None
+ImageDraw = None
 try:
-    import pyautogui
-    import PIL.ImageGrab
-    import PIL.Image
-    import PIL.ImageDraw
     import requests
     from dotenv import load_dotenv
 except ImportError as e:
@@ -40,6 +42,71 @@ except ImportError as e:
     sys.exit(1)
 
 load_dotenv()
+
+
+def ensure_dependencies_installed() -> bool:
+    """تأكد من تثبيت المكتبات الأساسية، مع إعطاء خيار تثبيت تلقائي للمستخدم."""
+    required = ["pyautogui", "PIL", "requests", "dotenv"]
+    missing = [name for name in required if importlib.util.find_spec(name) is None]
+
+    if not missing:
+        return True
+
+    print("\n⚠️  توجد مكتبات مفقودة لتشغيل الوكيل:")
+    print(f"   {', '.join(missing)}")
+    print("   هذا الأمر سيقوم بتثبيت المتطلبات تلقائياً من desktop_agent/requirements.txt")
+
+    try:
+        answer = input("هل تريد تثبيتها الآن؟ [Y/n]: ").strip().lower()
+    except EOFError:
+        answer = "n"
+
+    if answer not in ("", "y", "yes"):
+        print("تم إلغاء التثبيت. شغّل هذا الأمر لاحقاً: python -m pip install -r desktop_agent/requirements.txt")
+        return False
+
+    req_file = Path(__file__).resolve().parent / "requirements.txt"
+    print(f"\n⬇️  تثبيت المتطلبات من: {req_file}\n")
+    result = subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(req_file)], shell=False)
+    if result.returncode != 0:
+        print("\n❌ فشل تثبيت المتطلبات. جرّب يدويًا: python -m pip install -r desktop_agent/requirements.txt")
+        return False
+
+    return True
+
+
+def ensure_gui_runtime() -> None:
+    """تأكد من توفر مكتبات التشغيل الرسومية قبل استخدام وضع الشاشة."""
+    global pyautogui, PIL, ImageGrab, ImageDraw
+
+    if pyautogui is not None and PIL is not None:
+        return
+
+    if not ensure_dependencies_installed():
+        raise RuntimeError("تعذّر تثبيت المتطلبات. لا يمكن تشغيل الوكيل بدون المكتبات الأساسية.")
+
+    try:
+        import pyautogui as _pyautogui
+        import PIL.ImageGrab as _ImageGrab
+        import PIL.Image as _Image
+        import PIL.ImageDraw as _ImageDraw
+    except ImportError as exc:
+        raise RuntimeError("مكتبات الشاشة غير متوفرة. شغّل: python -m pip install -r desktop_agent/requirements.txt") from exc
+
+    pyautogui = _pyautogui
+    PIL = _Image
+    ImageGrab = _ImageGrab
+    ImageDraw = _ImageDraw
+
+    if os.environ.get("DISPLAY") is None and sys.platform.startswith("linux"):
+        raise RuntimeError("هذا بيئة بدون شاشة (headless). يحتاج الوكيل الحقيقي إلى جلسة سطح مكتب فعّالة مع DISPLAY/X11.")
+
+
+def is_headless_environment() -> bool:
+    """تحقق ما إذا كانت بيئة التشغيل لا تدعم محاكاة الشاشة."""
+    if sys.platform.startswith("win"):
+        return False
+    return os.environ.get("DISPLAY") is None
 
 # ── الإعدادات ────────────────────────────────────────────────────────────────
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
@@ -53,9 +120,14 @@ SCREENSHOT_W   = 1280         # عرض الصورة المرسلة للـ AI
 LOG_DIR        = Path("logs")
 
 # ── أمان: مفتاح الطوارئ ──────────────────────────────────────────────────────
-pyautogui.FAILSAFE = True    # حرّك الماوس للزاوية العلوية اليسرى لإيقاف الوكيل
-
+# لا نُحدّد هذا عند الاستيراد في بيئات headless؛ يتم تفعيل it فقط عند تشغيل الوكيل الحقيقي.
 _paused = False
+
+
+def enable_fail_safe() -> None:
+    """فعّل وضع الأمان عند التشغيل الحقيقي للوكيل."""
+    if pyautogui is not None:
+        pyautogui.FAILSAFE = True
 
 def _pause_handler(sig, frame):
     global _paused
@@ -68,12 +140,13 @@ signal.signal(signal.SIGINT, _pause_handler)
 # ── أدوات الشاشة ──────────────────────────────────────────────────────────────
 def screenshot_b64(draw_cursor: bool = True) -> str:
     """التقط الشاشة وأعدها base64 بحجم مناسب."""
-    img: PIL.Image.Image = PIL.ImageGrab.grab()
+    ensure_gui_runtime()
+    img: PIL.Image.Image = ImageGrab.grab()
 
     # ارسم مؤشر الماوس على الصورة حتى يراه الـ AI
     if draw_cursor:
         mx, my = pyautogui.position()
-        draw = PIL.ImageDraw.Draw(img)
+        draw = ImageDraw.Draw(img)
         r = 8
         draw.ellipse([mx - r, my - r, mx + r, my + r], outline="red", width=3)
         draw.line([mx - 18, my, mx + 18, my], fill="red", width=2)
@@ -90,11 +163,13 @@ def screenshot_b64(draw_cursor: bool = True) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 def screen_size() -> tuple[int, int]:
+    ensure_gui_runtime()
     return pyautogui.size()
 
 # ── منطق تحجيم الإحداثيات ────────────────────────────────────────────────────
 def scale_coords(x: int, y: int) -> tuple[int, int]:
     """الـ AI يرى صورة بعرض SCREENSHOT_W، بينما الشاشة قد تكون أكبر."""
+    ensure_gui_runtime()
     sw, sh = pyautogui.size()
     scale_x = sw / SCREENSHOT_W
     scale_y = sh / (SCREENSHOT_W * sh // sw)
@@ -181,6 +256,7 @@ def ask_ai(img_b64: str, task: str, history: list[str]) -> dict[str, Any]:
 # ── تنفيذ الأفعال ─────────────────────────────────────────────────────────────
 def execute(action: dict[str, Any]) -> str:
     """نفّذ الفعل وأعِد وصفاً للسجل."""
+    ensure_gui_runtime()
     act = action.get("action", "")
 
     if act == "click":
@@ -271,6 +347,10 @@ def _type_arabic(text: str):
 # ── حلقة الوكيل الرئيسية ─────────────────────────────────────────────────────
 def run_agent(task: str, dry_run: bool = False) -> str:
     """شغّل الوكيل حتى اكتمال المهمة أو الوصول للحد الأقصى."""
+    if dry_run:
+        print(f"\n🧪 وضع الاختبار / dry-run: لا يتم تنفيذ أي زر أو ماوس. المهمة: {task}\n")
+        return "🧪 dry-run mode: no execution performed"
+
     LOG_DIR.mkdir(exist_ok=True)
     log_file = LOG_DIR / f"session_{int(time.time())}.jsonl"
 
@@ -382,9 +462,15 @@ def main():
     parser.add_argument("--grades",  action="store_true", help="وضع إدخال النقاط على موقع الوزارة")
     parser.add_argument("--dry-run", action="store_true", help="عرض الخطوات بدون تنفيذ فعلي")
     parser.add_argument("--steps",   type=int, default=MAX_STEPS, help=f"أقصى خطوات (افتراضي {MAX_STEPS})")
+    parser.add_argument("--install", action="store_true", help="تثبيت المتطلبات وربطها مباشرة")
     args = parser.parse_args()
 
     MAX_STEPS = args.steps
+
+    if args.install:
+        if ensure_dependencies_installed():
+            print("\n✅ تم تثبيت المتطلبات بنجاح. يمكنك الآن تشغيل الوكيل: python agent.py")
+        return
 
     # اختر المهمة
     if args.grades:
@@ -412,6 +498,11 @@ def main():
         print("   أنشئ ملف .env أو انسخه من .env.example وأضف:")
         print("   GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxx")
         print("\n   احصل على مفتاح مجاني من: https://console.groq.com\n")
+        sys.exit(1)
+
+    if not args.dry_run and is_headless_environment():
+        print("\n⚠️  بيئة headless: لا يمكن تشغيل الوكيل الحقيقي دون جلسة سطح مكتب مع DISPLAY/X11.")
+        print("   جرّب التشغيل على جهاز محلي أو خادم مع واجهة رسومية، أو استخدم --dry-run للاختبار.")
         sys.exit(1)
 
     run_agent(task, dry_run=args.dry_run)

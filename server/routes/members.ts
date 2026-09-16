@@ -15,6 +15,7 @@ import { Router, type Request, type Response } from "express";
 import { and, eq, inArray } from "drizzle-orm";
 import { db, schoolMembersTable, studentsTable, gradesTable, absencesTable, schoolInfoTable } from "../../shared/db.js";
 import { getCachedJson, setCachedJson } from "../services/redisCache.js";
+import { calcAnnualAvg, calcWeightedAvg, getSubjectsForLevel } from "../../shared/subjects.js";
 
 const router = Router();
 
@@ -148,6 +149,10 @@ router.get("/my-member-context", (req: Request, res: Response): void => {
 router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   if (req.memberContext?.role !== "parent") { res.status(403).json({ error: "Parents only" }); return; }
+  if (req.user!.subscriptionStatus !== "active") {
+    res.status(402).json({ error: "Parent service subscription required" });
+    return;
+  }
 
   const { linkedStudentId, schoolUserId } = req.memberContext;
   if (!linkedStudentId) { res.json({ student: null }); return; }
@@ -198,17 +203,13 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
     }
   }
 
-  const { getSubjectsForLevel, calcWeightedAvg } = await import("../../shared/subjects.js");
   const subs = getSubjectsForLevel(student.niveau as import("../../shared/subjects.js").Niveau);
 
   const t1Avg = storedAvgs["1"] ?? calcWeightedAvg(subjectGrades["1"] ?? {}, subs);
   const t2Avg = storedAvgs["2"] ?? calcWeightedAvg(subjectGrades["2"] ?? {}, subs);
   const t3Avg = storedAvgs["3"] ?? calcWeightedAvg(subjectGrades["3"] ?? {}, subs);
 
-  const avgs = [t1Avg, t2Avg, t3Avg].filter((v): v is number => v !== null);
-  const annualAvg = avgs.length > 0
-    ? Math.round((avgs.reduce((a, b) => a + b, 0) / avgs.length) * 100) / 100
-    : null;
+  const annualAvg = calcAnnualAvg(t1Avg, t2Avg, t3Avg);
 
   // Return subject grades only (no __avg__ sentinels) so the client can show
   // per-subject rows without confusion.

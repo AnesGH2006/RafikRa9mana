@@ -988,10 +988,10 @@ function AuthGate() {
     </div>
   );
 
-  // Teachers/parents are sub-accounts — they bypass the subscription paywall
-  // (the head admin's subscription covers them).
-  const isMember = !!user?.memberContext;
-  const isSubscribed = user?.subscriptionStatus === "active" || isMember;
+  // Teachers are covered by the school's subscription. Parent access is a
+  // separate service paid by the parent account.
+  const isTeacherMember = user?.memberContext?.role === "teacher";
+  const isSubscribed = user?.subscriptionStatus === "active" || isTeacherMember;
 
   return (
     <AnimatePresence mode="wait">

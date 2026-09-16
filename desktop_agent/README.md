@@ -17,9 +17,9 @@
 # 1. تأكد من تثبيت Python 3.10+
 python --version
 
-# 2. ثبّت المكتبات
+# 2. ثبّت المكتبات تلقائياً
 cd desktop_agent
-pip install -r requirements.txt
+python agent.py --install
 
 # 3. أنشئ ملف .env
 copy .env.example .env
@@ -27,6 +27,23 @@ copy .env.example .env
 
 # 4. شغّل الوكيل
 python agent.py
+```
+
+## إذا لم تعرف كيف تثبّت
+
+- افتح موجه الأوامر داخل مجلد `desktop_agent`
+- نفّذ:
+  ```bash
+  python agent.py --install
+  ```
+- ستظهر لك رسالة تسألك إن كنت تريد تثبيت المكتبات تلقائياً
+- بعد اكتمال التثبيت، أنشئ ملف `.env` من `.env.example` وأضف مفتاح Groq
+
+## التثبيت اليدوي
+
+```bash
+cd desktop_agent
+python -m pip install -r requirements.txt
 ```
 
 ## الحصول على مفتاح Groq (مجاني)

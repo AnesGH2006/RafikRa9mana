@@ -120,7 +120,7 @@ export function calcAnnualAvg(
   t2: number | null,
   t3: number | null
 ): number | null {
-  const available = [t1, t2, t3].filter((v): v is number => v !== null && v > 0);
+  const available = [t1, t2, t3].filter((v): v is number => v !== null && Number.isFinite(v));
   if (available.length === 0) return null;
   return Math.round((available.reduce((a, b) => a + b, 0) / available.length) * 100) / 100;
 }

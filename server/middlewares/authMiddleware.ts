@@ -1,7 +1,7 @@
 import { type Request, type Response, type NextFunction } from "express";
 import { eq } from "drizzle-orm";
 import { getSession, getSessionId } from "../lib/auth.js";
-import { db, schoolMembersTable } from "../../shared/db.js";
+import { db, schoolMembersTable, usersTable } from "../../shared/db.js";
 import type { AuthUser, MemberContext } from "../../shared/types.js";
 
 declare global {
@@ -31,7 +31,24 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     return;
   }
 
-  req.user = session.user;
+  // Keep authorization state current after asynchronous payment webhooks.
+  const [currentUser] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, session.user.id))
+    .limit(1);
+  req.user = currentUser
+    ? {
+        ...session.user,
+        email: currentUser.email,
+        firstName: currentUser.firstName,
+        lastName: currentUser.lastName,
+        profileImageUrl: currentUser.profileImageUrl,
+        role: currentUser.role,
+        subscriptionStatus: currentUser.subscriptionStatus,
+        subscriptionExpiresAt: currentUser.subscriptionExpiresAt?.toISOString() ?? null,
+      }
+    : session.user;
   req.isAuthenticated = () => true;
 
   // Enrich with member context if this user is a teacher/parent sub-account

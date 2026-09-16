@@ -73,6 +73,9 @@ const steps = [
 
 export default function PaywallScreen() {
   const { user, logout } = useAuth();
+  const isParent = user?.memberContext?.role === "parent";
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
   const [schoolStage, setSchoolStage] = useState<"moyen" | "lycee">(() => {
     if (typeof window === "undefined") return "moyen";
     const stored = window.localStorage.getItem("selected-school-stage") || window.localStorage.getItem("cem-school-stage");
@@ -85,6 +88,25 @@ export default function PaywallScreen() {
       window.localStorage.setItem("cem-school-stage", schoolStage);
     }
   }, [schoolStage]);
+
+  async function startParentCheckout() {
+    setCheckoutBusy(true);
+    setCheckoutError("");
+    try {
+      const response = await fetch(`${import.meta.env.BASE_URL}api/payments/chargily/checkout`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnUrl: `${window.location.origin}/my-child` }),
+      });
+      const payload = await response.json() as { checkoutUrl?: string; error?: string };
+      if (!response.ok || !payload.checkoutUrl) throw new Error(payload.error ?? "تعذر بدء عملية الدفع");
+      window.location.assign(payload.checkoutUrl);
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "تعذر بدء عملية الدفع");
+      setCheckoutBusy(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-start pt-0 overflow-hidden relative">
@@ -130,12 +152,28 @@ export default function PaywallScreen() {
             الوصول مقيّد — يتطلب اشتراكًا
           </motion.div>
           <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
-            اختر باقتك وابدأ الآن
+            {isParent ? "فعّل خدمة متابعة طفلك" : "اختر باقتك وابدأ الآن"}
           </h1>
           <p className="text-muted-foreground text-base max-w-lg mx-auto">
-            حسابك مسجّل بنجاح. فعّل اشتراكك للوصول إلى جميع ميزات رفيق الرقمنة.
+            {isParent
+              ? "ادفع اشتراك خدمة ولي الأمر للوصول إلى نتائج طفلك وغياباته وإشعارات المدرسة."
+              : "حسابك مسجّل بنجاح. فعّل اشتراكك للوصول إلى جميع ميزات رفيق الرقمنة."}
           </p>
         </motion.div>
+
+        {isParent && (
+          <motion.div
+            className="rounded-2xl border border-emerald-200 bg-emerald-50/70 dark:border-emerald-800/50 dark:bg-emerald-950/20 p-6 text-center space-y-3"
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+          >
+            <p className="font-bold">خدمة ولي الأمر — 1 000 دج / سنة</p>
+            <p className="text-sm text-muted-foreground">سيتم فتح حساب طفلك تلقائيًا بعد تأكيد الدفع.</p>
+            <Button onClick={startParentCheckout} disabled={checkoutBusy} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              {checkoutBusy ? "جارٍ فتح صفحة الدفع…" : "الدفع عبر Chargily"}
+            </Button>
+            {checkoutError && <p className="text-sm text-red-600">{checkoutError}</p>}
+          </motion.div>
+        )}
 
         {/* Choose school level before payment */}
         <motion.div
