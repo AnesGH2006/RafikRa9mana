@@ -352,26 +352,24 @@ export default function AgentSetupPage() {
                   type="button"
                   onClick={async () => {
                     try {
-                      const res = await fetch(`${BASE}api/agent/download`, { credentials: "include" });
+                      const res = await fetch(`${BASE}api/agent/download`, { method: "HEAD", credentials: "include" });
                       if (!res.ok) {
-                        const data = await res.json().catch(() => ({}));
+                        const data = await fetch(`${BASE}api/agent/download`, { credentials: "include" }).then(r => r.json().catch(() => ({}))).catch(() => ({}));
                         toast({
                           title: "المثبّت غير متوفر",
-                          description: data?.message || "يجب بناء المثبّت أولاً على جهاز Windows.",
+                          description: data?.message || "يجب بناء المثبّت أولاً على جهاز Windows ثم إعداده للتنزيل.",
                           variant: "destructive",
                         });
                         return;
                       }
 
-                      const blob = await res.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = "SchoolManagerAgent-Setup.exe";
-                      document.body.appendChild(a);
-                      a.click();
-                      a.remove();
-                      URL.revokeObjectURL(url);
+                      const link = document.createElement("a");
+                      link.href = `${BASE}api/agent/download?download=1`;
+                      link.download = "SchoolManagerAgent-Setup.exe";
+                      link.rel = "noopener noreferrer";
+                      document.body.appendChild(link);
+                      link.click();
+                      link.remove();
                     } catch {
                       toast({
                         title: "تعذّر بدء التنزيل",
@@ -380,7 +378,7 @@ export default function AgentSetupPage() {
                       });
                     }
                   }}
-                  className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-base font-bold text-slate-900 shadow-lg shadow-amber-500/25 transition hover:bg-amber-300"
+                  className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-base font-bold text-slate-900 shadow-lg shadow-amber-500/25 transition hover:bg-amber-300 active:scale-[0.99]"
                 >
                   <Download className="h-5 w-5" />
                   تثبيت الوكيل
