@@ -825,7 +825,7 @@ function AppLayout() {
               <Route path="/audit-log"           component={AuditLogPage} />
               <Route path="/class-balancer"      component={ClassBalancerPage} />
               <Route path="/timetable"           component={TimetablePage} />
-              <Route path="/ministry"             component={MinistryPage} />
+              <Route path="/ministry"             component={MinistryGradePanel} />
               <Route component={NotFound} />
             </Switch>
           </AnimatePresence>
@@ -1025,7 +1025,7 @@ export default function App() {
     </ThemeProvider>
   );
 }
-
+<MinistryGradePanel />
 // Lazy-load so it never blocks the main bundle
 import { lazy, Suspense } from "react";
 const _PwaPrompt = lazy(() =>
