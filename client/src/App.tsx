@@ -63,7 +63,7 @@ import ParentRegisterPage from "@/pages/parent-register";
 import AuditLogPage from "@/pages/audit-log";
 import ClassBalancerPage from "@/pages/class-balancer";
 import TimetablePage from "@/pages/timetable";
-import { MinistryGradePanel } from "@/pages/MinistryGradePanel";
+import { MinistryGradePanel } from "@/MinistryGradePanel";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface NavItemDef {
   href: string;
