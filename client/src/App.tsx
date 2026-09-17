@@ -63,7 +63,7 @@ import ParentRegisterPage from "@/pages/parent-register";
 import AuditLogPage from "@/pages/audit-log";
 import ClassBalancerPage from "@/pages/class-balancer";
 import TimetablePage from "@/pages/timetable";
-
+import { MinistryGradePanel } from "@/pages/ministrygradepanel";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface NavItemDef {
   href: string;
@@ -825,6 +825,7 @@ function AppLayout() {
               <Route path="/audit-log"           component={AuditLogPage} />
               <Route path="/class-balancer"      component={ClassBalancerPage} />
               <Route path="/timetable"           component={TimetablePage} />
+              <Route path="/ministry"             component={MinistryPage} />
               <Route component={NotFound} />
             </Switch>
           </AnimatePresence>
