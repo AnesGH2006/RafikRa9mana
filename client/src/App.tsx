@@ -825,7 +825,7 @@ function AppLayout() {
               <Route path="/audit-log"           component={AuditLogPage} />
               <Route path="/class-balancer"      component={ClassBalancerPage} />
               <Route path="/timetable"           component={TimetablePage} />
-              <Route path="/ministry"             component={MinistryGradePanel} />
+              <Route path="/ministrygradepanel" component={MinistryGradePanel} />
               <Route component={NotFound} />
             </Switch>
           </AnimatePresence>
