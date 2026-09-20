@@ -465,16 +465,31 @@ export default function UploadGradesOcrPage() {
       </div>
 
       {/* Upload zone */}
-      {phase !== "done" && (
+            {phase !== "done" && (
         <motion.div
-          className={`rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center gap-4 py-14 px-6 text-center
-            ${dragging ? "border-violet-400 bg-violet-50/40 dark:bg-violet-950/20" : "border-muted-foreground/25 hover:border-violet-400/50 hover:bg-violet-50/20 dark:hover:bg-violet-950/10"}`}
-          onDragOver={onDragOver}
+          className={`rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center gap-4 py-14 px-6 text-center
+            ${!niveau || !classe ? "opacity-50 cursor-not-allowed border-muted-foreground/15" :
+              dragging ? "border-violet-400 bg-violet-50/40 dark:bg-violet-950/20 cursor-pointer" :
+              "border-muted-foreground/25 hover:border-violet-400/50 hover:bg-violet-50/20 dark:hover:bg-violet-950/10 cursor-pointer"}`}
+          onDragOver={e => { if (niveau && classe) onDragOver(e); }}
           onDragLeave={onDragLeave}
-          onDrop={onDrop}
-          onClick={() => phase === "idle" && fileInputRef.current?.click()}
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.99 }}
+          onDrop={e => {
+            if (!niveau || !classe) {
+              e.preventDefault();
+              toast({ variant: "destructive", title: "بيانات ناقصة", description: "يجب ملء المستوى والفوج قبل رفع الصورة" });
+              return;
+            }
+            onDrop(e);
+          }}
+          onClick={() => {
+            if (!niveau || !classe) {
+              toast({ variant: "destructive", title: "بيانات ناقصة", description: "يجب ملء المستوى والفوج قبل رفع الصورة" });
+              return;
+            }
+            if (phase === "idle") fileInputRef.current?.click();
+          }}
+          whileHover={{ scale: niveau && classe ? 1.01 : 1 }}
+          whileTap={{ scale: niveau && classe ? 0.99 : 1 }}
         >
           <input
             ref={fileInputRef}
