@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { School, User, Save, KeyRound } from "lucide-react";
+import { School, User, Save, KeyRound, Sparkles } from "lucide-react";
 import type { SchoolInfo } from "@shared/types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -28,9 +28,15 @@ export default function Settings() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
+
   const [groqKey, setGroqKey] = useState("");
   const [hasGroqKey, setHasGroqKey] = useState(false);
   const [savingGroqKey, setSavingGroqKey] = useState(false);
+
+  const [geminiKey, setGeminiKey] = useState("");
+  const [hasGeminiKey, setHasGeminiKey] = useState(false);
+  const [savingGeminiKey, setSavingGeminiKey] = useState(false);
+
   const [form, setForm] = useState({ nom: "", wilaya: "", commune: "", annee: "2025-2026", directeur: "", phone: "", supportPhone: "" });
 
   const fetchSchool = useCallback(async () => {
@@ -47,7 +53,12 @@ export default function Settings() {
     if (user?.memberContext || (user?.role !== "admin" && user?.subscriptionStatus !== "active")) return;
     fetch(`${BASE}api/assistant/settings`, { credentials: "include" })
       .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data) setHasGroqKey(Boolean(data.hasGroqApiKey)); });
+      .then(data => {
+        if (data) {
+          setHasGroqKey(Boolean(data.hasGroqApiKey));
+          setHasGeminiKey(Boolean(data.hasGeminiApiKey));
+        }
+      });
   }, [user]);
 
   const handleSave = async () => {
@@ -89,6 +100,24 @@ export default function Settings() {
     finally { setSavingGroqKey(false); }
   };
 
+  const saveGeminiKey = async () => {
+    setSavingGeminiKey(true);
+    try {
+      const res = await fetch(`${BASE}api/assistant/settings`, {
+        method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ geminiApiKey: geminiKey }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "تعذر حفظ المفتاح");
+      setHasGeminiKey(Boolean(data.hasGeminiApiKey));
+      setGeminiKey("");
+      toast({ title: "تم حفظ مفتاح Gemini بأمان" });
+    } catch (error) { toast({ title: error instanceof Error ? error.message : "تعذر حفظ المفتاح", variant: "destructive" }); }
+    finally { setSavingGeminiKey(false); }
+  };
+
+  const canManageKeys = !user?.memberContext && (user?.role === "admin" || user?.subscriptionStatus === "active");
+
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
       className="p-6 space-y-6 max-w-2xl mx-auto">
@@ -97,18 +126,42 @@ export default function Settings() {
         {t("settings.title")}
       </motion.h1>
 
-      {!user?.memberContext && (user?.role === "admin" || user?.subscriptionStatus === "active") && (
-        <Card className="shadow-sm">
-          <CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-base"><KeyRound className="w-5 h-5" /> مفتاح المساعد الذكي Groq</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">أدخل مفتاحك الشخصي من console.groq.com. يُحفظ مشفراً ولا يظهر لأي مستخدم آخر.</p>
-            <Label htmlFor="groq-api-key">مفتاح Groq {hasGroqKey ? "(محفوظ، أدخل مفتاحاً جديداً لتغييره)" : ""}</Label>
-            <Input id="groq-api-key" type="password" autoComplete="off" placeholder="gsk_..." value={groqKey} onChange={e => setGroqKey(e.target.value)} dir="ltr" />
-            <Button onClick={saveGroqKey} disabled={savingGroqKey || !groqKey.trim()} className="gap-2">
-              <KeyRound className="w-4 h-4" /> {savingGroqKey ? "جارٍ الحفظ..." : "حفظ مفتاح Groq"}
-            </Button>
-          </CardContent>
-        </Card>
+      {canManageKeys && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Groq key card */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <KeyRound className="w-5 h-5" /> مفتاح Groq
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">من console.groq.com. يُحفظ مشفراً ولا يظهر لأي مستخدم آخر.</p>
+              <Label htmlFor="groq-api-key">مفتاح Groq {hasGroqKey ? "(محفوظ — أدخل مفتاحاً جديداً لتغييره)" : ""}</Label>
+              <Input id="groq-api-key" type="password" autoComplete="off" placeholder="gsk_..." value={groqKey} onChange={e => setGroqKey(e.target.value)} dir="ltr" />
+              <Button onClick={saveGroqKey} disabled={savingGroqKey || !groqKey.trim()} className="gap-2 w-full">
+                <KeyRound className="w-4 h-4" /> {savingGroqKey ? "جارٍ الحفظ..." : "حفظ مفتاح Groq"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Gemini key card */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Sparkles className="w-5 h-5" /> مفتاح Gemini
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">من aistudio.google.com. يُستخدم لتحسين دقة استخراج البيانات بالـ OCR.</p>
+              <Label htmlFor="gemini-api-key">مفتاح Gemini {hasGeminiKey ? "(محفوظ — أدخل مفتاحاً جديداً لتغييره)" : ""}</Label>
+              <Input id="gemini-api-key" type="password" autoComplete="off" placeholder="AIza..." value={geminiKey} onChange={e => setGeminiKey(e.target.value)} dir="ltr" />
+              <Button onClick={saveGeminiKey} disabled={savingGeminiKey || !geminiKey.trim()} className="gap-2 w-full">
+                <Sparkles className="w-4 h-4" /> {savingGeminiKey ? "جارٍ الحفظ..." : "حفظ مفتاح Gemini"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* School info card */}
