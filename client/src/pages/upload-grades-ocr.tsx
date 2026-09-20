@@ -15,6 +15,9 @@
  * ✅ FIX: Added Levenshtein-distance fuzzy fallback so minor OCR
  *         mis-readings (extra space, one transposed letter) still match.
  * ✅ NEW:  Absences mode (type=absences) — extracts justified/unjustified hours.
+ * ✅ FIX 2: Upload zone is now HARD-DISABLED (no click, no drag-drop) until
+ *          niveau + classe are filled, with a persistent inline banner —
+ *          so it's impossible to select a file before required fields are set.
  */
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -45,12 +48,9 @@ type OcrMode = "grades" | "absences";
 interface OcrRow {
   rowNumber: number;
   studentName: string;
-  // grades mode
   grade?: number | null;
-  // absences mode
   justifiedHours?: number;
   unjustifiedHours?: number;
-  // common
   confidence: number;
   lowConfidence: boolean;
   editedName?: string;
@@ -74,7 +74,6 @@ const pageVariants = {
   exit:    { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
 
-// ── Arabic normalizer (strips diacritics, unifies أ/إ/آ/ا, ة/ه, ى/ي) ────────
 function normArabic(s: string): string {
   return String(s ?? "")
     .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
@@ -87,7 +86,6 @@ function normArabic(s: string): string {
     .trim();
 }
 
-// ── Levenshtein distance for fuzzy fallback ────────────────────────────────────
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;
   const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
@@ -101,19 +99,15 @@ function levenshtein(a: string, b: string): number {
   return dp[m]![n]!;
 }
 
-// ── Name matching: exact/partial → word-order-independent → fuzzy ─────────────
 function nameMatches(a: string, b: string): boolean {
   const na = normArabic(a);
   const nb = normArabic(b);
   if (!na || !nb) return false;
-  // 1. exact / substring match
   if (na === nb || na.includes(nb) || nb.includes(na)) return true;
-  // 2. word-order-independent (handles "اسم لقب" vs "لقب اسم")
   const wa = na.split(" ").filter(Boolean);
   const wb = nb.split(" ").filter(Boolean);
   const [shorter, longer] = wa.length <= wb.length ? [wa, wb] : [wb, wa];
   if (shorter.length > 0 && shorter.every(w => longer.some(lw => lw.includes(w)))) return true;
-  // 3. fuzzy Levenshtein fallback — allow up to 20% edits (min 1, max 3)
   const maxDist = Math.min(3, Math.max(1, Math.floor(Math.min(na.length, nb.length) * 0.2)));
   return levenshtein(na, nb) <= maxDist;
 }
@@ -121,17 +115,14 @@ function nameMatches(a: string, b: string): boolean {
 export default function UploadGradesOcrPage() {
   const { toast } = useToast();
 
-  // ── Mode ──────────────────────────────────────────────────────────────────────
   const [mode, setMode] = useState<OcrMode>("grades");
 
-  // ── Form fields ───────────────────────────────────────────────────────────────
   const [annee,     setAnnee]     = useState("2025-2026");
   const [niveau,    setNiveau]    = useState("");
   const [classe,    setClasse]    = useState("");
   const [trimestre, setTrimestre] = useState("1");
   const [subject,   setSubject]   = useState("");
 
-  // ── Upload / OCR state ────────────────────────────────────────────────────────
   const [phase,    setPhase]    = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [rows,     setRows]     = useState<OcrRow[]>([]);
   const [preview,  setPreview]  = useState<string | null>(null);
@@ -140,12 +131,12 @@ export default function UploadGradesOcrPage() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
 
-  // ── Save state ────────────────────────────────────────────────────────────────
   const [saveState, setSaveState] = useState<SaveState>({ phase: "idle", saved: 0, failed: 0, errors: [] });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Reset when mode changes ────────────────────────────────────────────────────
+  const canUpload = Boolean(niveau && classe);
+
   const switchMode = (m: OcrMode) => {
     setMode(m);
     setPhase("idle");
@@ -157,35 +148,33 @@ export default function UploadGradesOcrPage() {
     if (m === "absences") setSubject("");
   };
 
-  // ── Upload handler ─────────────────────────────────────────────────────────────
   const handleFile = useCallback(async (file: File) => {
-    // Validation
-    const MAX_SIZE = 15 * 1024 * 1024; // 15 MB
+    if (!niveau || !classe) {
+      toast({
+        variant: "destructive",
+        title: "بيانات ناقصة",
+        description: "يجب ملء المستوى والفوج قبل بدء المعالجة",
+      });
+      return;
+    }
+
+    const MAX_SIZE = 15 * 1024 * 1024;
     const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/bmp"];
-    
+
     if (!ALLOWED_TYPES.includes(file.type)) {
-      toast({ 
-        variant: "destructive", 
-        title: "نوع ملف غير صحيح", 
-        description: `الملفات المدعومة: JPEG, PNG, WebP, BMP` 
+      toast({
+        variant: "destructive",
+        title: "نوع ملف غير صحيح",
+        description: `الملفات المدعومة: JPEG, PNG, WebP, BMP`
       });
       return;
     }
 
     if (file.size > MAX_SIZE) {
-      toast({ 
-        variant: "destructive", 
-        title: "الملف كبير جداً", 
-        description: `الحد الأقصى: 15 MB (الملف الحالي: ${(file.size / 1024 / 1024).toFixed(1)} MB)` 
-      });
-      return;
-    }
-
-    if (!niveau || !classe) {
-      toast({ 
-        variant: "destructive", 
-        title: "بيانات ناقصة", 
-        description: "يجب ملء المستوى والفوج قبل بدء المعالجة" 
+      toast({
+        variant: "destructive",
+        title: "الملف كبير جداً",
+        description: `الحد الأقصى: 15 MB (الملف الحالي: ${(file.size / 1024 / 1024).toFixed(1)} MB)`
       });
       return;
     }
@@ -246,19 +235,40 @@ export default function UploadGradesOcrPage() {
       setSuggestions(["جرّب مرة أخرى", "تحقق من اتصال الإنترنت"]);
       setPhase("error");
     }
-  }, [toast, mode]);
+  }, [toast, mode, niveau, classe, subject]);
 
-  // ── Drag & drop ───────────────────────────────────────────────────────────────
-  const onDragOver  = (e: React.DragEvent) => { e.preventDefault(); setDragging(true); };
+  const handleDropzoneClick = () => {
+    if (!canUpload) {
+      toast({
+        variant: "destructive",
+        title: "بيانات ناقصة",
+        description: "يجب ملء المستوى والفوج قبل رفع الصورة",
+      });
+      return;
+    }
+    if (phase === "idle") fileInputRef.current?.click();
+  };
+
+  const onDragOver  = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (canUpload) setDragging(true);
+  };
   const onDragLeave = () => setDragging(false);
   const onDrop      = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
+    if (!canUpload) {
+      toast({
+        variant: "destructive",
+        title: "بيانات ناقصة",
+        description: "يجب ملء المستوى والفوج قبل رفع الصورة",
+      });
+      return;
+    }
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
   };
 
-  // ── Row editing helpers ────────────────────────────────────────────────────────
   const updateRow    = (idx: number, patch: Partial<OcrRow>) =>
     setRows(prev => prev.map((r, i) => i === idx ? { ...r, ...patch } : r));
   const effectiveName       = (r: OcrRow) => r.editedName ?? r.studentName;
@@ -266,7 +276,6 @@ export default function UploadGradesOcrPage() {
   const effectiveJustified  = (r: OcrRow) => r.editedJustified  !== undefined ? r.editedJustified  : String(r.justifiedHours  ?? 0);
   const effectiveUnjustified= (r: OcrRow) => r.editedUnjustified !== undefined ? r.editedUnjustified : String(r.unjustifiedHours ?? 0);
 
-  // ── Fetch students for matching ────────────────────────────────────────────────
   async function fetchStudents(): Promise<Array<{ id: string; nomPrenom: string }>> {
     if (!niveau || !classe) return [];
     try {
@@ -280,7 +289,6 @@ export default function UploadGradesOcrPage() {
     } catch { return []; }
   }
 
-  // ── Save grades ────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!niveau || !classe) {
       toast({ variant: "destructive", title: "خطأ", description: "يرجى تحديد المستوى والفوج قبل الحفظ" });
@@ -343,7 +351,6 @@ export default function UploadGradesOcrPage() {
             }),
           });
         } else {
-          // absences mode
           const justified   = parseInt(effectiveJustified(row))   || 0;
           const unjustified = parseInt(effectiveUnjustified(row)) || 0;
           res = await fetch(`${BASE}api/absences`, {
@@ -395,7 +402,6 @@ export default function UploadGradesOcrPage() {
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
       className="p-6 space-y-6 max-w-5xl mx-auto" dir="rtl">
 
-      {/* Header */}
       <div className="flex items-center gap-3">
         <span className="inline-flex w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 items-center justify-center shadow-lg shadow-violet-500/30">
           <ScanLine className="w-5 h-5 text-white" />
@@ -406,7 +412,6 @@ export default function UploadGradesOcrPage() {
         </div>
       </div>
 
-      {/* Mode toggle */}
       <div className="flex gap-2 p-1 bg-muted/50 rounded-xl w-fit">
         <button
           onClick={() => switchMode("grades")}
@@ -432,7 +437,6 @@ export default function UploadGradesOcrPage() {
         </button>
       </div>
 
-      {/* Form fields */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
         <Select value={annee} onValueChange={setAnnee}>
           <SelectTrigger><SelectValue placeholder="السنة" /></SelectTrigger>
@@ -464,39 +468,39 @@ export default function UploadGradesOcrPage() {
         )}
       </div>
 
-      {/* Upload zone */}
-            {phase !== "done" && (
+      {!canUpload && phase === "idle" && (
+        <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40 rounded-lg px-3 py-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          حدد المستوى والفوج أعلاه أولاً — منطقة رفع الصورة معطّلة حتى تُعبّأ الحقلين
+        </div>
+      )}
+
+      {phase !== "done" && (
         <motion.div
           className={`rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center gap-4 py-14 px-6 text-center
-            ${!niveau || !classe ? "opacity-50 cursor-not-allowed border-muted-foreground/15" :
-              dragging ? "border-violet-400 bg-violet-50/40 dark:bg-violet-950/20 cursor-pointer" :
-              "border-muted-foreground/25 hover:border-violet-400/50 hover:bg-violet-50/20 dark:hover:bg-violet-950/10 cursor-pointer"}`}
-          onDragOver={e => { if (niveau && classe) onDragOver(e); }}
+            ${!canUpload
+              ? "opacity-50 cursor-not-allowed border-muted-foreground/15"
+              : dragging
+                ? "border-violet-400 bg-violet-50/40 dark:bg-violet-950/20 cursor-pointer"
+                : "border-muted-foreground/25 hover:border-violet-400/50 hover:bg-violet-50/20 dark:hover:bg-violet-950/10 cursor-pointer"}`}
+          onDragOver={onDragOver}
           onDragLeave={onDragLeave}
-          onDrop={e => {
-            if (!niveau || !classe) {
-              e.preventDefault();
-              toast({ variant: "destructive", title: "بيانات ناقصة", description: "يجب ملء المستوى والفوج قبل رفع الصورة" });
-              return;
-            }
-            onDrop(e);
-          }}
-          onClick={() => {
-            if (!niveau || !classe) {
-              toast({ variant: "destructive", title: "بيانات ناقصة", description: "يجب ملء المستوى والفوج قبل رفع الصورة" });
-              return;
-            }
-            if (phase === "idle") fileInputRef.current?.click();
-          }}
-          whileHover={{ scale: niveau && classe ? 1.01 : 1 }}
-          whileTap={{ scale: niveau && classe ? 0.99 : 1 }}
+          onDrop={onDrop}
+          onClick={handleDropzoneClick}
+          whileHover={{ scale: canUpload ? 1.01 : 1 }}
+          whileTap={{ scale: canUpload ? 0.99 : 1 }}
         >
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+            disabled={!canUpload}
+            onChange={e => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+              e.target.value = "";
+            }}
           />
 
           {phase === "idle" && (
@@ -510,7 +514,11 @@ export default function UploadGradesOcrPage() {
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">JPEG · PNG · WebP · BMP — حجم أقصى 15 MB</p>
               </div>
-              <Button size="sm" className="gap-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white border-0 shadow">
+              <Button
+                size="sm"
+                disabled={!canUpload}
+                className="gap-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white border-0 shadow disabled:opacity-60"
+              >
                 <Upload className="w-4 h-4" />
                 اختيار صورة
               </Button>
@@ -555,14 +563,12 @@ export default function UploadGradesOcrPage() {
         </motion.div>
       )}
 
-      {/* Results table */}
       <AnimatePresence>
         {phase === "done" && rows.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="space-y-4"
           >
-            {/* Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <h2 className="font-bold text-base">نتائج الاستخراج</h2>
@@ -599,7 +605,6 @@ export default function UploadGradesOcrPage() {
               </div>
             </div>
 
-            {/* Save summary */}
             {saveState.phase === "done" && (
               <motion.div
                 initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
@@ -624,7 +629,6 @@ export default function UploadGradesOcrPage() {
               </motion.div>
             )}
 
-            {/* Legend */}
             <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
               <span className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded bg-amber-100 border border-amber-400" />
@@ -640,7 +644,6 @@ export default function UploadGradesOcrPage() {
               </span>
             </div>
 
-            {/* Table */}
             <div className="rounded-xl border overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -675,12 +678,10 @@ export default function UploadGradesOcrPage() {
                           : idx % 2 === 0 ? "" : "bg-muted/20"
                         }`}
                       >
-                        {/* Row # */}
                         <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono w-10">
                           {row.rowNumber}
                         </td>
 
-                        {/* Editable name */}
                         <td className="px-4 py-2 min-w-[180px]">
                           <div className="flex items-center gap-1.5">
                             <Input
@@ -695,7 +696,6 @@ export default function UploadGradesOcrPage() {
 
                         {mode === "grades" ? (
                           <>
-                            {/* Grade */}
                             <td className="px-4 py-2 w-24">
                               <Input
                                 value={effectiveGrade(row)}
@@ -705,7 +705,6 @@ export default function UploadGradesOcrPage() {
                                 dir="ltr"
                               />
                             </td>
-                            {/* Confidence */}
                             <td className="px-4 py-2 w-20">
                               <span className={`text-xs font-mono ${
                                 row.confidence >= 85 ? "text-emerald-600" :
@@ -715,7 +714,6 @@ export default function UploadGradesOcrPage() {
                           </>
                         ) : (
                           <>
-                            {/* Justified hours */}
                             <td className="px-4 py-2 w-24">
                               <Input
                                 value={effectiveJustified(row)}
@@ -725,7 +723,6 @@ export default function UploadGradesOcrPage() {
                                 dir="ltr"
                               />
                             </td>
-                            {/* Unjustified hours */}
                             <td className="px-4 py-2 w-24">
                               <Input
                                 value={effectiveUnjustified(row)}
@@ -735,14 +732,12 @@ export default function UploadGradesOcrPage() {
                                 dir="ltr"
                               />
                             </td>
-                            {/* Total */}
                             <td className="px-4 py-2 w-20 text-xs font-mono text-center text-muted-foreground">
                               {(parseInt(effectiveJustified(row)) || 0) + (parseInt(effectiveUnjustified(row)) || 0)}
                             </td>
                           </>
                         )}
 
-                        {/* Status */}
                         <td className="px-4 py-2 w-36">
                           {row.saved ? (
                             <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold">
@@ -768,7 +763,6 @@ export default function UploadGradesOcrPage() {
               </div>
             </div>
 
-            {/* Missing field warning */}
             {!canSave && (
               <p className="text-xs text-amber-600 flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5" />
