@@ -1,16 +1,16 @@
-/**
+﻿/**
  * OCR Grade Sheet & Absence Sheet Processing
  *
- * POST /api/ocr/parse-grades?type=grades|absences&engine=auto|vision|tesseract
+ * POST /api/ocr/parse-grades?type=grades|absences&engine=auto|gemini|vision|tesseract
  *
- * Pipeline: Sharp preprocess → Groq Vision (primary) → Tesseract.js (fallback)
+ * Pipeline: Sharp preprocess → Gemini Vision or Groq Vision (user's own key) → Tesseract.js (fallback)
  */
 import { Router } from "express";
 import multer from "multer";
 import { logger } from "../lib/logger.js";
 import { processOcr, type OcrEngine } from "../services/ocrService.js";
 import { db, ocrUploadsTable } from "../../shared/db.js";
-import { getUserGroqKey } from "../lib/groq-key.js";
+import { getUserGroqKey, getUserGeminiKey } from "../lib/groq-key.js";
 
 const router = Router();
 const upload = multer({
@@ -53,20 +53,38 @@ router.post(
     }
 
     const engineParam = String(req.query.engine ?? "auto") as OcrEngine;
-    const engine: OcrEngine = ["auto", "vision", "tesseract"].includes(engineParam)
+    const engine: OcrEngine = ["auto", "gemini", "vision", "tesseract"].includes(engineParam)
       ? engineParam
       : "auto";
 
     try {
-      logger.info({ size: req.file.size, mime: req.file.mimetype, ocrType, engine }, "OCR: processing");
+      const [geminiApiKey, groqApiKey] = await Promise.all([
+        getUserGeminiKey(userId),
+        getUserGroqKey(userId),
+      ]);
 
-      const result = await processOcr(req.file.buffer, ocrType, engine, await getUserGroqKey(userId));
+      if (!geminiApiKey && !groqApiKey && engine !== "tesseract") {
+        res.status(428).json({
+          error: "لم يتم ضبط أي مفتاح OCR بعد. أضف مفتاح Gemini أو Groq من صفحة الإعدادات أولاً.",
+          suggestion: "settings_required",
+        });
+        return;
+      }
+
+      logger.info(
+        { size: req.file.size, mime: req.file.mimetype, ocrType, engine, hasGemini: Boolean(geminiApiKey), hasGroq: Boolean(groqApiKey) },
+        "OCR: processing",
+      );
+
+      const result = await processOcr(req.file.buffer, ocrType, engine, { geminiApiKey, groqApiKey });
 
       if (result.rows.length === 0) {
         const suggestions = [
           "تأكد من أن الصورة تحتوي على بيانات واضحة",
-          "حاول صورة بجودة أعلى أو بضاءة أفضل",
-          "جرّب محرك Tesseract إذا كان المحرك المختار يستخدم Vision",
+          "حاول صورة بجودة أعلى أو إضاءة أفضل",
+          geminiApiKey && groqApiKey
+            ? "جرّب تبديل المحرك (Gemini/Groq) من الإعدادات"
+            : "أضف مفتاح OCR ثانٍ (Gemini أو Groq) من الإعدادات لزيادة الدقة",
         ];
         res.status(422).json({
           error: ocrType === "absences"
@@ -125,12 +143,12 @@ router.post(
     } catch (err: any) {
       logger.error({ err }, "OCR processing failed");
       const errorMessage = err?.message ?? "Unknown error";
-      
+
       res.status(500).json({
         error: "فشل معالجة الصورة",
         details: errorMessage,
-        suggestion: errorMessage.includes("GROQ_API_KEY")
-          ? "تأكد من تكوين مفتاح Groq في الإعدادات"
+        suggestion: errorMessage.includes("API_KEY") || errorMessage.includes("API key")
+          ? "تأكد من صحة مفتاح Gemini أو Groq في الإعدادات"
           : "جرّب صورة أخرى أو تحقق من جودة الصورة",
       });
     }
