@@ -38,6 +38,13 @@ if (!process.env.SESSION_SECRET) {
   );
 }
 
+if (!process.env.GEMINI_API_KEY) {
+  logger.warn(
+    { envVar: "GEMINI_API_KEY" },
+    "GEMINI_API_KEY is not set. POST /api/ocr/scan-grades will use each user's saved Gemini key, or return 503 if none is available.",
+  );
+}
+
 // ── Verify database connectivity (non-fatal) ──────────────────────────────────
 // We attempt a quick connectivity probe and log the result, but we do NOT
 // exit on failure.  In autoscale/Cloud Run the managed database may not be
