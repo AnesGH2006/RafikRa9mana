@@ -144,12 +144,17 @@ router.post(
       logger.error({ err }, "OCR processing failed");
       const errorMessage = err?.message ?? "Unknown error";
 
+      // Show the REAL error to the user directly (no Tesseract fallback to
+      // hide behind anymore), so a bad API key or network issue is obvious
+      // immediately instead of requiring a look at server logs.
       res.status(500).json({
-        error: "فشل معالجة الصورة",
+        error: `فشل معالجة الصورة: ${errorMessage}`,
         details: errorMessage,
-        suggestion: errorMessage.includes("API_KEY") || errorMessage.includes("API key")
-          ? "تأكد من صحة مفتاح Gemini أو Groq في الإعدادات"
-          : "جرّب صورة أخرى أو تحقق من جودة الصورة",
+        suggestions: [
+          errorMessage.includes("API_KEY") || errorMessage.includes("API key") || errorMessage.includes("401") || errorMessage.includes("400")
+            ? "تأكد من صحة مفتاح Gemini أو Groq في الإعدادات (قد يكون منتهي الصلاحية أو منسوخًا بشكل خاطئ)"
+            : "جرّب صورة أخرى أو تحقق من جودة الصورة",
+        ],
       });
     }
   },

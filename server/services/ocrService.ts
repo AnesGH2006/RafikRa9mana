@@ -656,7 +656,7 @@ export async function processOcr(
   apiKeys: ApiKeys = {},
 ): Promise<OcrResult> {
   const resolved = resolveEngine(engine, apiKeys);
-  const { data, mimeType, tesseractBuffer } = await prepareImage(buffer);
+  const { data, mimeType } = await prepareImage(buffer);
 
   let rows: Array<OcrGradeRow | OcrAbsenceRow | OcrDailyAttendanceRow> = [];
   let rawText = "";
@@ -666,62 +666,40 @@ export async function processOcr(
   const isVisionEngine = resolved === "gemini" || resolved === "vision";
 
   if (isVisionEngine) {
-    try {
-      const result = await extractWithVision(resolved, data, mimeType, type, apiKeys);
-      rows = result.rows;
-      rawText = result.rawText;
-      dayColumns = result.dayColumns;
+    // NOTE: Tesseract fallback intentionally removed. If Vision fails, the
+    // real error (bad API key, network issue, etc.) propagates up to the
+    // route so the user sees the ACTUAL cause instead of silently getting
+    // garbled Tesseract output that looks like a "successful" result.
+    const result = await extractWithVision(resolved, data, mimeType, type, apiKeys);
+    rows = result.rows;
+    rawText = result.rawText;
+    dayColumns = result.dayColumns;
 
-      if (rows.length === 0 && type !== "daily_attendance") {
-        // Try the other vision engine before falling back to Tesseract
-        const otherEngine = resolved === "gemini" ? "vision" : "gemini";
-        const otherKeyAvailable = otherEngine === "gemini" ? Boolean(apiKeys.geminiApiKey) : Boolean(apiKeys.groqApiKey);
+    if (rows.length === 0 && type !== "daily_attendance") {
+      // Try the other vision engine before giving up (still Vision-only, no Tesseract)
+      const otherEngine = resolved === "gemini" ? "vision" : "gemini";
+      const otherKeyAvailable = otherEngine === "gemini" ? Boolean(apiKeys.geminiApiKey) : Boolean(apiKeys.groqApiKey);
 
-        if (otherKeyAvailable) {
-          logger.warn({ type, from: resolved, to: otherEngine }, "Primary vision engine returned no rows — trying secondary vision engine");
-          try {
-            const secondTry = await extractWithVision(otherEngine, data, mimeType, type, apiKeys);
-            if (secondTry.rows.length > 0) {
-              rows = secondTry.rows;
-              rawText = secondTry.rawText || rawText;
-              usedEngine = otherEngine;
-            }
-          } catch (err) {
-            logger.warn({ err }, "Secondary vision engine also failed");
-          }
-        }
-
-        if (rows.length === 0) {
-          logger.warn({ type }, "All vision engines returned no rows — falling back to Tesseract");
-          usedEngine = "tesseract";
-          const fallback = await extractWithTesseract(tesseractBuffer, type);
-          rows = fallback.rows;
-          rawText = fallback.rawText || rawText;
+      if (otherKeyAvailable) {
+        logger.warn({ type, from: resolved, to: otherEngine }, "Primary vision engine returned no rows — trying secondary vision engine");
+        const secondTry = await extractWithVision(otherEngine, data, mimeType, type, apiKeys);
+        if (secondTry.rows.length > 0) {
+          rows = secondTry.rows;
+          rawText = secondTry.rawText || rawText;
+          usedEngine = otherEngine;
+        } else {
+          rawText = secondTry.rawText || rawText;
         }
       }
-    } catch (err) {
-      logger.warn({ err, type }, "Vision OCR failed — falling back to Tesseract");
-      if (type !== "daily_attendance") {
-        usedEngine = "tesseract";
-        try {
-          const fallback = await extractWithTesseract(tesseractBuffer, type);
-          rows = fallback.rows;
-          rawText = fallback.rawText;
-        } catch (fallbackErr) {
-          logger.error({ fallbackErr }, "Vision and Tesseract both failed");
-        }
-      } else {
-        logger.error({ err }, "Vision OCR failed for daily_attendance — no fallback available for this type");
-      }
     }
-  } else {
-    try {
-      const result = await extractWithTesseract(tesseractBuffer, type);
-      rows = result.rows;
-      rawText = result.rawText;
-    } catch (err) {
-      logger.error({ err, type }, "Tesseract extraction failed");
-    }
+  } else if (resolved === "tesseract") {
+    // Tesseract only runs when explicitly requested via engine=tesseract.
+    const result = await extractWithTesseract(
+      (await prepareImage(buffer)).tesseractBuffer,
+      type,
+    );
+    rows = result.rows;
+    rawText = result.rawText;
   }
 
   const confidences = rows.map(r => r.confidence);
@@ -738,3 +716,4 @@ export async function processOcr(
     overallConfidence,
   };
 }
+
