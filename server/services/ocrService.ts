@@ -109,7 +109,14 @@ async function callGeminiVision(
             { text: prompt },
           ],
         }],
-        generationConfig: { temperature: 0, maxOutputTokens: 4096 },
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: 4096,
+          // Gemini 3.x models default to "high" thinking level, which adds
+          // significant latency for a simple extraction task like this one
+          // and was causing 30s timeouts. "low" is fast and sufficient here.
+          thinkingConfig: { thinkingLevel: "low" },
+        },
       });
 
       const res = await fetch(
@@ -118,7 +125,7 @@ async function callGeminiVision(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body,
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(60000),
         },
       );
 
