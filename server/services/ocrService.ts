@@ -86,7 +86,7 @@ export async function prepareImage(buffer: Buffer): Promise<{ data: string; mime
 
 // ── Gemini Vision ─────────────────────────────────────────────────────────────
 
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL = "gemini-3.8-flash";
 
 async function callGeminiVision(
   imageB64: string,
