@@ -38,6 +38,72 @@ router.get("/grades", async (req, res): Promise<void> => {
   res.json(rows.map(r => ({ ...r, score: parseFloat(String(r.score)) })));
 });
 
+// ── POST /api/grades — single subject/score upsert ────────────────────────────
+// Used by the OCR review-and-save flow, which saves one row (one student, one
+// subject, one score) at a time. Unlike /grades/bulk, this only replaces the
+// ONE matching (studentId, annee, trimestre, subject) row — it never touches
+// or deletes any other subject's grade for that student.
+router.post("/grades", async (req, res): Promise<void> => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = req.user!.id;
+
+  const { studentId, annee, trimestre, subject, score } = req.body as {
+    studentId?: string;
+    annee?: string;
+    trimestre?: number;
+    subject?: string;
+    score?: number;
+  };
+
+  if (
+    !studentId || !annee || !trimestre || !subject ||
+    typeof score !== "number" || isNaN(score) || score < 0 || score > 20
+  ) {
+    res.status(400).json({ error: "بيانات غير صالحة" });
+    return;
+  }
+
+  const [student] = await db.select().from(studentsTable)
+    .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId)));
+  if (!student) {
+    res.status(404).json({ error: "الطالب غير موجود" });
+    return;
+  }
+
+  // Replace only this exact (student, year, trimester, subject) grade.
+  await db.delete(gradesTable).where(and(
+    eq(gradesTable.userId, userId),
+    eq(gradesTable.studentId, studentId),
+    eq(gradesTable.annee, annee),
+    eq(gradesTable.trimestre, trimestre),
+    eq(gradesTable.subject, subject),
+  ));
+
+  const [row] = await db.insert(gradesTable).values({
+    id: crypto.randomBytes(8).toString("hex"),
+    userId,
+    studentId,
+    annee,
+    trimestre,
+    subject,
+    score: String(Math.max(0, Math.min(20, score))),
+  }).returning();
+
+  logAudit({
+    userId,
+    actorId:     req.memberContext?.memberId ?? userId,
+    actorName:   req.memberContext?.name ?? req.user!.firstName ?? req.user!.email ?? undefined,
+    action:      "grade_edit",
+    description: `تعديل درجة ${student.nomPrenom} — ${subject} — الفصل ${trimestre}`,
+    entity:      "grade",
+    entityId:    student.id,
+    details:     { studentName: student.nomPrenom, subject, trimestre, score, annee },
+    req,
+  });
+
+  res.json({ success: true, grade: { ...row, score: parseFloat(String(row.score)) } });
+});
+
 // ── POST /api/grades/bulk ─────────────────────────────────────────────────────
 // Accepts either:
 //   { studentId, annee, trimestre, grades }          ← manual entry (existing)
