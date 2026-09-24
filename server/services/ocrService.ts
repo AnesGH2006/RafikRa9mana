@@ -673,30 +673,53 @@ export async function processOcr(
   const isVisionEngine = resolved === "gemini" || resolved === "vision";
 
   if (isVisionEngine) {
-    // NOTE: Tesseract fallback intentionally removed. If Vision fails, the
-    // real error (bad API key, network issue, etc.) propagates up to the
-    // route so the user sees the ACTUAL cause instead of silently getting
-    // garbled Tesseract output that looks like a "successful" result.
-    const result = await extractWithVision(resolved, data, mimeType, type, apiKeys);
-    rows = result.rows;
-    rawText = result.rawText;
-    dayColumns = result.dayColumns;
+    // Vision-to-vision fallback: if the primary engine fails (network error,
+    // transient overload like 503, etc.) or returns nothing, retry with the
+    // other vision engine before giving up. This does NOT fall back to
+    // Tesseract — both engines here are full Vision models, so the user
+    // still gets a real, trustworthy extraction rather than garbled text.
+    let primaryError: Error | null = null;
 
-    if (rows.length === 0 && type !== "daily_attendance") {
-      // Try the other vision engine before giving up (still Vision-only, no Tesseract)
+    try {
+      const result = await extractWithVision(resolved, data, mimeType, type, apiKeys);
+      rows = result.rows;
+      rawText = result.rawText;
+      dayColumns = result.dayColumns;
+    } catch (err) {
+      primaryError = err instanceof Error ? err : new Error(String(err));
+      logger.warn({ err: primaryError.message, engine: resolved }, "Primary vision engine failed — will try secondary engine if available");
+    }
+
+    if (rows.length === 0 || primaryError) {
       const otherEngine = resolved === "gemini" ? "vision" : "gemini";
       const otherKeyAvailable = otherEngine === "gemini" ? Boolean(apiKeys.geminiApiKey) : Boolean(apiKeys.groqApiKey);
 
       if (otherKeyAvailable) {
-        logger.warn({ type, from: resolved, to: otherEngine }, "Primary vision engine returned no rows — trying secondary vision engine");
-        const secondTry = await extractWithVision(otherEngine, data, mimeType, type, apiKeys);
-        if (secondTry.rows.length > 0) {
-          rows = secondTry.rows;
-          rawText = secondTry.rawText || rawText;
-          usedEngine = otherEngine;
-        } else {
-          rawText = secondTry.rawText || rawText;
+        logger.warn({ type, from: resolved, to: otherEngine }, "Trying secondary vision engine");
+        try {
+          const secondTry = await extractWithVision(otherEngine, data, mimeType, type, apiKeys);
+          if (secondTry.rows.length > 0) {
+            rows = secondTry.rows;
+            rawText = secondTry.rawText || rawText;
+            usedEngine = otherEngine;
+            primaryError = null; // secondary succeeded — the earlier failure no longer matters
+          } else {
+            rawText = secondTry.rawText || rawText;
+            // Secondary ran but found nothing too. If the primary had thrown
+            // a real error, that's still the more useful message to surface.
+          }
+        } catch (secondErr) {
+          const secondMsg = secondErr instanceof Error ? secondErr.message : String(secondErr);
+          logger.warn({ err: secondMsg, engine: otherEngine }, "Secondary vision engine also failed");
+          if (primaryError) {
+            throw new Error(
+              `فشل المحرك الأساسي (${resolved === "gemini" ? "Gemini" : "Groq"}): ${primaryError.message} — وفشل المحرك البديل (${otherEngine === "gemini" ? "Gemini" : "Groq"}) أيضًا: ${secondMsg}`
+            );
+          }
         }
+      } else if (primaryError) {
+        // No second key configured — nothing left to try, surface the real error.
+        throw primaryError;
       }
     }
   } else if (resolved === "tesseract") {
