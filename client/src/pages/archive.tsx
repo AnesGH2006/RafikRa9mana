@@ -19,6 +19,7 @@ import {
   Archive, Download, Database, CheckCircle2,
   Loader2, FileJson, FileSpreadsheet, Calendar, Users, BookOpen,
   Clock, CheckSquare, Square,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -217,6 +218,14 @@ export default function ArchivePage() {
   const toggleInclude = (key: string) =>
     setInclude(p => ({ ...p, [key]: !p[key] }));
 
+  function removeArchive(year: string) {
+    if (!window.confirm(`حذف سجل أرشفة السنة ${year}؟`)) return;
+    const updated = archives.filter(entry => entry.year !== year);
+    setArchives(updated);
+    localStorage.setItem("schoolArchives", JSON.stringify(updated));
+    toast({ title: "تم حذف سجل الأرشفة" });
+  }
+
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="p-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -393,8 +402,8 @@ export default function ArchivePage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
-                  {["السنة الدراسية", "تاريخ الأرشفة", "التلاميذ", "الصيغة", "المحتوى", "اسم الملف"].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-start text-xs font-semibold text-muted-foreground">{h}</th>
+                  {["السنة الدراسية", "تاريخ الأرشفة", "التلاميذ", "الصيغة", "المحتوى", "اسم الملف", ""].map((h, index) => (
+                    <th key={`${h}-${index}`} className="px-4 py-2.5 text-start text-xs font-semibold text-muted-foreground">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -419,6 +428,11 @@ export default function ArchivePage() {
                       </div>
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-sky-400">{a.filename}</td>
+                    <td className="px-4 py-2.5 text-end">
+                      <Button variant="ghost" size="icon" onClick={() => removeArchive(a.year)} className="h-8 w-8 text-muted-foreground hover:bg-red-500/10 hover:text-red-500" title="حذف سجل الأرشفة">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

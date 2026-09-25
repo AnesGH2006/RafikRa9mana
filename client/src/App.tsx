@@ -1024,7 +1024,6 @@ export default function App() {
         </Switch>
         <Toaster />
         <PwaInstallPromptLazy />
-        <AgentInstallPromptLazy />
       </LanguageProvider>
     </ThemeProvider>
   );
@@ -1042,13 +1041,3 @@ function PwaInstallPromptLazy() {
   );
 }
 
-const _AgentPrompt = lazy(() =>
-  import("@/components/agent-install-prompt").then(m => ({ default: m.AgentInstallPrompt }))
-);
-function AgentInstallPromptLazy() {
-  return (
-    <Suspense fallback={null}>
-      <_AgentPrompt />
-    </Suspense>
-  );
-}
