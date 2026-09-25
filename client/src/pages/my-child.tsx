@@ -88,8 +88,6 @@ export default function MyChildPage() {
       if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
         throw new Error("هذا المتصفح لا يدعم الإشعارات الفورية");
       }
-      const publicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-      if (!publicKey) throw new Error("لم يتم إعداد مفتاح الإشعارات للموقع");
       const registration = await navigator.serviceWorker.ready;
       const existing = await registration.pushManager.getSubscription();
       if (existing) {
@@ -101,11 +99,18 @@ export default function MyChildPage() {
         setPushEnabled(false);
         return;
       }
+      const keyResponse = await fetch(`${BASE}api/notifications/vapid-public-key`, { credentials: "include" });
+      const keyPayload = await keyResponse.json() as { publicKey?: string; error?: string };
+      if (!keyResponse.ok || !keyPayload.publicKey) {
+        throw new Error(keyResponse.status === 503
+          ? "الإشعارات غير مهيأة على الخادم. يرجى التواصل مع المسؤول."
+          : keyPayload.error ?? "تعذر تحميل مفتاح الإشعارات");
+      }
       const permission = await Notification.requestPermission();
       if (permission !== "granted") throw new Error("يرجى السماح بالإشعارات من إعدادات المتصفح");
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
+        applicationServerKey: urlBase64ToUint8Array(keyPayload.publicKey) as unknown as BufferSource,
       });
       const response = await fetch(`${BASE}api/notifications/push-subscription`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },

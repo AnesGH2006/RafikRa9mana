@@ -10,13 +10,22 @@ import { Router } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, pushSubscriptionsTable, schoolMembersTable } from "../../shared/db.js";
 import { sendBulkSms, countSegments, ARABIC_SEGMENT_BYTES } from "../services/smsService.js";
-import { sendPushToUser } from "../services/pushNotificationService.js";
+import { getVapidPublicKey, sendPushToUser } from "../services/pushNotificationService.js";
 
 const router = Router();
 
 function isParent(req: any): boolean {
   return req.isAuthenticated() && req.memberContext?.role === "parent";
 }
+
+router.get("/notifications/vapid-public-key", (_req, res): void => {
+  const publicKey = getVapidPublicKey();
+  if (!publicKey) {
+    res.status(503).json({ error: "Push notifications are not configured" });
+    return;
+  }
+  res.set("Cache-Control", "public, max-age=300").json({ publicKey });
+});
 
 router.post("/notifications/push-subscription", async (req, res): Promise<void> => {
   if (!isParent(req)) { res.status(403).json({ error: "Parents only" }); return; }
