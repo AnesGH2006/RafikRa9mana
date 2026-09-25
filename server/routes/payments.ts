@@ -39,8 +39,9 @@ router.post("/payments/redeem-code", async (req, res): Promise<void> => {
 router.post("/payments/chargily/checkout", async (req, res): Promise<void> => {
   if (!requireAuth(req, res)) return;
   const returnUrl = typeof req.body?.returnUrl === "string" ? req.body.returnUrl : `${req.protocol}://${req.get("host")}/account`;
+  const amountDzd = Number(req.body?.amountDzd ?? 1000);
   try {
-    const payment = await createChargilyCheckout(req.user!.id, returnUrl);
+    const payment = await createChargilyCheckout(req.user!.id, returnUrl, amountDzd);
     res.status(201).json({ id: payment!.id, checkoutUrl: payment!.checkoutUrl, amountDzd: payment!.amountDzd });
   } catch (error) {
     req.log.error({ error }, "Chargily checkout creation failed");

@@ -89,7 +89,7 @@ export default function PaywallScreen() {
     }
   }, [schoolStage]);
 
-  async function startParentCheckout() {
+  async function startCheckout(amountDzd = 1000) {
     setCheckoutBusy(true);
     setCheckoutError("");
     try {
@@ -97,7 +97,7 @@ export default function PaywallScreen() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ returnUrl: `${window.location.origin}/my-child` }),
+        body: JSON.stringify({ returnUrl: `${window.location.origin}${isParent ? "/my-child" : "/"}`, amountDzd }),
       });
       const payload = await response.json() as { checkoutUrl?: string; error?: string };
       if (!response.ok || !payload.checkoutUrl) throw new Error(payload.error ?? "تعذر بدء عملية الدفع");
@@ -168,7 +168,7 @@ export default function PaywallScreen() {
           >
             <p className="font-bold">خدمة ولي الأمر — 1 000 دج / سنة</p>
             <p className="text-sm text-muted-foreground">سيتم فتح حساب طفلك تلقائيًا بعد تأكيد الدفع.</p>
-            <Button onClick={startParentCheckout} disabled={checkoutBusy} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Button onClick={() => startCheckout(1000)} disabled={checkoutBusy} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               {checkoutBusy ? "جارٍ فتح صفحة الدفع…" : "الدفع عبر Chargily"}
             </Button>
             {checkoutError && <p className="text-sm text-red-600">{checkoutError}</p>}
@@ -257,6 +257,15 @@ export default function PaywallScreen() {
                       </li>
                     ))}
                   </ul>
+                  {plan.name === "مؤسسي" ? (
+                    <a href="mailto:contact@rafik-raqamna.dz" className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2.5 text-sm font-bold text-amber-300 transition hover:bg-amber-500/20">
+                      <Mail className="h-4 w-4" /> تواصل معنا
+                    </a>
+                  ) : (
+                    <Button onClick={() => startCheckout(plan.name === "Pro" ? 12000 : 6000)} disabled={checkoutBusy} className="mt-6 w-full bg-emerald-600 text-white hover:bg-emerald-700">
+                      {checkoutBusy ? "جارٍ فتح صفحة الدفع…" : "ادفع عبر Chargily"}
+                    </Button>
+                  )}
                 </div>
               </motion.div>
             );

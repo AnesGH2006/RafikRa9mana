@@ -2,7 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db, paymentsTable, usersTable } from "../../shared/db.js";
 
-const AMOUNT_DZD = 1000;
+const DEFAULT_AMOUNT_DZD = 1000;
+const ALLOWED_AMOUNTS_DZD = new Set([1000, 6000, 12000]);
 
 export function verifyChargilySignature(rawBody: string, signature: string | undefined): boolean {
   const secret = process.env.CHARGILY_WEBHOOK_SECRET;
@@ -13,7 +14,8 @@ export function verifyChargilySignature(rawBody: string, signature: string | und
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-export async function createChargilyCheckout(userId: string, returnUrl: string) {
+export async function createChargilyCheckout(userId: string, returnUrl: string, requestedAmountDzd = DEFAULT_AMOUNT_DZD) {
+  const amountDzd = ALLOWED_AMOUNTS_DZD.has(requestedAmountDzd) ? requestedAmountDzd : DEFAULT_AMOUNT_DZD;
   const apiKey = process.env.CHARGILY_API_KEY;
   const endpoint = process.env.CHARGILY_API_URL ?? "https://pay.chargily.com/test/api/v2/checkouts";
   if (!apiKey) throw new Error("CHARGILY_API_KEY is not configured");
@@ -21,7 +23,7 @@ export async function createChargilyCheckout(userId: string, returnUrl: string) 
   const [payment] = await db.insert(paymentsTable).values({
     userId,
     provider: "chargily",
-    amountDzd: AMOUNT_DZD,
+    amountDzd,
     status: "pending",
     metadata: { returnUrl },
   }).returning();
@@ -30,7 +32,7 @@ export async function createChargilyCheckout(userId: string, returnUrl: string) 
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ amount: AMOUNT_DZD, currency: "dzd", success_url: returnUrl, failure_url: returnUrl, metadata: { paymentId: payment.id, userId } }),
+    body: JSON.stringify({ amount: amountDzd, currency: "dzd", success_url: returnUrl, failure_url: returnUrl, metadata: { paymentId: payment.id, userId } }),
     signal: AbortSignal.timeout(15000),
   });
   if (!response.ok) {
