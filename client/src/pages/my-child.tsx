@@ -2,8 +2,7 @@
  * My Child Page — Parent role only
  * Shows the linked student's full academic profile including grades, averages, and absences.
  */
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useMemo, useState, useEffect } from "react";
 import { useLanguage } from "@/contexts/language-provider";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -58,11 +57,6 @@ function getGradeColor(score: number): string {
   if (score >= 7)  return "text-amber-600 dark:text-amber-400";
   return "text-red-600 dark:text-red-400";
 }
-
-const pageVariants = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.4 } },
-};
 
 export default function MyChildPage() {
   const { t } = useLanguage();
@@ -143,34 +137,45 @@ export default function MyChildPage() {
 
   if (error || !data?.student) {
     return (
-      <motion.div variants={pageVariants} initial="initial" animate="animate"
+      <div
         className="flex flex-col items-center justify-center min-h-64 gap-4 text-muted-foreground"
       >
         <AlertCircle className="w-12 h-12 text-amber-500 opacity-70" />
         <p className="text-sm text-center">
           {memberCtx?.linkedStudentId ? "حدث خطأ أثناء تحميل البيانات" : "لا يوجد تلميذ مرتبط بحسابك. تواصل مع مدير المدرسة."}
         </p>
-      </motion.div>
+      </div>
     );
   }
 
   const { student, grades, absences } = data;
-  const subs = getSubjectsForLevel(student.niveau as Niveau);
+  const { subs, trimesterGrades, t1Avg, t2Avg, t3Avg, annualAvg, totalJustified, totalUnjustified } = useMemo(() => {
+    const subjects = getSubjectsForLevel(student.niveau as Niveau);
+    const averages = [
+      data.t1Avg ?? calcTrimAvg(grades, 1, student.niveau),
+      data.t2Avg ?? calcTrimAvg(grades, 2, student.niveau),
+      data.t3Avg ?? calcTrimAvg(grades, 3, student.niveau),
+    ];
+    const availableAverages = averages.filter((value): value is number => value !== null);
+    const groupedGrades = new Map<number, Map<string, number>>();
+    for (const grade of grades) {
+      if (!groupedGrades.has(grade.trimestre)) groupedGrades.set(grade.trimestre, new Map());
+      groupedGrades.get(grade.trimestre)!.set(grade.subject, grade.score);
+    }
 
-  // Use server-computed averages (Ministry-stored values take precedence over recalculation).
-  // Fall back to client-side recalculation only if the server didn't return them (older API).
-  const t1Avg    = data.t1Avg    ?? calcTrimAvg(grades, 1, student.niveau);
-  const t2Avg    = data.t2Avg    ?? calcTrimAvg(grades, 2, student.niveau);
-  const t3Avg    = data.t3Avg    ?? calcTrimAvg(grades, 3, student.niveau);
-  const annualAvg = data.annualAvg ?? (
-    [t1Avg, t2Avg, t3Avg].filter(v => v !== null).length > 0
-      ? ([t1Avg, t2Avg, t3Avg].filter(v => v !== null) as number[]).reduce((a, b) => a + b, 0)
-        / [t1Avg, t2Avg, t3Avg].filter(v => v !== null).length
-      : null
-  );
-
-  const totalJustified   = absences.reduce((s, a) => s + (a.justifiedHours ?? 0), 0);
-  const totalUnjustified = absences.reduce((s, a) => s + (a.unjustifiedHours ?? 0), 0);
+    return {
+      subs: subjects,
+      trimesterGrades: groupedGrades,
+      t1Avg: averages[0],
+      t2Avg: averages[1],
+      t3Avg: averages[2],
+      annualAvg: data.annualAvg ?? (availableAverages.length > 0
+        ? availableAverages.reduce((sum, value) => sum + value, 0) / availableAverages.length
+        : null),
+      totalJustified: absences.reduce((sum, absence) => sum + (absence.justifiedHours ?? 0), 0),
+      totalUnjustified: absences.reduce((sum, absence) => sum + (absence.unjustifiedHours ?? 0), 0),
+    };
+  }, [absences, data.annualAvg, data.t1Avg, data.t2Avg, data.t3Avg, grades, student.niveau]);
 
   const isPassed = annualAvg !== null ? annualAvg >= 10 : null;
 
@@ -190,7 +195,7 @@ export default function MyChildPage() {
   }
 
   return (
-    <motion.div variants={pageVariants} initial="initial" animate="animate"
+    <div
       className="p-4 md:p-6 space-y-6 max-w-2xl mx-auto"
     >
       {/* Dev escape — removes this account from parent membership */}
@@ -274,11 +279,11 @@ export default function MyChildPage() {
 
       {/* Grades by trimester */}
       {[1, 2, 3].map(tr => {
-        const trimGrades = grades.filter(g => g.trimestre === tr);
-        if (trimGrades.length === 0) return null;
+        const trimGrades = trimesterGrades.get(tr);
+        if (!trimGrades || trimGrades.size === 0) return null;
         const avg = calcTrimAvg(grades, tr, student.niveau);
         return (
-          <Card key={tr} className="shadow-sm">
+          <Card key={tr} className="shadow-sm [content-visibility:auto] [contain-intrinsic-size:0_220px]">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center justify-between">
                 <span className="flex items-center gap-2">
@@ -295,8 +300,7 @@ export default function MyChildPage() {
             <CardContent>
               <div className="space-y-1.5">
                 {subs.map(sub => {
-                  const g = trimGrades.find(gr => gr.subject === sub.key);
-                  const score = g?.score;
+                  const score = trimGrades.get(sub.key);
                   return (
                     <div key={sub.key} className="flex items-center justify-between text-sm py-0.5 border-b last:border-0 border-border/50">
                       <span className="text-muted-foreground truncate ml-2">
@@ -338,6 +342,6 @@ export default function MyChildPage() {
           </div>
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   );
 }

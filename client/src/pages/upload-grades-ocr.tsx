@@ -1,24 +1,4 @@
-/**
- * /upload-grades-ocr — OCR Grade Sheet & Absence Sheet Review Page
- *
- * Modes:
- *  • grades   — upload a printed grade sheet, extract scores, save to /api/grades
- *  • absences — upload a printed absence sheet, extract hours, save to /api/absences
- *
- * Flow (both modes):
- *  1. Pick year / niveau / class / trimestre (+ subject for grades mode)
- *  2. Upload an image of a printed sheet
- *  3. OCR runs via POST /api/ocr/parse-grades?type=<mode>
- *  4. Results appear in an editable table
- *  5. "Save to Database" button matches rows to students by name and saves
- *
- * ✅ FIX: Added Levenshtein-distance fuzzy fallback so minor OCR
- *         mis-readings (extra space, one transposed letter) still match.
- * ✅ NEW:  Absences mode (type=absences) — extracts justified/unjustified hours.
- * ✅ FIX 2: Upload zone is now HARD-DISABLED (no click, no drag-drop) until
- *          niveau + classe are filled, with a persistent inline banner —
- *          so it's impossible to select a file before required fields are set.
- */
+
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
