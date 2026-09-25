@@ -100,7 +100,12 @@ export default function MyChildPage() {
         return;
       }
       const keyResponse = await fetch(`${BASE}api/notifications/vapid-public-key`, { credentials: "include" });
-      const keyPayload = await keyResponse.json() as { publicKey?: string; error?: string };
+      const keyPayload = keyResponse.headers.get("content-type")?.includes("application/json")
+        ? await keyResponse.json().catch(() => null) as { publicKey?: string; error?: string } | null
+        : null;
+      if (!keyPayload) {
+        throw new Error("خادم الإشعارات غير محدّث. أعد تشغيل الخادم أو أعد نشره.");
+      }
       if (!keyResponse.ok || !keyPayload.publicKey) {
         throw new Error(keyResponse.status === 503
           ? "الإشعارات غير مهيأة على الخادم. يرجى التواصل مع المسؤول."
