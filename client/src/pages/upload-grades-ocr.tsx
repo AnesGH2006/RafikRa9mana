@@ -97,6 +97,13 @@ function nameMatches(a: string, b: string): boolean {
   return levenshtein(na, nb) <= maxDist;
 }
 
+function getCurrentTrimester(): number {
+  const month = new Date().getMonth();
+  if (month >= 8) return 1;
+  if (month <= 2) return 2;
+  return 3;
+}
+
 export default function UploadGradesOcrPage() {
   const { toast } = useToast();
 
@@ -121,7 +128,7 @@ export default function UploadGradesOcrPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const canUpload = Boolean(niveau && classe);
+  const canUpload = mode === "absences" || Boolean(niveau && classe);
 
   const switchMode = (m: OcrMode) => {
     setMode(m);
@@ -135,7 +142,7 @@ export default function UploadGradesOcrPage() {
   };
 
   const handleFile = useCallback(async (file: File) => {
-    if (!niveau || !classe) {
+    if (mode === "grades" && (!niveau || !classe)) {
       toast({
         variant: "destructive",
         title: "بيانات ناقصة",
@@ -263,10 +270,12 @@ export default function UploadGradesOcrPage() {
   const effectiveUnjustified= (r: OcrRow) => r.editedUnjustified !== undefined ? r.editedUnjustified : String(r.unjustifiedHours ?? 0);
 
   async function fetchStudents(): Promise<Array<{ id: string; nomPrenom: string }>> {
-    if (!niveau || !classe) return [];
+    if (!classe || (mode === "grades" && !niveau)) return [];
+    const params = new URLSearchParams({ annee, classe });
+    if (mode === "grades") params.set("niveau", niveau);
     try {
       const res = await fetch(
-        `${BASE}api/students?annee=${encodeURIComponent(annee)}&niveau=${encodeURIComponent(niveau)}&classe=${encodeURIComponent(classe)}&limit=200`,
+        `${BASE}api/students?${params}`,
         { credentials: "include" },
       );
       if (!res.ok) return [];
@@ -276,8 +285,8 @@ export default function UploadGradesOcrPage() {
   }
 
   const handleSave = async () => {
-    if (!niveau || !classe) {
-      toast({ variant: "destructive", title: "خطأ", description: "يرجى تحديد المستوى والفوج قبل الحفظ" });
+    if (!classe || (mode === "grades" && !niveau)) {
+      toast({ variant: "destructive", title: "خطأ", description: mode === "grades" ? "يرجى تحديد المستوى والفوج قبل الحفظ" : "يرجى تحديد الفوج قبل الحفظ" });
       return;
     }
     if (mode === "grades" && !subject) {
@@ -290,14 +299,16 @@ export default function UploadGradesOcrPage() {
     const students = await fetchStudents();
 
     if (students.length === 0) {
-      const msg = `لم يتم العثور على أي تلميذ في ${niveau} — الفوج ${classe} — سنة ${annee}. تحقق من صحة المستوى والفوج المحددين أو تأكد من استيراد القائمة أولاً.`;
+      const msg = mode === "grades"
+        ? `لم يتم العثور على أي تلميذ في ${niveau} — الفوج ${classe} — سنة ${annee}. تحقق من صحة المستوى والفوج المحددين أو تأكد من استيراد القائمة أولاً.`
+        : `لم يتم العثور على أي تلميذ في الفوج ${classe} — سنة ${annee}. تحقق من الفوج أو تأكد من استيراد القائمة أولاً.`;
       setSaveState({ phase: "done", saved: 0, failed: rows.length, errors: [msg] });
       setRows(prev => prev.map(r => ({ ...r, saveError: "لا يوجد تلاميذ في هذا الفوج" })));
       toast({ variant: "destructive", title: "لم يتم العثور على تلاميذ", description: msg });
       return;
     }
 
-    const findStudent = (name: string) => students.find(s => nameMatches(s.nomPrenom, name));
+    const findStudents = (name: string) => students.filter(s => nameMatches(s.nomPrenom, name));
 
     let saved = 0, failed = 0;
     const errors: string[] = [];
@@ -306,12 +317,16 @@ export default function UploadGradesOcrPage() {
     for (let i = 0; i < rows.length; i++) {
       const row  = rows[i]!;
       const name = effectiveName(row);
-      const student = findStudent(name);
+      const matches = findStudents(name);
+      const student = mode === "grades" ? matches[0] : matches.length === 1 ? matches[0] : undefined;
 
       if (!student) {
         failed++;
-        errors.push(`صف ${row.rowNumber}: لم يُطابق أي تلميذ لـ "${name}"`);
-        updatedRows[i] = { ...updatedRows[i]!, saveError: "لم يُعثر على التلميذ في الفوج" };
+        const message = matches.length > 1
+          ? "الاسم مطابق لأكثر من تلميذ؛ يلزم التحقق من المستوى"
+          : "لم يُعثر على التلميذ في الفوج";
+        errors.push(`صف ${row.rowNumber}: ${message} (${name})`);
+        updatedRows[i] = { ...updatedRows[i]!, saveError: message };
         continue;
       }
 
@@ -344,7 +359,7 @@ export default function UploadGradesOcrPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               studentId: student.id, annee,
-              trimestre: parseInt(trimestre),
+              trimestre: getCurrentTrimester(),
               justifiedHours: justified,
               unjustifiedHours: unjustified,
             }),
@@ -382,7 +397,7 @@ export default function UploadGradesOcrPage() {
   };
 
   const lowConfCount = rows.filter(r => r.lowConfidence).length;
-  const canSave = mode === "grades" ? !!(niveau && classe && subject) : !!(niveau && classe);
+  const canSave = mode === "grades" ? !!(niveau && classe && subject) : !!classe;
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
@@ -428,19 +443,23 @@ export default function UploadGradesOcrPage() {
           <SelectTrigger><SelectValue placeholder="السنة" /></SelectTrigger>
           <SelectContent>{ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
         </Select>
-        <Select value={niveau} onValueChange={setNiveau}>
-          <SelectTrigger><SelectValue placeholder="المستوى" /></SelectTrigger>
-          <SelectContent>{NIVEAUX.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
-        </Select>
+        {mode === "grades" && (
+          <Select value={niveau} onValueChange={setNiveau}>
+            <SelectTrigger><SelectValue placeholder="المستوى" /></SelectTrigger>
+            <SelectContent>{NIVEAUX.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+          </Select>
+        )}
         <Input
-          placeholder="الفوج (مثال: 1 أو A)"
+          placeholder={mode === "grades" ? "الفوج (مثال: 1 أو A)" : "الفوج (للحفظ، اختياري أثناء القراءة)"}
           value={classe}
           onChange={e => setClasse(e.target.value)}
         />
-        <Select value={trimestre} onValueChange={setTrimestre}>
-          <SelectTrigger><SelectValue placeholder="الفصل" /></SelectTrigger>
-          <SelectContent>{TRIMESTERS.map(t => <SelectItem key={t} value={t}>الفصل {t}</SelectItem>)}</SelectContent>
-        </Select>
+        {mode === "grades" && (
+          <Select value={trimestre} onValueChange={setTrimestre}>
+            <SelectTrigger><SelectValue placeholder="الفصل" /></SelectTrigger>
+            <SelectContent>{TRIMESTERS.map(t => <SelectItem key={t} value={t}>الفصل {t}</SelectItem>)}</SelectContent>
+          </Select>
+        )}
         {mode === "grades" ? (
           <>
             <Select value={subject} onValueChange={setSubject}>
@@ -455,7 +474,7 @@ export default function UploadGradesOcrPage() {
         ) : (
           <div className="flex items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 text-xs text-amber-700 dark:text-amber-400 font-medium gap-1.5">
             <Clock className="w-3.5 h-3.5" />
-            وضع الغيابات
+            وضع الغيابات · الفصل {getCurrentTrimester()} تلقائيًا
           </div>
         )}
       </div>
@@ -760,7 +779,7 @@ export default function UploadGradesOcrPage() {
                 <AlertTriangle className="w-3.5 h-3.5" />
                 {mode === "grades"
                   ? "حدد المستوى والفوج والمادة أعلاه لتفعيل زر الحفظ"
-                  : "حدد المستوى والفوج أعلاه لتفعيل زر الحفظ"}
+                  : "حدد الفوج أعلاه لتفعيل زر الحفظ"}
               </p>
             )}
           </motion.div>
