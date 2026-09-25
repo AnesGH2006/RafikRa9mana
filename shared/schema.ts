@@ -109,6 +109,22 @@ export const absencesTable = pgTable("absences", {
 export type Absence = typeof absencesTable.$inferSelect;
 export type InsertAbsence = typeof absencesTable.$inferInsert;
 
+export const studentDailyAttendanceTable = pgTable("student_daily_attendance", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  studentId: varchar("student_id", { length: 64 }).notNull().references(() => studentsTable.id, { onDelete: "cascade" }),
+  attendanceDate: varchar("attendance_date", { length: 10 }).notNull(),
+  status: varchar("status", { length: 100 }).notNull(),
+  isAbsent: boolean("is_absent").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("UQ_student_daily_attendance_user_student_date").on(table.userId, table.studentId, table.attendanceDate),
+  index("IDX_student_daily_attendance_user_date").on(table.userId, table.attendanceDate),
+]);
+
+export type StudentDailyAttendance = typeof studentDailyAttendanceTable.$inferSelect;
+export type InsertStudentDailyAttendance = typeof studentDailyAttendanceTable.$inferInsert;
+
 export const bemSessionsTable = pgTable("bem_sessions", {
   id: varchar("id", { length: 64 }).primaryKey(),
   userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),

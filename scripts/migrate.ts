@@ -103,6 +103,22 @@ async function migrate() {
     );
   `);
 
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS student_daily_attendance (
+      id varchar(64) PRIMARY KEY,
+      user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      student_id varchar(64) NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      attendance_date varchar(10) NOT NULL,
+      status varchar(100) NOT NULL,
+      is_absent boolean NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS "UQ_student_daily_attendance_user_student_date"
+      ON student_daily_attendance(user_id, student_id, attendance_date);
+    CREATE INDEX IF NOT EXISTS "IDX_student_daily_attendance_user_date"
+      ON student_daily_attendance(user_id, attendance_date);
+  `);
+
   await db.execute(sql`DO $$ BEGIN CREATE TYPE payment_status AS ENUM ('pending','paid','failed','refunded'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
   await db.execute(sql`DO $$ BEGIN CREATE TYPE payment_provider AS ENUM ('chargily','activation_code'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
   await db.execute(sql`

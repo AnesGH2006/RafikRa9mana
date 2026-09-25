@@ -9,7 +9,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   ScanLine, Upload, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
-  Pencil, Save, RotateCcw, FileImage, Clock, BookOpen,
+  Pencil, Save, RotateCcw, FileImage, Clock, BookOpen, ClipboardCheck,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL;
@@ -28,7 +28,7 @@ const SUBJECTS_AR    = [
   "تربية موسيقية", "تربية بدنية",
 ];
 
-type OcrMode = "grades" | "absences";
+type OcrMode = "grades" | "absences" | "daily_register";
 
 interface OcrRow {
   rowNumber: number;
@@ -36,12 +36,16 @@ interface OcrRow {
   grade?: number | null;
   justifiedHours?: number;
   unjustifiedHours?: number;
+  status?: string;
+  isAbsent?: boolean | null;
   confidence: number;
   lowConfidence: boolean;
   editedName?: string;
   editedGrade?: string;
   editedJustified?: string;
   editedUnjustified?: string;
+  editedStatus?: string;
+  editedAbsent?: boolean | null;
   saved?: boolean;
   saveError?: string;
 }
@@ -104,12 +108,19 @@ function getCurrentTrimester(): number {
   return 3;
 }
 
+function isIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 export default function UploadGradesOcrPage() {
   const { toast } = useToast();
 
   const [mode, setMode] = useState<OcrMode>("grades");
 
   const [annee,     setAnnee]     = useState("2025-2026");
+  const [reportDate, setReportDate] = useState("");
   const [niveau,    setNiveau]    = useState("");
   const [classe,    setClasse]    = useState("");
   const [trimestre, setTrimestre] = useState("1");
@@ -128,7 +139,7 @@ export default function UploadGradesOcrPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const canUpload = mode === "absences" || Boolean(niveau && classe);
+  const canUpload = mode !== "grades" || Boolean(niveau && classe);
 
   const switchMode = (m: OcrMode) => {
     setMode(m);
@@ -138,6 +149,7 @@ export default function UploadGradesOcrPage() {
     setErrMsg("");
     setSuggestions([]);
     setSaveState({ phase: "idle", saved: 0, failed: 0, errors: [] });
+    setReportDate("");
     if (m === "absences") setSubject("");
   };
 
@@ -220,6 +232,7 @@ export default function UploadGradesOcrPage() {
       }
 
       setRows(data.rows.map((r: OcrRow) => ({ ...r })));
+      if (mode === "daily_register") setReportDate(data.reportDate ?? "");
       setOverallConf(data.overallConfidence ?? null);
       setSuggestions([]);
       setPhase("done");
@@ -268,6 +281,8 @@ export default function UploadGradesOcrPage() {
   const effectiveGrade      = (r: OcrRow) => r.editedGrade !== undefined ? r.editedGrade : String(r.grade ?? "");
   const effectiveJustified  = (r: OcrRow) => r.editedJustified  !== undefined ? r.editedJustified  : String(r.justifiedHours  ?? 0);
   const effectiveUnjustified= (r: OcrRow) => r.editedUnjustified !== undefined ? r.editedUnjustified : String(r.unjustifiedHours ?? 0);
+  const effectiveStatus     = (r: OcrRow) => r.editedStatus ?? r.status ?? "";
+  const effectiveAbsent     = (r: OcrRow) => r.editedAbsent !== undefined ? r.editedAbsent : r.isAbsent ?? null;
 
   async function fetchStudents(): Promise<Array<{ id: string; nomPrenom: string }>> {
     if (!classe || (mode === "grades" && !niveau)) return [];
@@ -293,6 +308,14 @@ export default function UploadGradesOcrPage() {
       toast({ variant: "destructive", title: "خطأ", description: "يرجى تحديد المادة قبل الحفظ" });
       return;
     }
+    if (mode === "daily_register" && !isIsoDate(reportDate)) {
+      toast({ variant: "destructive", title: "تاريخ غير صالح", description: "أدخل تاريخ التقرير قبل الحفظ" });
+      return;
+    }
+    if (mode === "daily_register" && rows.some(row => effectiveAbsent(row) === null || !effectiveStatus(row))) {
+      toast({ variant: "destructive", title: "مراجعة مطلوبة", description: "حدد حالة كل تلميذ وتأكد من علامة الحضور قبل الحفظ" });
+      return;
+    }
 
     setSaveState({ phase: "saving", saved: 0, failed: 0, errors: [] });
 
@@ -309,6 +332,67 @@ export default function UploadGradesOcrPage() {
     }
 
     const findStudents = (name: string) => students.filter(s => nameMatches(s.nomPrenom, name));
+
+    if (mode === "daily_register") {
+      const updatedRows = [...rows];
+      const entries: Array<{ studentId: string; status: string; isAbsent: boolean }> = [];
+      const matchedRows: number[] = [];
+      const seenStudentIds = new Set<string>();
+      const errors: string[] = [];
+
+      rows.forEach((row, index) => {
+        const matches = findStudents(effectiveName(row));
+        if (matches.length !== 1) {
+          const message = matches.length > 1 ? "الاسم مطابق لأكثر من تلميذ في الفوج" : "لم يُعثر على التلميذ في الفوج";
+          errors.push(`صف ${row.rowNumber}: ${message}`);
+          updatedRows[index] = { ...row, saveError: message };
+          return;
+        }
+        const student = matches[0]!;
+        if (seenStudentIds.has(student.id)) {
+          const message = "ظهر التلميذ أكثر من مرة في الصورة";
+          errors.push(`صف ${row.rowNumber}: ${message}`);
+          updatedRows[index] = { ...row, saveError: message };
+          return;
+        }
+        seenStudentIds.add(student.id);
+        matchedRows.push(index);
+        entries.push({ studentId: student.id, status: effectiveStatus(row), isAbsent: effectiveAbsent(row) === true });
+      });
+
+      if (entries.length === 0) {
+        setRows(updatedRows);
+        setSaveState({ phase: "done", saved: 0, failed: rows.length, errors });
+        toast({ variant: "destructive", title: "لم يتم العثور على تطابقات", description: errors[0] });
+        return;
+      }
+
+      try {
+        const response = await fetch(`${BASE}api/absences/daily-students`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ attendanceDate: reportDate, entries }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error ?? "فشل حفظ السجل اليومي");
+
+        for (const index of matchedRows) {
+          updatedRows[index] = { ...updatedRows[index]!, saved: true, saveError: undefined };
+        }
+        setRows(updatedRows);
+        setSaveState({ phase: "done", saved: entries.length, failed: errors.length, errors });
+        toast({
+          title: `تم حفظ ${entries.length} سجل ليوم ${reportDate}`,
+          description: errors.length > 0 ? `تعذر مطابقة ${errors.length} صف` : undefined,
+        });
+      } catch (error: any) {
+        setRows(rows.map(row => ({ ...row, saveError: error?.message ?? "فشل الحفظ" })));
+        setSaveState({ phase: "done", saved: 0, failed: rows.length, errors: [error?.message ?? "فشل الحفظ"] });
+        toast({ variant: "destructive", title: "فشل الحفظ", description: error?.message ?? "فشل حفظ السجل اليومي" });
+      }
+      return;
+    }
 
     let saved = 0, failed = 0;
     const errors: string[] = [];
@@ -436,6 +520,17 @@ export default function UploadGradesOcrPage() {
           <Clock className="w-3.5 h-3.5" />
           غيابات
         </button>
+        <button
+          onClick={() => switchMode("daily_register")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            mode === "daily_register"
+              ? "bg-background text-emerald-600 dark:text-emerald-400 shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <ClipboardCheck className="w-3.5 h-3.5" />
+          سجل يومي
+        </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
@@ -454,6 +549,9 @@ export default function UploadGradesOcrPage() {
           value={classe}
           onChange={e => setClasse(e.target.value)}
         />
+        {mode === "daily_register" && (
+          <Input type="date" aria-label="تاريخ سجل الغياب" value={reportDate} onChange={e => setReportDate(e.target.value)} />
+        )}
         {mode === "grades" && (
           <Select value={trimestre} onValueChange={setTrimestre}>
             <SelectTrigger><SelectValue placeholder="الفصل" /></SelectTrigger>
@@ -471,6 +569,11 @@ export default function UploadGradesOcrPage() {
               <SelectContent>{GRADE_TYPES.map(type => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}</SelectContent>
             </Select>
           </>
+        ) : mode === "daily_register" ? (
+          <div className="flex items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/50 text-xs text-emerald-700 dark:text-emerald-400 font-medium gap-1.5">
+            <ClipboardCheck className="w-3.5 h-3.5" />
+            سجل يومي · تُراجع العلامات قبل الحفظ
+          </div>
         ) : (
           <div className="flex items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 text-xs text-amber-700 dark:text-amber-400 font-medium gap-1.5">
             <Clock className="w-3.5 h-3.5" />
@@ -521,7 +624,7 @@ export default function UploadGradesOcrPage() {
               </div>
               <div>
                 <p className="font-semibold text-base">
-                  {mode === "grades" ? "أسقط صورة كشف الدرجات هنا" : "أسقط صورة كشف الغياب هنا"}
+                  {mode === "grades" ? "أسقط صورة كشف الدرجات هنا" : mode === "daily_register" ? "أسقط صورة سجل الغياب اليومي هنا" : "أسقط صورة كشف الغياب هنا"}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">JPEG · PNG · WebP · BMP — حجم أقصى 15 MB</p>
               </div>

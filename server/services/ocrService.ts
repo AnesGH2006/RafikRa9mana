@@ -5,6 +5,7 @@
  *  - grades            : printed/handwritten grade sheets (0-20 scores)
  *  - absences          : printed absence sheets (justified/unjustified hours, term totals)
  *  - daily_attendance   : weekly attendance grids (per-day symbols like ح/غ/غ‌م/ت)
+ *  - daily_register     : dated per-student registers with an attendance mark
  *
  * Design note on daily_attendance: instead of forcing a fixed enum of symbols,
  * the model is asked to describe the table structure it sees (day column names)
@@ -17,7 +18,7 @@ import Tesseract from "tesseract.js";
 import { logger } from "../lib/logger.js";
 
 export type OcrEngine = "gemini" | "vision" | "tesseract" | "auto";
-export type OcrType = "grades" | "absences" | "daily_attendance";
+export type OcrType = "grades" | "absences" | "daily_attendance" | "daily_register";
 
 export interface OcrGradeRow {
   studentName: string;
@@ -40,12 +41,20 @@ export interface OcrDailyAttendanceRow {
   confidence: number;
 }
 
+export interface OcrDailyRegisterRow {
+  studentName: string;
+  status: string;
+  isAbsent: boolean | null;
+  confidence: number;
+}
+
 export interface OcrResult {
   engine: OcrEngine;
   type: OcrType;
-  rows: Array<OcrGradeRow | OcrAbsenceRow | OcrDailyAttendanceRow>;
+  rows: Array<OcrGradeRow | OcrAbsenceRow | OcrDailyAttendanceRow | OcrDailyRegisterRow>;
   /** For daily_attendance: the day-column headers detected in the sheet, in order */
   dayColumns?: string[];
+  reportDate?: string;
   rawText?: string;
   overallConfidence: number;
 }
@@ -304,6 +313,18 @@ const DAILY_ATTENDANCE_PROMPT = `هذه صورة سجل حضور وغياب مد
 - اقرأ الجدول حتى لو كانت الكتابة اليدوية أو الصورة مائلة أو فيها بقع أو إضاءة غير متساوية — ابذل قصارى جهدك، ولا تتجاهل صفاً كاملاً لمجرد صعوبة جزء منه.
 - لا تخترع بيانات لم تُكتب في الصورة.`;
 
+const DAILY_REGISTER_PROMPT = `اقرأ صورة سجل غياب مدرسي يومي جزائري. يحتوي الجدول عادة على أسماء التلاميذ، تاريخ التقرير، وعلامة أو كلمة تبين حالة كل تلميذ مثل "غائب" أو "حاضر". قد يحتوي أيضًا أعمدة لا علاقة لها بالحضور مثل الجنس، تاريخ الميلاد، القسم، والرقم التسلسلي.
+
+أعد كائن JSON فقط بهذا الشكل:
+{"reportDate":"2024-03-15","rows":[{"studentName":"الاسم الكامل","status":"غائب","isAbsent":true}]}
+
+قواعد:
+- استخرج التاريخ من عنوان التقرير وحوّله إلى YYYY-MM-DD. إذا لم يظهر تاريخ واضح، أعد reportDate بقيمة null.
+- استخرج كل صف تلميذ، ولا تخلط بين عمود الحالة وبين الجنس أو المستوى أو الحالة الإدارية مثل "جديد".
+- انسخ نص أو رمز الحضور كما يظهر في عمود الحالة إلى status.
+- isAbsent=true فقط إذا كانت علامة الحضور تعني بوضوح الغياب، وfalse إذا كانت تعني الحضور، وnull إذا لم تكن الحالة واضحة.
+- تجاهل أرقام التسلسل، تاريخ الميلاد، والعناوين. لا تخترع أسماء أو علامات.`;
+
 // ── JSON extraction helpers ────────────────────────────────────────────────────
 
 function extractJsonArrayCandidate(raw: string): string | null {
@@ -403,6 +424,10 @@ export function estimateLineConfidence(
       const plausible = Object.values(days).every(v => v.trim().length <= 4);
       if (plausible) score += 5;
     }
+  } else if (type === "daily_register") {
+    const registerRow = typeof value === "object" && !Array.isArray(value) ? value as Record<string, string> : null;
+    if (registerRow?.status?.trim()) score += 15;
+    if (registerRow?.status && registerRow.status.length <= 20) score += 5;
   }
 
   return Math.max(50, Math.min(96, Math.round(score)));
@@ -429,7 +454,38 @@ async function extractWithVision(
   mimeType: string,
   type: OcrType,
   apiKeys: ApiKeys,
-): Promise<{ rows: Array<OcrGradeRow | OcrAbsenceRow | OcrDailyAttendanceRow>; rawText: string; dayColumns?: string[] }> {
+): Promise<{ rows: Array<OcrGradeRow | OcrAbsenceRow | OcrDailyAttendanceRow | OcrDailyRegisterRow>; rawText: string; dayColumns?: string[]; reportDate?: string }> {
+
+  if (type === "daily_register") {
+    const content = await callVisionEngine(engine, imageB64, mimeType, DAILY_REGISTER_PROMPT, apiKeys);
+    const jsonCandidate = extractJsonObjectCandidate(content);
+    if (!jsonCandidate) return { rows: [], rawText: content };
+
+    try {
+      const parsed = JSON.parse(jsonCandidate) as { reportDate?: unknown; rows?: unknown[] };
+      const reportDate = typeof parsed.reportDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.reportDate)
+        ? parsed.reportDate
+        : undefined;
+      const rawRows = Array.isArray(parsed.rows) ? parsed.rows : [];
+      const rows: OcrDailyRegisterRow[] = rawRows
+        .filter((row: any) => row && typeof row === "object" && typeof row.studentName === "string" && row.studentName.trim())
+        .map((row: any) => {
+          const studentName = String(row.studentName).trim();
+          const status = typeof row.status === "string" ? row.status.trim() : "";
+          const isAbsent = typeof row.isAbsent === "boolean" ? row.isAbsent : null;
+          return {
+            studentName,
+            status,
+            isAbsent,
+            confidence: estimateLineConfidence(studentName, { status }, "daily_register"),
+          };
+        });
+      return { rows, rawText: content, reportDate };
+    } catch (err) {
+      logger.warn({ err, type }, "Failed to parse daily_register JSON");
+      return { rows: [], rawText: content };
+    }
+  }
 
   if (type === "daily_attendance") {
     const content = await callVisionEngine(engine, imageB64, mimeType, DAILY_ATTENDANCE_PROMPT, apiKeys);
@@ -581,8 +637,8 @@ async function extractWithTesseract(
   buffer: Buffer,
   type: OcrType,
 ): Promise<{ rows: Array<OcrGradeRow | OcrAbsenceRow>; rawText: string }> {
-  if (type === "daily_attendance") {
-    logger.warn("Tesseract fallback does not support daily_attendance — returning empty result");
+  if (type === "daily_attendance" || type === "daily_register") {
+    logger.warn({ type }, "Tesseract fallback does not support daily attendance OCR — returning empty result");
     return { rows: [], rawText: "" };
   }
 
@@ -665,9 +721,10 @@ export async function processOcr(
   const resolved = resolveEngine(engine, apiKeys);
   const { data, mimeType } = await prepareImage(buffer);
 
-  let rows: Array<OcrGradeRow | OcrAbsenceRow | OcrDailyAttendanceRow> = [];
+  let rows: Array<OcrGradeRow | OcrAbsenceRow | OcrDailyAttendanceRow | OcrDailyRegisterRow> = [];
   let rawText = "";
   let dayColumns: string[] | undefined;
+  let reportDate: string | undefined;
   let usedEngine = resolved;
 
   const isVisionEngine = resolved === "gemini" || resolved === "vision";
@@ -685,6 +742,7 @@ export async function processOcr(
       rows = result.rows;
       rawText = result.rawText;
       dayColumns = result.dayColumns;
+      reportDate = result.reportDate;
     } catch (err) {
       primaryError = err instanceof Error ? err : new Error(String(err));
       logger.warn({ err: primaryError.message, engine: resolved }, "Primary vision engine failed — will try secondary engine if available");
@@ -701,6 +759,8 @@ export async function processOcr(
           if (secondTry.rows.length > 0) {
             rows = secondTry.rows;
             rawText = secondTry.rawText || rawText;
+            dayColumns = secondTry.dayColumns ?? dayColumns;
+            reportDate = secondTry.reportDate ?? reportDate;
             usedEngine = otherEngine;
             primaryError = null; // secondary succeeded — the earlier failure no longer matters
           } else {
@@ -742,6 +802,7 @@ export async function processOcr(
     type,
     rows,
     dayColumns,
+    reportDate,
     rawText,
     overallConfidence,
   };
