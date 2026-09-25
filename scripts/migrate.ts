@@ -29,6 +29,9 @@ async function migrate() {
       updated_at timestamptz NOT NULL DEFAULT now()
     );
   `);
+  await db.execute(sql`DO $$ BEGIN CREATE TYPE subscription_status AS ENUM ('pending','active','suspended'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status subscription_status NOT NULL DEFAULT 'pending';`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at timestamptz;`);
 
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS school_info (
@@ -66,6 +69,11 @@ async function migrate() {
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
+  await db.execute(sql`
+    UPDATE students
+    SET nom_prenom = regexp_replace(nom_prenom, '^(.+)\\s+\\1$', '\\1')
+    WHERE nom_prenom ~ '^(.+)\\s+\\1$';
+  `);
 
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS grades (
@@ -93,6 +101,27 @@ async function migrate() {
       unjustified_hours integer NOT NULL DEFAULT 0,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+  `);
+
+  await db.execute(sql`DO $$ BEGIN CREATE TYPE payment_status AS ENUM ('pending','paid','failed','refunded'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
+  await db.execute(sql`DO $$ BEGIN CREATE TYPE payment_provider AS ENUM ('chargily','activation_code'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS payments (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider payment_provider NOT NULL,
+      provider_reference varchar(255),
+      amount_dzd integer NOT NULL DEFAULT 1000,
+      status payment_status NOT NULL DEFAULT 'pending',
+      checkout_url varchar(2000),
+      metadata jsonb,
+      paid_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS "UQ_payments_provider_reference" ON payments(provider, provider_reference);
+    CREATE INDEX IF NOT EXISTS "IDX_payments_user_created" ON payments(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS "IDX_payments_status" ON payments(status);
   `);
 
   console.log("Migration complete.");

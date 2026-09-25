@@ -66,6 +66,8 @@ async function probeDb(attempt = 1): Promise<void> {
     await db.execute(sql`SELECT 1`);
     // Keep the parent feed compatible with databases created before assessment types existed.
     await db.execute(sql`ALTER TABLE grades ADD COLUMN IF NOT EXISTS grade_type varchar(20) NOT NULL DEFAULT 'general'`);
+    // Repair names imported from combined Excel name columns before the parser fix.
+    await db.execute(sql`UPDATE students SET nom_prenom = regexp_replace(nom_prenom, '^(.+)\\s+\\1$', '\\1') WHERE nom_prenom ~ '^(.+)\\s+\\1$'`);
     logger.info("Database connection verified");
   } catch (err) {
     if (attempt < MAX_ATTEMPTS) {

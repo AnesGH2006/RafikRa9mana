@@ -263,8 +263,8 @@ function processRows(
   }
   if (!detectedNiveau) detectedNiveau = normalizeLevel(headerCells.join(" "));
 
-  const colNom    = findCol(headerCells, NOM_N);
-  const colPrenom = findCol(headerCells, PRENOM_N);
+  let colNom      = findCol(headerCells, NOM_N);
+  let colPrenom   = findCol(headerCells, PRENOM_N);
   const colName   = findCol(headerCells, NAME_N);
   const colBirth  = findCol(headerCells, BIRTH_N);
   const colLevel  = findCol(headerCells, LEVEL_N);
@@ -274,6 +274,13 @@ function processRows(
   const colResult = findCol(headerCells, RESULT_N);
   const colRaqm   = findCol(headerCells, RAQM_N);   // ✅ now correctly picks "رقم القيد"
   const colPhone  = findCol(headerCells, PHONE_N);   // رقم هاتف الولي
+
+  // A combined "الاسم واللقب" header contains both keywords, so fuzzy
+  // detection returns the same column for nom and prenom. Use it as one name.
+  if (colNom && colPrenom && colNom === colPrenom) {
+    colNom = null;
+    colPrenom = null;
+  }
 
   logger.info({ colNom, colPrenom, colName, colLevel, colClass, colGender, colRaqm, colPhone }, "Column map");
 
