@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/language-provider";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, Zap, Star, Crown, Calendar, Leaf, Building2 } from "lucide-react";
@@ -13,6 +14,40 @@ const pageVariants = {
 
 export default function SubscriptionPage() {
   const { t } = useLanguage();
+  const { user } = useAuth();
+  const [checkoutBusy, setCheckoutBusy] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState("");
+
+  async function startCheckout(planKey: string, amountDzd: number) {
+    if (planKey === "institution") {
+      window.location.href = "mailto:contact@rafik-raqamna.dz?subject=Demande%20d'abonnement%20institutionnel";
+      return;
+    }
+
+    setCheckoutBusy(planKey);
+    setCheckoutError("");
+
+    try {
+      const response = await fetch(`${import.meta.env.BASE_URL}api/payments/chargily/checkout`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          returnUrl: `${window.location.origin}${user?.memberContext?.role === "parent" ? "/my-child" : "/"}`,
+          amountDzd,
+        }),
+      });
+      const payload = (await response.json()) as { checkoutUrl?: string; error?: string };
+      if (!response.ok || !payload.checkoutUrl) {
+        throw new Error(payload.error ?? "تعذر بدء عملية الدفع");
+      }
+      window.location.assign(payload.checkoutUrl);
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "تعذر بدء عملية الدفع");
+    } finally {
+      setCheckoutBusy(null);
+    }
+  }
 
   const plans = [
     {
@@ -221,7 +256,13 @@ export default function SubscriptionPage() {
                   transition={{ type: "spring", stiffness: 300, damping: 20 }}>
                   <Button
                     variant={plan.ctaVariant}
-                    disabled={plan.current}
+                    disabled={plan.current || checkoutBusy === plan.key}
+                    onClick={() => {
+                      if (plan.current) return;
+                      if (plan.key === "basic") return startCheckout(plan.key, 6000);
+                      if (plan.key === "pro") return startCheckout(plan.key, 12000);
+                      if (plan.key === "institution") return startCheckout(plan.key, 0);
+                    }}
                     className={`w-full py-4 font-bold text-xs rounded-xl shadow-md transition-all ${
                       plan.current
                         ? "opacity-70 cursor-default"
@@ -234,7 +275,7 @@ export default function SubscriptionPage() {
                               : ""
                     }`}
                   >
-                    {plan.current ? `✓ ${plan.cta}` : plan.cta}
+                    {plan.current ? `✓ ${plan.cta}` : checkoutBusy === plan.key ? "جارٍ التحضير…" : plan.cta}
                   </Button>
                 </motion.div>
               </CardContent>
@@ -242,6 +283,12 @@ export default function SubscriptionPage() {
           </motion.div>
         ))}
       </div>
+
+      {checkoutError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
+          {checkoutError}
+        </div>
+      )}
 
       {/* Comparison table */}
       <motion.div
