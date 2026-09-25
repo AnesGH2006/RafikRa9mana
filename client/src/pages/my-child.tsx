@@ -124,38 +124,16 @@ export default function MyChildPage() {
       .catch(e => { setError(String(e)); setLoading(false); });
   }, [annee]);
 
-  const memberCtx = user?.memberContext;
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-64 text-muted-foreground gap-3">
-        <GraduationCap className="w-10 h-10 animate-pulse opacity-40" />
-        <span className="text-sm">جارٍ تحميل البيانات…</span>
-      </div>
-    );
-  }
-
-  if (error || !data?.student) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center min-h-64 gap-4 text-muted-foreground"
-      >
-        <AlertCircle className="w-12 h-12 text-amber-500 opacity-70" />
-        <p className="text-sm text-center">
-          {memberCtx?.linkedStudentId ? "حدث خطأ أثناء تحميل البيانات" : "لا يوجد تلميذ مرتبط بحسابك. تواصل مع مدير المدرسة."}
-        </p>
-      </div>
-    );
-  }
-
-  const { student, grades, absences } = data;
+  const student = data?.student;
+  const grades = data?.grades ?? [];
+  const absences = data?.absences ?? [];
   const { subs, trimesterGrades, t1Avg, t2Avg, t3Avg, annualAvg, totalJustified, totalUnjustified } = useMemo(() => {
-    const subjects = getSubjectsForLevel(student.niveau as Niveau);
-    const averages = [
-      data.t1Avg ?? calcTrimAvg(grades, 1, student.niveau),
-      data.t2Avg ?? calcTrimAvg(grades, 2, student.niveau),
-      data.t3Avg ?? calcTrimAvg(grades, 3, student.niveau),
-    ];
+    const subjects = student ? getSubjectsForLevel(student.niveau as Niveau) : [];
+    const averages = student ? [
+      data?.t1Avg ?? calcTrimAvg(grades, 1, student.niveau),
+      data?.t2Avg ?? calcTrimAvg(grades, 2, student.niveau),
+      data?.t3Avg ?? calcTrimAvg(grades, 3, student.niveau),
+    ] : [null, null, null];
     const availableAverages = averages.filter((value): value is number => value !== null);
     const groupedGrades = new Map<number, Map<string, number>>();
     for (const grade of grades) {
@@ -169,14 +147,39 @@ export default function MyChildPage() {
       t1Avg: averages[0],
       t2Avg: averages[1],
       t3Avg: averages[2],
-      annualAvg: data.annualAvg ?? (availableAverages.length > 0
+      annualAvg: data?.annualAvg ?? (availableAverages.length > 0
         ? availableAverages.reduce((sum, value) => sum + value, 0) / availableAverages.length
         : null),
       totalJustified: absences.reduce((sum, absence) => sum + (absence.justifiedHours ?? 0), 0),
       totalUnjustified: absences.reduce((sum, absence) => sum + (absence.unjustifiedHours ?? 0), 0),
     };
-  }, [absences, data.annualAvg, data.t1Avg, data.t2Avg, data.t3Avg, grades, student.niveau]);
+  }, [absences, data?.annualAvg, data?.t1Avg, data?.t2Avg, data?.t3Avg, grades, student?.niveau]);
 
+  const memberCtx = user?.memberContext;
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-64 text-muted-foreground gap-3">
+        <GraduationCap className="w-10 h-10 animate-pulse opacity-40" />
+        <span className="text-sm">جارٍ تحميل البيانات…</span>
+      </div>
+    );
+  }
+
+  if (error || !student) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center min-h-64 gap-4 text-muted-foreground"
+      >
+        <AlertCircle className="w-12 h-12 text-amber-500 opacity-70" />
+        <p className="text-sm text-center">
+          {memberCtx?.linkedStudentId ? "حدث خطأ أثناء تحميل البيانات" : "لا يوجد تلميذ مرتبط بحسابك. تواصل مع مدير المدرسة."}
+        </p>
+      </div>
+    );
+  }
+
+  const loadedStudent = student;
   const isPassed = annualAvg !== null ? annualAvg >= 10 : null;
 
   async function leaveParentMode() {
@@ -235,11 +238,11 @@ export default function MyChildPage() {
               <User className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">{student.nomPrenom}</h2>
+              <h2 className="text-xl font-bold">{loadedStudent.nomPrenom}</h2>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <Badge variant="secondary" className="text-xs">{student.niveau}</Badge>
-                <Badge variant="outline" className="text-xs">قسم {student.classe}</Badge>
-                <Badge variant="outline" className="text-xs">{student.annee}</Badge>
+                <Badge variant="secondary" className="text-xs">{loadedStudent.niveau}</Badge>
+                <Badge variant="outline" className="text-xs">قسم {loadedStudent.classe}</Badge>
+                <Badge variant="outline" className="text-xs">{loadedStudent.annee}</Badge>
               </div>
             </div>
           </div>
@@ -281,7 +284,7 @@ export default function MyChildPage() {
       {[1, 2, 3].map(tr => {
         const trimGrades = trimesterGrades.get(tr);
         if (!trimGrades || trimGrades.size === 0) return null;
-        const avg = calcTrimAvg(grades, tr, student.niveau);
+        const avg = calcTrimAvg(grades, tr, loadedStudent.niveau);
         return (
           <Card key={tr} className="shadow-sm [content-visibility:auto] [contain-intrinsic-size:0_220px]">
             <CardHeader className="pb-2">
