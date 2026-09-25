@@ -158,7 +158,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   if (!linkedStudentId) { res.json({ student: null }); return; }
 
   const annee = String(req.query.annee ?? "2025-2026");
-  const cacheKey = `parent-feed:${schoolUserId}:${linkedStudentId}:${annee}`;
+  const cacheKey = `parent-feed:v2:${schoolUserId}:${linkedStudentId}:${annee}`;
   const cached = await getCachedJson<Record<string, unknown>>(cacheKey);
   if (cached) {
     res.set("Cache-Control", "private, max-age=60");
@@ -185,6 +185,12 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
     .select()
     .from(absencesTable)
     .where(and(eq(absencesTable.studentId, linkedStudentId), eq(absencesTable.annee, annee)));
+
+  const [schoolInfo] = await db
+    .select({ nom: schoolInfoTable.nom, wilaya: schoolInfoTable.wilaya, commune: schoolInfoTable.commune })
+    .from(schoolInfoTable)
+    .where(eq(schoolInfoTable.userId, schoolUserId))
+    .limit(1);
 
   // Separate Ministry-stored averages (__avg__ sentinel) from subject grades —
   // same logic as /api/results so both pages show identical values.
@@ -218,6 +224,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
     .map(g => ({ ...g, score: parseFloat(String(g.score)) }));
 
   const payload = {
+    school: schoolInfo ?? null,
     student,
     grades,
     absences,

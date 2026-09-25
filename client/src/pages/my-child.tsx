@@ -21,6 +21,7 @@ import type { Niveau } from "@shared/types";
 const BASE = import.meta.env.BASE_URL;
 
 interface StudentData {
+  school?: { nom: string; wilaya?: string | null; commune?: string | null };
   student: {
     id: string;
     nomPrenom: string;
@@ -208,8 +209,16 @@ export default function MyChildPage() {
     { id: "performance", label: "الأداء الأكاديمي", icon: BarChart3 },
   ];
   const displayName = loadedStudent.nomPrenom || "أحمد بن علي";
-  const monthlyRates = [94, 98, 96, 92, 100, 96];
   const initials = displayName.split(" ").map(part => part[0]).slice(0, 2).join("");
+  const schoolName = data.school?.nom || "المؤسسة التعليمية";
+  const absenceRecords = absences.filter(absence => absence.justifiedHours > 0 || absence.unjustifiedHours > 0);
+  const latestAbsence = absenceRecords[absenceRecords.length - 1];
+  const totalAbsenceHours = totalJustified + totalUnjustified;
+  const attendanceRate = totalAbsenceHours > 0 ? Math.max(0, 100 - (totalAbsenceHours * 2)) : 100;
+  const absenceByTrimester = [1, 2, 3].map(trimestre => {
+    const record = absences.find(absence => absence.trimestre === trimestre);
+    return (record?.justifiedHours ?? 0) + (record?.unjustifiedHours ?? 0);
+  });
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#0a1020] text-slate-100 font-[Tajawal]">
@@ -276,13 +285,13 @@ export default function MyChildPage() {
                 <div>
                   <div className="mb-4 flex items-center gap-2 text-xs text-cyan-300"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300" /> الملف الدراسي النشط</div>
                   <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">{displayName}</h2>
-                  <p className="mt-2 text-sm text-slate-400">{loadedStudent.niveau || "4ème AM"} <span className="mx-2 text-slate-600">•</span> ثانوية العقيد لطفي</p>
+                  <p className="mt-2 text-sm text-slate-400">{loadedStudent.niveau} <span className="mx-2 text-slate-600">•</span> {schoolName}</p>
                   <div className="mt-6 flex flex-wrap items-center gap-2 text-xs text-slate-400"><span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">القسم {loadedStudent.classe}</span><span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">السنة {annee}</span></div>
                 </div>
                 <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-[30px] border border-cyan-300/20 bg-gradient-to-br from-cyan-400/20 to-blue-500/20 text-4xl font-bold text-cyan-200 shadow-2xl shadow-cyan-500/10">{initials || "أح"}</div>
               </div>
               <div className="relative mt-8 grid grid-cols-2 gap-3 border-t border-white/10 pt-5 sm:grid-cols-4">
-                <div><p className="text-[11px] text-slate-500">الحضور الشهري</p><p className="mt-1 text-xl font-bold text-white">96.4% <span className="text-xs font-medium text-emerald-400">+2.1%</span></p></div>
+                <div><p className="text-[11px] text-slate-500">نسبة الحضور التقديرية</p><p className="mt-1 text-xl font-bold text-white">{attendanceRate.toFixed(1)}% <span className="text-xs font-medium text-slate-500">حسب الساعات</span></p></div>
                 <div><p className="text-[11px] text-slate-500">معدل السنة</p><p className="mt-1 text-xl font-bold text-white">{annualAvg !== null ? annualAvg.toFixed(2) : "—"}<span className="text-xs font-normal text-slate-500"> / 20</span></p></div>
                 <div><p className="text-[11px] text-slate-500">غيابات مبررة</p><p className="mt-1 text-xl font-bold text-emerald-300">{totalJustified}<span className="text-xs font-normal text-slate-500"> ساعة</span></p></div>
                 <div><p className="text-[11px] text-slate-500">تحتاج انتباهك</p><p className="mt-1 text-xl font-bold text-red-300">{totalUnjustified}<span className="text-xs font-normal text-slate-500"> ساعة</span></p></div>
@@ -290,8 +299,8 @@ export default function MyChildPage() {
             </div>
             <div className="rounded-[28px] border border-red-400/20 bg-gradient-to-br from-[#2a1828] to-[#161b2b] p-6 shadow-xl shadow-red-950/10">
               <div className="flex items-start justify-between"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/15 text-red-300"><CircleAlert className="h-5 w-5" /></div><span className="rounded-full bg-red-400/10 px-2.5 py-1 text-[10px] font-bold text-red-300">جديد</span></div>
-              <p className="mt-7 text-xs text-red-300/80">تنبيه غياب</p><h3 className="mt-1 text-lg font-bold text-white">الجمعة 15 مارس 2024</h3><p className="mt-2 text-xs leading-5 text-slate-400">تم تسجيل غياب لم يتم تبريره بعد. يرجى مراجعة التفاصيل واتخاذ الإجراء المناسب.</p>
-              <button onClick={() => setActiveTab("attendance")} className="mt-5 flex items-center gap-2 text-xs font-bold text-red-200 transition hover:text-white">عرض تفاصيل الغياب <ChevronLeft className="h-4 w-4" /></button>
+              <p className="mt-7 text-xs text-red-300/80">{latestAbsence?.unjustifiedHours ? "تنبيه غياب غير مبرر" : "ملخص الغياب"}</p><h3 className="mt-1 text-lg font-bold text-white">{latestAbsence ? TRIMESTRE_LABELS[latestAbsence.trimestre] : "لا توجد غيابات مسجلة"}</h3><p className="mt-2 text-xs leading-5 text-slate-400">{latestAbsence ? `${latestAbsence.unjustifiedHours} ساعة غير مبررة و${latestAbsence.justifiedHours} ساعة مبررة في هذا الفصل.` : "لم يتم تسجيل ساعات غياب لهذا العام الدراسي."}</p>
+              <button onClick={() => setActiveTab("attendance")} className="mt-5 flex items-center gap-2 text-xs font-bold text-red-200 transition hover:text-white">عرض سجل الغياب <ChevronLeft className="h-4 w-4" /></button>
             </div>
           </section>
 
@@ -301,20 +310,18 @@ export default function MyChildPage() {
             <div className="rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6">
               <div className="mb-6 flex items-center justify-between"><div><p className="text-xs text-slate-500">تحديثات اليوم</p><h2 className="mt-1 text-xl font-bold text-white">سجل الحضور والغياب</h2></div><button className="flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200">كل السجلات <ChevronLeft className="h-4 w-4" /></button></div>
               <div className="relative space-y-1 before:absolute before:right-[18px] before:top-5 before:h-[calc(100%-40px)] before:w-px before:bg-white/10">
-                <div className="relative flex gap-4 rounded-2xl border border-red-400/20 bg-red-500/[0.07] p-4"><div className="z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] bg-red-500 text-white"><CircleAlert className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><div><span className="rounded-md bg-red-400/15 px-2 py-1 text-[11px] font-bold text-red-300">غائب</span><span className="mr-2 text-xs text-slate-500">الجمعة، 15 مارس 2024</span></div><span className="text-[11px] text-slate-500">08:00 - 09:00</span></div><p className="mt-3 text-sm font-bold text-white">اللغة العربية</p><p className="mt-1 text-xs text-slate-400">الحصة الأولى <span className="mx-1 text-slate-600">•</span> قاعة 12</p><button className="mt-4 inline-flex items-center gap-2 rounded-xl bg-red-500 px-3 py-2 text-xs font-bold text-white shadow-lg shadow-red-900/20 transition hover:bg-red-400"><FileText className="h-3.5 w-3.5" /> تبرير الغياب</button></div></div>
-                <div className="relative flex gap-4 p-4"><div className="z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] bg-emerald-500/20 text-emerald-300"><CheckCircle2 className="h-4 w-4" /></div><div className="flex-1"><div className="flex items-center justify-between"><p className="text-sm font-bold text-white">حاضر</p><span className="text-[11px] text-slate-500">الخميس، 14 مارس</span></div><p className="mt-1 text-xs text-slate-500">تم تسجيل الحضور بنجاح في جميع الحصص</p></div></div>
-                <div className="relative flex gap-4 p-4"><div className="z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] bg-emerald-500/20 text-emerald-300"><CheckCircle2 className="h-4 w-4" /></div><div className="flex-1"><div className="flex items-center justify-between"><p className="text-sm font-bold text-white">حاضر</p><span className="text-[11px] text-slate-500">الأربعاء، 13 مارس</span></div><p className="mt-1 text-xs text-slate-500">تم تسجيل الحضور بنجاح في جميع الحصص</p></div></div>
+                  {absenceRecords.length === 0 ? <div className="relative flex gap-4 p-4"><div className="z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] bg-emerald-500/20 text-emerald-300"><CheckCircle2 className="h-4 w-4" /></div><div className="flex-1"><p className="text-sm font-bold text-white">لا توجد غيابات</p><p className="mt-1 text-xs text-slate-500">سجل الحضور خالٍ من الغيابات لهذا العام الدراسي</p></div></div> : absenceRecords.map(absence => <div key={absence.id} className={`relative flex gap-4 rounded-2xl p-4 ${absence.unjustifiedHours > 0 ? "border border-red-400/20 bg-red-500/[0.07]" : "border border-emerald-400/10 bg-emerald-500/[0.04]"}`}><div className={`z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] ${absence.unjustifiedHours > 0 ? "bg-red-500 text-white" : "bg-emerald-500/20 text-emerald-300"}`}>{absence.unjustifiedHours > 0 ? <CircleAlert className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><div><span className={`rounded-md px-2 py-1 text-[11px] font-bold ${absence.unjustifiedHours > 0 ? "bg-red-400/15 text-red-300" : "bg-emerald-400/15 text-emerald-300"}`}>{absence.unjustifiedHours > 0 ? "غياب غير مبرر" : "غياب مبرر"}</span><span className="mr-2 text-xs text-slate-500">{TRIMESTRE_LABELS[absence.trimestre]}</span></div><span className="text-[11px] text-slate-500">{absence.justifiedHours + absence.unjustifiedHours} ساعة</span></div><p className="mt-3 text-sm font-bold text-white">ملخص الغياب الفصلي</p><p className="mt-1 text-xs text-slate-400">{absence.justifiedHours} ساعة مبررة <span className="mx-1 text-slate-600">•</span> {absence.unjustifiedHours} ساعة غير مبررة</p></div></div>)}
               </div>
             </div>
 
-            <div className="rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6"><div className="flex items-start justify-between"><div><p className="text-xs text-slate-500">آخر 6 أشهر</p><h2 className="mt-1 text-xl font-bold text-white">نسبة الحضور</h2></div><div className="rounded-xl bg-emerald-400/10 p-2 text-emerald-300"><TrendingUp className="h-4 w-4" /></div></div><div className="mt-8 flex h-36 items-end gap-2 border-b border-white/10 px-1">{monthlyRates.map((rate, index) => <div key={rate + index} className="group flex flex-1 flex-col items-center gap-2"><span className="text-[10px] text-slate-500 opacity-0 transition group-hover:opacity-100">{rate}%</span><div className="w-full max-w-7 rounded-t-md bg-gradient-to-t from-blue-500 to-cyan-300 opacity-80 transition group-hover:opacity-100" style={{ height: `${rate - 55}%` }} /></div>)}</div><div className="mt-3 flex justify-between text-[10px] text-slate-600"><span>أكتوبر</span><span>نوفمبر</span><span>ديسمبر</span><span>يناير</span><span>فبراير</span><span>مارس</span></div><div className="mt-7 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300"><Clock3 className="h-4 w-4" /></div><div><p className="text-xs text-slate-500">متوسط الالتزام</p><p className="text-sm font-bold text-white">ممتاز <span className="mr-1 text-xs font-normal text-emerald-300">96.4%</span></p></div></div></div>
+            <div className="rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6"><div className="flex items-start justify-between"><div><p className="text-xs text-slate-500">حسب الفصول الدراسية</p><h2 className="mt-1 text-xl font-bold text-white">ساعات الغياب</h2></div><div className="rounded-xl bg-emerald-400/10 p-2 text-emerald-300"><TrendingUp className="h-4 w-4" /></div></div><div className="mt-8 flex h-36 items-end gap-4 border-b border-white/10 px-3">{absenceByTrimester.map((hours, index) => <div key={index} className="group flex flex-1 flex-col items-center gap-2"><span className="text-[10px] text-slate-500 opacity-0 transition group-hover:opacity-100">{hours} س</span><div className="w-full max-w-10 rounded-t-md bg-gradient-to-t from-blue-500 to-cyan-300 opacity-80 transition group-hover:opacity-100" style={{ height: `${Math.max(hours * 8, 8)}%` }} /></div>)}</div><div className="mt-3 flex justify-between px-2 text-[10px] text-slate-600"><span>الفصل الأول</span><span>الفصل الثاني</span><span>الفصل الثالث</span></div><div className="mt-7 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300"><Clock3 className="h-4 w-4" /></div><div><p className="text-xs text-slate-500">إجمالي الساعات</p><p className="text-sm font-bold text-white">{totalAbsenceHours} ساعة <span className="mr-1 text-xs font-normal text-slate-500">مسجلة</span></p></div></div></div>
           </section>
 
           <section className="mt-5 grid gap-5 md:grid-cols-3">
             {[
               { label: "المعدل الفصلي", value: t1Avg !== null ? t1Avg.toFixed(2) : "—", note: "الفصل الأول", icon: Award, color: "text-blue-300" },
-              { label: "أيام الحضور", value: "42", note: "من أصل 44 يوم", icon: Calendar, color: "text-cyan-300" },
-              { label: "الترتيب الأكاديمي", value: "08", note: "على مستوى القسم", icon: BarChart3, color: "text-violet-300" },
+              { label: "ساعات الغياب", value: String(totalAbsenceHours), note: "مبررة وغير مبررة", icon: Calendar, color: "text-cyan-300" },
+              { label: "درجات مسجلة", value: String(grades.length), note: "من السجلات المتاحة", icon: BarChart3, color: "text-violet-300" },
             ].map(metric => <div key={metric.label} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-[#111a2c]/70 p-4"><div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ${metric.color}`}><metric.icon className="h-5 w-5" /></div><div><p className="text-[11px] text-slate-500">{metric.label}</p><p className="text-lg font-bold text-white">{metric.value}</p><p className="text-[10px] text-slate-500">{metric.note}</p></div></div>)}
           </section>
 
