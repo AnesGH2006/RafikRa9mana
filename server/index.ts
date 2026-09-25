@@ -64,6 +64,8 @@ async function probeDb(attempt = 1): Promise<void> {
   const DELAY_MS = 3000;
   try {
     await db.execute(sql`SELECT 1`);
+    // Keep the parent feed compatible with databases created before assessment types existed.
+    await db.execute(sql`ALTER TABLE grades ADD COLUMN IF NOT EXISTS grade_type varchar(20) NOT NULL DEFAULT 'general'`);
     logger.info("Database connection verified");
   } catch (err) {
     if (attempt < MAX_ATTEMPTS) {
