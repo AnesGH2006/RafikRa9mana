@@ -201,12 +201,16 @@ export default function MyChildPage() {
     return Uint8Array.from(atob(base64), char => char.charCodeAt(0));
   }
 
+  function selectTab(tabId: string) {
+    setActiveTab(tabId);
+    requestAnimationFrame(() => document.getElementById(`parent-${tabId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
   const tabItems = [
     { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
     { id: "attendance", label: "الغيابات", icon: ClipboardCheck },
     { id: "grades", label: "الدرجات", icon: GraduationCap },
     { id: "notifications", label: "الإشعارات", icon: Bell },
-    { id: "performance", label: "الأداء الأكاديمي", icon: BarChart3 },
   ];
   const displayName = loadedStudent.nomPrenom || "أحمد بن علي";
   const initials = displayName.split(" ").map(part => part[0]).slice(0, 2).join("");
@@ -241,7 +245,7 @@ export default function MyChildPage() {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-right text-sm transition ${active ? "bg-blue-500/15 text-blue-300 shadow-inner shadow-blue-500/10" : "text-slate-400 hover:bg-white/5 hover:text-slate-100"}`}>
+                <button key={tab.id} onClick={() => selectTab(tab.id)} className={`group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-right text-sm transition ${active ? "bg-blue-500/15 text-blue-300 shadow-inner shadow-blue-500/10" : "text-slate-400 hover:bg-white/5 hover:text-slate-100"}`}>
                   <Icon className={`h-[18px] w-[18px] ${active ? "text-cyan-300" : "text-slate-500 group-hover:text-slate-300"}`} />
                   {tab.label}
                   {tab.id === "attendance" && <span className="mr-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500/15 px-1.5 text-[10px] font-bold text-red-300">1</span>}
@@ -275,10 +279,10 @@ export default function MyChildPage() {
           </header>
 
           <div className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-[#111a2c]/70 p-1.5 lg:hidden">
-            {tabItems.map(tab => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${activeTab === tab.id ? "bg-blue-500 text-white" : "text-slate-400"}`}><tab.icon className="h-3.5 w-3.5" />{tab.label}</button>)}
+            {tabItems.map(tab => <button key={tab.id} onClick={() => selectTab(tab.id)} className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${activeTab === tab.id ? "bg-blue-500 text-white" : "text-slate-400"}`}><tab.icon className="h-3.5 w-3.5" />{tab.label}</button>)}
           </div>
 
-          <section className="mb-7 grid gap-5 xl:grid-cols-[1.4fr_0.6fr]">
+          <section id="parent-overview" className="mb-7 scroll-mt-6 grid gap-5 xl:grid-cols-[1.4fr_0.6fr]">
             <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-[#152743] via-[#102039] to-[#10192b] p-6 shadow-2xl shadow-black/20 sm:p-8">
               <div className="absolute -left-12 -top-24 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
               <div className="relative flex flex-col justify-between gap-8 sm:flex-row sm:items-center">
@@ -300,21 +304,26 @@ export default function MyChildPage() {
             <div className="rounded-[28px] border border-red-400/20 bg-gradient-to-br from-[#2a1828] to-[#161b2b] p-6 shadow-xl shadow-red-950/10">
               <div className="flex items-start justify-between"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/15 text-red-300"><CircleAlert className="h-5 w-5" /></div><span className="rounded-full bg-red-400/10 px-2.5 py-1 text-[10px] font-bold text-red-300">جديد</span></div>
               <p className="mt-7 text-xs text-red-300/80">{latestAbsence?.unjustifiedHours ? "تنبيه غياب غير مبرر" : "ملخص الغياب"}</p><h3 className="mt-1 text-lg font-bold text-white">{latestAbsence ? TRIMESTRE_LABELS[latestAbsence.trimestre] : "لا توجد غيابات مسجلة"}</h3><p className="mt-2 text-xs leading-5 text-slate-400">{latestAbsence ? `${latestAbsence.unjustifiedHours} ساعة غير مبررة و${latestAbsence.justifiedHours} ساعة مبررة في هذا الفصل.` : "لم يتم تسجيل ساعات غياب لهذا العام الدراسي."}</p>
-              <button onClick={() => setActiveTab("attendance")} className="mt-5 flex items-center gap-2 text-xs font-bold text-red-200 transition hover:text-white">عرض سجل الغياب <ChevronLeft className="h-4 w-4" /></button>
+              <button onClick={() => selectTab("attendance")} className="mt-5 flex items-center gap-2 text-xs font-bold text-red-200 transition hover:text-white">عرض سجل الغياب <ChevronLeft className="h-4 w-4" /></button>
             </div>
           </section>
 
           {pushError && <p className="mb-5 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-xs text-red-200">{pushError}</p>}
 
-          <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+          <section id="parent-attendance" className="scroll-mt-6 grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
             <div className="rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6">
-              <div className="mb-6 flex items-center justify-between"><div><p className="text-xs text-slate-500">تحديثات اليوم</p><h2 className="mt-1 text-xl font-bold text-white">سجل الحضور والغياب</h2></div><button className="flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200">كل السجلات <ChevronLeft className="h-4 w-4" /></button></div>
+              <div className="mb-6 flex items-center justify-between"><div><p className="text-xs text-slate-500">تحديثات اليوم</p><h2 className="mt-1 text-xl font-bold text-white">سجل الحضور والغياب</h2></div><button onClick={() => selectTab("attendance")} className="flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200">كل السجلات <ChevronLeft className="h-4 w-4" /></button></div>
               <div className="relative space-y-1 before:absolute before:right-[18px] before:top-5 before:h-[calc(100%-40px)] before:w-px before:bg-white/10">
                   {absenceRecords.length === 0 ? <div className="relative flex gap-4 p-4"><div className="z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] bg-emerald-500/20 text-emerald-300"><CheckCircle2 className="h-4 w-4" /></div><div className="flex-1"><p className="text-sm font-bold text-white">لا توجد غيابات</p><p className="mt-1 text-xs text-slate-500">سجل الحضور خالٍ من الغيابات لهذا العام الدراسي</p></div></div> : absenceRecords.map(absence => <div key={absence.id} className={`relative flex gap-4 rounded-2xl p-4 ${absence.unjustifiedHours > 0 ? "border border-red-400/20 bg-red-500/[0.07]" : "border border-emerald-400/10 bg-emerald-500/[0.04]"}`}><div className={`z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] ${absence.unjustifiedHours > 0 ? "bg-red-500 text-white" : "bg-emerald-500/20 text-emerald-300"}`}>{absence.unjustifiedHours > 0 ? <CircleAlert className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><div><span className={`rounded-md px-2 py-1 text-[11px] font-bold ${absence.unjustifiedHours > 0 ? "bg-red-400/15 text-red-300" : "bg-emerald-400/15 text-emerald-300"}`}>{absence.unjustifiedHours > 0 ? "غياب غير مبرر" : "غياب مبرر"}</span><span className="mr-2 text-xs text-slate-500">{TRIMESTRE_LABELS[absence.trimestre]}</span></div><span className="text-[11px] text-slate-500">{absence.justifiedHours + absence.unjustifiedHours} ساعة</span></div><p className="mt-3 text-sm font-bold text-white">ملخص الغياب الفصلي</p><p className="mt-1 text-xs text-slate-400">{absence.justifiedHours} ساعة مبررة <span className="mx-1 text-slate-600">•</span> {absence.unjustifiedHours} ساعة غير مبررة</p></div></div>)}
               </div>
             </div>
 
             <div className="rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6"><div className="flex items-start justify-between"><div><p className="text-xs text-slate-500">حسب الفصول الدراسية</p><h2 className="mt-1 text-xl font-bold text-white">ساعات الغياب</h2></div><div className="rounded-xl bg-emerald-400/10 p-2 text-emerald-300"><TrendingUp className="h-4 w-4" /></div></div><div className="mt-8 flex h-36 items-end gap-4 border-b border-white/10 px-3">{absenceByTrimester.map((hours, index) => <div key={index} className="group flex flex-1 flex-col items-center gap-2"><span className="text-[10px] text-slate-500 opacity-0 transition group-hover:opacity-100">{hours} س</span><div className="w-full max-w-10 rounded-t-md bg-gradient-to-t from-blue-500 to-cyan-300 opacity-80 transition group-hover:opacity-100" style={{ height: `${Math.max(hours * 8, 8)}%` }} /></div>)}</div><div className="mt-3 flex justify-between px-2 text-[10px] text-slate-600"><span>الفصل الأول</span><span>الفصل الثاني</span><span>الفصل الثالث</span></div><div className="mt-7 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300"><Clock3 className="h-4 w-4" /></div><div><p className="text-xs text-slate-500">إجمالي الساعات</p><p className="text-sm font-bold text-white">{totalAbsenceHours} ساعة <span className="mr-1 text-xs font-normal text-slate-500">مسجلة</span></p></div></div></div>
+          </section>
+
+          <section id="parent-grades" className="mt-5 scroll-mt-6 rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6">
+            <div className="mb-6 flex items-center justify-between"><div><p className="text-xs text-slate-500">النتائج المسجلة</p><h2 className="mt-1 text-xl font-bold text-white">الدرجات حسب الفصل</h2></div><BookOpen className="h-5 w-5 text-blue-300" /></div>
+            {grades.length === 0 ? <p className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">لا توجد درجات مسجلة لهذا العام الدراسي.</p> : <div className="grid gap-4 md:grid-cols-3">{[1, 2, 3].map(trimestre => { const trimGrades = trimesterGrades.get(trimestre); return <div key={trimestre} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"><div className="mb-4 flex items-center justify-between"><p className="text-sm font-bold text-white">{TRIMESTRE_LABELS[trimestre]}</p><span className="text-xs text-slate-500">{trimGrades?.size ?? 0} مواد</span></div><div className="space-y-2">{subs.map(subject => { const score = trimGrades?.get(subject.key); return <div key={subject.key} className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-slate-400">{subject.arLabel}</span><span className={`font-bold ${score === undefined ? "text-slate-600" : getGradeColor(score)}`}>{score === undefined ? "—" : score.toFixed(2)}</span></div>; })}</div></div>; })}</div>}
           </section>
 
           <section className="mt-5 grid gap-5 md:grid-cols-3">
@@ -325,7 +334,7 @@ export default function MyChildPage() {
             ].map(metric => <div key={metric.label} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-[#111a2c]/70 p-4"><div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ${metric.color}`}><metric.icon className="h-5 w-5" /></div><div><p className="text-[11px] text-slate-500">{metric.label}</p><p className="text-lg font-bold text-white">{metric.value}</p><p className="text-[10px] text-slate-500">{metric.note}</p></div></div>)}
           </section>
 
-          <div className="mt-6 flex items-center justify-between rounded-2xl border border-white/10 bg-[#111a2c]/50 px-4 py-3 text-xs text-slate-500"><span className="flex items-center gap-2"><Bell className="h-3.5 w-3.5 text-cyan-300" /> الإشعارات الفورية {pushEnabled ? "مفعّلة" : "غير مفعّلة"}</span><button onClick={togglePush} disabled={pushBusy} className="font-bold text-cyan-300 hover:text-white">{pushEnabled ? "إيقاف التنبيهات" : "تفعيل التنبيهات"}</button></div>
+          <div id="parent-notifications" className="mt-6 scroll-mt-6 flex items-center justify-between rounded-2xl border border-white/10 bg-[#111a2c]/50 px-4 py-3 text-xs text-slate-500"><span className="flex items-center gap-2"><Bell className="h-3.5 w-3.5 text-cyan-300" /> الإشعارات الفورية {pushEnabled ? "مفعّلة" : "غير مفعّلة"}</span><button onClick={togglePush} disabled={pushBusy} className="font-bold text-cyan-300 hover:text-white">{pushEnabled ? "إيقاف التنبيهات" : "تفعيل التنبيهات"}</button></div>
         </main>
       </div>
     </div>
