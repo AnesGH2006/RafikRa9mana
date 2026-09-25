@@ -75,10 +75,12 @@ async function migrate() {
       annee varchar(20) NOT NULL DEFAULT '2025-2026',
       trimestre integer NOT NULL CHECK (trimestre IN (1,2,3)),
       subject varchar(50) NOT NULL,
+      grade_type varchar(20) NOT NULL DEFAULT 'general',
       score numeric(5,2) NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
+  await db.execute(sql`ALTER TABLE grades ADD COLUMN IF NOT EXISTS grade_type varchar(20) NOT NULL DEFAULT 'general';`);
 
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS absences (

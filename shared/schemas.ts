@@ -127,6 +127,7 @@ export const GradeSchema = zod.object({
   annee: zod.string(),
   trimestre: zod.number().int().min(1).max(3),
   subject: zod.string(),
+  gradeType: zod.enum(["general", "continuous", "test", "exam"]).default("general"),
   score: zod.number().min(0).max(20),
 });
 
@@ -135,6 +136,7 @@ export const UpsertGradeBody = zod.object({
   annee: zod.string(),
   trimestre: zod.number().int().min(1).max(3),
   subject: zod.string(),
+  gradeType: zod.enum(["general", "continuous", "test", "exam"]).optional().default("general"),
   score: zod.number().min(0).max(20),
 });
 

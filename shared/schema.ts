@@ -87,6 +87,7 @@ export const gradesTable = pgTable("grades", {
   annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
   trimestre: integer("trimestre").notNull(),
   subject: varchar("subject", { length: 50 }).notNull(),
+  gradeType: varchar("grade_type", { length: 20 }).notNull().default("general"),
   score: numeric("score", { precision: 5, scale: 2 }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

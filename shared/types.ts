@@ -101,6 +101,7 @@ export interface Grade {
   annee: string;
   trimestre: number;
   subject: string;
+  gradeType?: "general" | "continuous" | "test" | "exam";
   score: number;
 }
 

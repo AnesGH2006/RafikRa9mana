@@ -16,6 +16,11 @@ const BASE = import.meta.env.BASE_URL;
 
 const ACADEMIC_YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 const TRIMESTERS     = ["1", "2", "3"];
+const GRADE_TYPES     = [
+  { value: "continuous", label: "تقويم مستمر" },
+  { value: "test", label: "فرض" },
+  { value: "exam", label: "اختبار" },
+] as const;
 const NIVEAUX        = ["1AM", "2AM", "3AM", "4AM"];
 const SUBJECTS_AR    = [
   "عربية", "فرنسية", "رياضيات", "علوم", "تربية إسلامية",
@@ -102,6 +107,7 @@ export default function UploadGradesOcrPage() {
   const [classe,    setClasse]    = useState("");
   const [trimestre, setTrimestre] = useState("1");
   const [subject,   setSubject]   = useState("");
+  const [gradeType, setGradeType] = useState("test");
 
   const [phase,    setPhase]    = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [rows,     setRows]     = useState<OcrRow[]>([]);
@@ -327,7 +333,7 @@ export default function UploadGradesOcrPage() {
             body: JSON.stringify({
               studentId: student.id, annee,
               trimestre: parseInt(trimestre),
-              subject, score: grade,
+              subject, score: grade, gradeType,
             }),
           });
         } else {
@@ -436,10 +442,16 @@ export default function UploadGradesOcrPage() {
           <SelectContent>{TRIMESTERS.map(t => <SelectItem key={t} value={t}>الفصل {t}</SelectItem>)}</SelectContent>
         </Select>
         {mode === "grades" ? (
-          <Select value={subject} onValueChange={setSubject}>
-            <SelectTrigger><SelectValue placeholder="المادة" /></SelectTrigger>
-            <SelectContent>{SUBJECTS_AR.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-          </Select>
+          <>
+            <Select value={subject} onValueChange={setSubject}>
+              <SelectTrigger><SelectValue placeholder="المادة" /></SelectTrigger>
+              <SelectContent>{SUBJECTS_AR.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={gradeType} onValueChange={setGradeType}>
+              <SelectTrigger><SelectValue placeholder="نوع الدرجة" /></SelectTrigger>
+              <SelectContent>{GRADE_TYPES.map(type => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </>
         ) : (
           <div className="flex items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 text-xs text-amber-700 dark:text-amber-400 font-medium gap-1.5">
             <Clock className="w-3.5 h-3.5" />

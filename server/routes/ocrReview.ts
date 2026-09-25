@@ -21,6 +21,7 @@ export interface OcrReviewRow {
   lowConfidence: boolean;
   // For grades
   grade?: number;
+  gradeType?: "general" | "continuous" | "test" | "exam";
   // For absences
   justifiedHours?: number;
   unjustifiedHours?: number;
@@ -131,7 +132,7 @@ router.post("/ocr/review-commit", async (req, res): Promise<void> => {
   }
 
   const userId = req.user!.id;
-  const { type, trimestre, subject, rows, annee } = req.body as OcrCommitRequest & { annee?: string };
+  const { type, trimestre, subject, gradeType = "general", rows, annee } = req.body as OcrCommitRequest & { annee?: string; gradeType?: "general" | "continuous" | "test" | "exam" };
 
   if (!type || !Array.isArray(rows) || rows.length === 0) {
     res.status(400).json({ error: "بيانات غير كاملة" });
@@ -167,6 +168,7 @@ router.post("/ocr/review-commit", async (req, res): Promise<void> => {
           annee: year,
           trimestre: trimestre!,
           subject: subject!,
+          gradeType,
           score: row.grade.toString(),
         });
         insertedCount++;

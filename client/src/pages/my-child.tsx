@@ -30,7 +30,7 @@ interface StudentData {
     annee: string;
     sexe: string;
   };
-  grades: { id: string; studentId: string; annee: string; trimestre: number; subject: string; score: number }[];
+  grades: { id: string; studentId: string; annee: string; trimestre: number; subject: string; score: number; gradeType?: "general" | "continuous" | "test" | "exam" }[];
   absences: { id: string; studentId: string; annee: string; trimestre: number; justifiedHours: number; unjustifiedHours: number }[];
   /** Pre-computed by the server using the same logic as /api/results (Ministry averages take precedence). */
   t1Avg: number | null;
@@ -223,6 +223,7 @@ export default function MyChildPage() {
     const record = absences.find(absence => absence.trimestre === trimestre);
     return (record?.justifiedHours ?? 0) + (record?.unjustifiedHours ?? 0);
   });
+  const gradeTypeLabels: Record<string, string> = { general: "درجة", continuous: "تقويم مستمر", test: "فرض", exam: "اختبار" };
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#0a1020] text-slate-100 font-[Tajawal]">
@@ -323,7 +324,7 @@ export default function MyChildPage() {
 
           <section id="parent-grades" className="mt-5 scroll-mt-6 rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6">
             <div className="mb-6 flex items-center justify-between"><div><p className="text-xs text-slate-500">النتائج المسجلة</p><h2 className="mt-1 text-xl font-bold text-white">الدرجات حسب الفصل</h2></div><BookOpen className="h-5 w-5 text-blue-300" /></div>
-            {grades.length === 0 ? <p className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">لا توجد درجات مسجلة لهذا العام الدراسي.</p> : <div className="grid gap-4 md:grid-cols-3">{[1, 2, 3].map(trimestre => { const trimGrades = trimesterGrades.get(trimestre); return <div key={trimestre} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"><div className="mb-4 flex items-center justify-between"><p className="text-sm font-bold text-white">{TRIMESTRE_LABELS[trimestre]}</p><span className="text-xs text-slate-500">{trimGrades?.size ?? 0} مواد</span></div><div className="space-y-2">{subs.map(subject => { const score = trimGrades?.get(subject.key); return <div key={subject.key} className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-slate-400">{subject.arLabel}</span><span className={`font-bold ${score === undefined ? "text-slate-600" : getGradeColor(score)}`}>{score === undefined ? "—" : score.toFixed(2)}</span></div>; })}</div></div>; })}</div>}
+            {grades.length === 0 ? <p className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">لا توجد درجات مسجلة لهذا العام الدراسي.</p> : <div className="grid gap-4 md:grid-cols-3">{[1, 2, 3].map(trimestre => { const trimesterRows = grades.filter(grade => grade.trimestre === trimestre); return <div key={trimestre} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"><div className="mb-4 flex items-center justify-between"><p className="text-sm font-bold text-white">{TRIMESTRE_LABELS[trimestre]}</p><span className="text-xs text-slate-500">{trimesterRows.length} درجات</span></div><div className="space-y-2">{trimesterRows.length === 0 ? <p className="text-xs text-slate-600">لا توجد درجات</p> : trimesterRows.map(grade => <div key={grade.id} className="flex items-center justify-between gap-3 text-xs"><div className="min-w-0"><p className="truncate text-slate-300">{grade.subject}</p><p className="text-[10px] text-slate-500">{gradeTypeLabels[grade.gradeType ?? "general"] ?? "درجة"}</p></div><span className={`font-bold ${getGradeColor(grade.score)}`}>{grade.score.toFixed(2)}</span></div>)}</div></div>; })}</div>}
           </section>
 
           <section className="mt-5 grid gap-5 md:grid-cols-3">
