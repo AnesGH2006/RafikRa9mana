@@ -51,6 +51,7 @@ import ReportsPage from "@/pages/reports";
 import SubscriptionPage from "@/pages/subscription";
 import AdminPage from "@/pages/admin";
 import AssistantPage from "@/pages/assistant";
+import ParentAssistantPage from "@/pages/parent-assistant";
 import AgentSetupPage from "@/pages/agent-setup";
 import PaywallScreen from "@/pages/paywall";
 import NotFound from "@/pages/not-found";
@@ -207,6 +208,7 @@ const PARENT_SECTIONS: SectionDef[] = [
     color: "text-emerald-400", gradient: "from-emerald-500 to-green-700",
     items: [
       { href: "/my-child", icon: GraduationCap, labelKey: "nav.my_child" },
+      { href: "/parent-assistant", icon: Bot, labelKey: "nav.parent_assistant" },
     ],
   },
 ];
@@ -781,7 +783,10 @@ function AppLayout() {
       <TopNav />
       <main className="flex-1 overflow-y-auto bg-dot-grid">
           {isParent ? (
-            <MyChildPage />
+            <Switch key={loc}>
+              <Route path="/parent-assistant" component={ParentAssistantPage} />
+              <Route component={MyChildPage} />
+            </Switch>
           ) : (
             <AnimatePresence mode="wait" initial={false}>
               <Switch key={loc}>

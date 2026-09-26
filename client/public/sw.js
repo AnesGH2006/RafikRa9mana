@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const SHELL_CACHE = `rafi8-ra9mana-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `rafi8-ra9mana-assets-${CACHE_VERSION}`;
 const API_CACHE = `rafi8-ra9mana-api-${CACHE_VERSION}`;
@@ -43,7 +43,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          if (res.ok && request.method === "GET") {
+          const cacheControl = res.headers.get("Cache-Control") || "";
+          const isPublicResponse = /(?:^|,)\s*public(?:\s|,|$)/i.test(cacheControl);
+          const isPrivateResponse = /\b(private|no-store)\b/i.test(cacheControl);
+          if (res.ok && request.method === "GET" && isPublicResponse && !isPrivateResponse) {
             const clone = res.clone();
             caches.open(API_CACHE).then((c) => c.put(request, clone));
           }
