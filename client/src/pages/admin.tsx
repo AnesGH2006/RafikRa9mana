@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Shield, CheckCircle2, XCircle, Clock, RefreshCw, Search, FileSpreadsheet, Upload, Users, AlertCircle, Loader2 } from "lucide-react";
+import { Shield, CheckCircle2, XCircle, Clock, RefreshCw, Search, FileSpreadsheet, Upload, Users, UserCheck, AlertCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -19,6 +19,8 @@ interface AdminUser {
   subscriptionExpiresAt: string | null;
   createdAt: string;
 }
+
+type SubscriptionTab = "managers" | "parents";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle2 }> = {
   active:    { label: "نشط",    color: "text-emerald-500", icon: CheckCircle2 },
@@ -115,7 +117,9 @@ function BulkImportCard() {
 export default function AdminPage() {
   const { user } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [parents, setParents] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<SubscriptionTab>("managers");
   const [search, setSearch] = useState("");
   const [updating, setUpdating] = useState<string | null>(null);
 
@@ -124,6 +128,8 @@ export default function AdminPage() {
     try {
       const res = await fetch(`${BASE}api/admin/users`, { credentials: "include" });
       if (res.ok) setUsers(await res.json());
+      const parentsRes = await fetch(`${BASE}api/admin/parents`, { credentials: "include" });
+      if (parentsRes.ok) setParents(await parentsRes.json());
     } finally { setLoading(false); }
   };
 
@@ -155,7 +161,8 @@ export default function AdminPage() {
     );
   }
 
-  const filtered = users.filter(u =>
+  const visibleUsers = activeTab === "managers" ? users : parents;
+  const filtered = visibleUsers.filter(u =>
     !search || (u.email || "").toLowerCase().includes(search.toLowerCase()) ||
     (u.firstName || "").toLowerCase().includes(search.toLowerCase())
   );
@@ -171,11 +178,28 @@ export default function AdminPage() {
             </span>
             لوحة الإدارة
           </h1>
-          <p className="text-xs text-muted-foreground mt-1 ms-11">إدارة حسابات المستخدمين والاشتراكات</p>
+          <p className="text-xs text-muted-foreground mt-1 ms-11">فصل اشتراكات المديرين عن اشتراكات الأولياء</p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchUsers} className="gap-2">
           <RefreshCw className="w-3.5 h-3.5" /> تحديث
         </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/50 p-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab("managers")}
+          className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors ${activeTab === "managers" ? "bg-background text-violet-700 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <Shield className="w-4 h-4" /> اشتراكات المدراء ({users.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("parents")}
+          className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors ${activeTab === "parents" ? "bg-background text-emerald-700 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <UserCheck className="w-4 h-4" /> اشتراكات الأولياء ({parents.length})
+        </button>
       </div>
 
       {/* Bulk Import + Quick Actions */}
@@ -207,9 +231,9 @@ export default function AdminPage() {
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "إجمالي", value: users.length, color: "from-blue-500 to-indigo-600" },
-          { label: "نشط",    value: users.filter(u => u.subscriptionStatus === "active").length, color: "from-emerald-500 to-green-600" },
-          { label: "معلّق",  value: users.filter(u => u.subscriptionStatus === "pending").length, color: "from-amber-500 to-orange-600" },
+          { label: "إجمالي", value: visibleUsers.length, color: "from-blue-500 to-indigo-600" },
+          { label: "نشط",    value: visibleUsers.filter(u => u.subscriptionStatus === "active").length, color: "from-emerald-500 to-green-600" },
+          { label: "معلّق",  value: visibleUsers.filter(u => u.subscriptionStatus === "pending").length, color: "from-amber-500 to-orange-600" },
         ].map((s, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}>
             <Card className="border-0 shadow-md overflow-hidden">
@@ -235,7 +259,7 @@ export default function AdminPage() {
       {/* Users table */}
       <Card className="border-0 shadow-md">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-bold">المستخدمون ({filtered.length})</CardTitle>
+          <CardTitle className="text-sm font-bold">{activeTab === "managers" ? "اشتراكات المديرين" : "اشتراكات الأولياء"} ({filtered.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (

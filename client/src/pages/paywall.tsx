@@ -175,6 +175,7 @@ export default function PaywallScreen() {
           </motion.div>
         )}
 
+        {!isParent && <>
         {/* Choose school level before payment */}
         <motion.div
           className="rounded-2xl border bg-card/70 backdrop-blur p-5 md:p-6"
@@ -271,6 +272,7 @@ export default function PaywallScreen() {
             );
           })}
         </div>
+        </>}
 
         {/* How to subscribe */}
         <motion.div

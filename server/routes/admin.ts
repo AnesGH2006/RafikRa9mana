@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, usersTable } from "../../shared/db.js";
+import { db, schoolMembersTable, usersTable } from "../../shared/db.js";
 import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -12,6 +12,11 @@ function isAdmin(req: Request): boolean {
 router.get("/admin/users", async (req: Request, res: Response): Promise<void> => {
   if (!isAdmin(req)) { res.status(403).json({ error: "Forbidden" }); return; }
   const users = await db.select().from(usersTable).orderBy(usersTable.createdAt);
+  const parentMembers = await db
+    .select({ memberUserId: schoolMembersTable.memberUserId })
+    .from(schoolMembersTable)
+    .where(eq(schoolMembersTable.role, "parent"));
+  const parentUserIds = new Set(parentMembers.map(member => member.memberUserId).filter(Boolean));
   res.json(users.map(u => ({
     id: u.id,
     email: u.email,
@@ -22,6 +27,32 @@ router.get("/admin/users", async (req: Request, res: Response): Promise<void> =>
     subscriptionStatus: u.subscriptionStatus,
     subscriptionExpiresAt: u.subscriptionExpiresAt,
     createdAt: u.createdAt,
+  })).filter(u => !parentUserIds.has(u.id)));
+});
+
+// GET /api/admin/parents — list parent subscriptions separately (admin only)
+router.get("/admin/parents", async (req: Request, res: Response): Promise<void> => {
+  if (!isAdmin(req)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const rows = await db
+    .select({ member: schoolMembersTable, user: usersTable })
+    .from(schoolMembersTable)
+    .leftJoin(usersTable, eq(schoolMembersTable.memberUserId, usersTable.id))
+    .where(eq(schoolMembersTable.role, "parent"))
+    .orderBy(schoolMembersTable.createdAt);
+
+  res.json(rows.map(({ member, user }) => ({
+    id: user?.id ?? member.id,
+    memberId: member.id,
+    email: user?.email ?? member.email,
+    firstName: user?.firstName ?? member.name,
+    lastName: user?.lastName ?? null,
+    role: "parent",
+    subscriptionStatus: user?.subscriptionStatus ?? "pending",
+    subscriptionExpiresAt: user?.subscriptionExpiresAt ?? null,
+    createdAt: member.createdAt,
+    schoolUserId: member.schoolUserId,
+    linkedStudentId: member.linkedStudentId,
   })));
 });
 
