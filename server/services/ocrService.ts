@@ -64,6 +64,12 @@ export interface ApiKeys {
   groqApiKey?: string | null;
 }
 
+function isOcrRateLimitError(error: Error): boolean {
+  return /(?:API\s+429|RESOURCE_EXHAUSTED|rate_limit_exceeded|tokens per minute|quota exceeded)/i.test(error.message);
+}
+
+const OCR_QUOTA_ERROR = "حصة خدمة OCR ممتلئة مؤقتًا. انتظر حتى تتجدد حصة Gemini أو Groq، أو أضف مفتاح API آخر من الإعدادات.";
+
 // ── Image preprocessing ─────────────────────────────────────────────────────────
 
 export async function prepareImage(buffer: Buffer): Promise<{ data: string; mimeType: string; tesseractBuffer: Buffer }> {
@@ -142,7 +148,7 @@ async function callGeminiVision(
         const err = await res.text().catch(() => res.statusText);
         lastError = new Error(`Gemini API ${res.status}: ${err}`);
 
-        if (res.status === 429 || res.status >= 500) {
+        if (res.status >= 500) {
           if (attempt < retries) {
             const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
             await new Promise(r => setTimeout(r, delay));
@@ -171,7 +177,7 @@ async function callGeminiVision(
       lastError = err instanceof Error ? err : new Error(String(err));
       logger.warn({ attempt, error: lastError.message }, "Gemini Vision attempt failed");
 
-      if (attempt < retries) {
+      if (attempt < retries && !isOcrRateLimitError(lastError)) {
         const delay = Math.min(500 * Math.pow(2, attempt - 1), 5000);
         await new Promise(r => setTimeout(r, delay));
       }
@@ -214,7 +220,7 @@ async function callGroqVision(imageB64: string, mimeType: string, prompt: string
         const err = await res.text().catch(() => res.statusText);
         lastError = new Error(`Groq API ${res.status}: ${err}`);
 
-        if (res.status === 429 || res.status >= 500) {
+        if (res.status >= 500) {
           if (attempt < retries) {
             const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
             await new Promise(r => setTimeout(r, delay));
@@ -241,7 +247,7 @@ async function callGroqVision(imageB64: string, mimeType: string, prompt: string
       lastError = err instanceof Error ? err : new Error(String(err));
       logger.warn({ attempt, error: lastError.message }, "Groq Vision attempt failed");
 
-      if (attempt < retries) {
+      if (attempt < retries && !isOcrRateLimitError(lastError)) {
         const delay = Math.min(500 * Math.pow(2, attempt - 1), 5000);
         await new Promise(r => setTimeout(r, delay));
       }
@@ -772,6 +778,9 @@ export async function processOcr(
           const secondMsg = secondErr instanceof Error ? secondErr.message : String(secondErr);
           logger.warn({ err: secondMsg, engine: otherEngine }, "Secondary vision engine also failed");
           if (primaryError) {
+            if (isOcrRateLimitError(primaryError) || isOcrRateLimitError(new Error(secondMsg))) {
+              throw new Error(OCR_QUOTA_ERROR);
+            }
             throw new Error(
               `فشل المحرك الأساسي (${resolved === "gemini" ? "Gemini" : "Groq"}): ${primaryError.message} — وفشل المحرك البديل (${otherEngine === "gemini" ? "Gemini" : "Groq"}) أيضًا: ${secondMsg}`
             );
@@ -779,7 +788,7 @@ export async function processOcr(
         }
       } else if (primaryError) {
         // No second key configured — nothing left to try, surface the real error.
-        throw primaryError;
+        throw isOcrRateLimitError(primaryError) ? new Error(OCR_QUOTA_ERROR) : primaryError;
       }
     }
   } else if (resolved === "tesseract") {
