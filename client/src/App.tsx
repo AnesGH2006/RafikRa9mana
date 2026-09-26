@@ -61,6 +61,7 @@ import MembersPage from "@/pages/members";
 import MyChildPage from "@/pages/my-child";
 import StudentQrViewPage from "@/pages/student-qr-view";
 import ParentRegisterPage from "@/pages/parent-register";
+import PaymentDemoPage from "@/pages/payment-demo";
 import AuditLogPage from "@/pages/audit-log";
 import ClassBalancerPage from "@/pages/class-balancer";
 import TimetablePage from "@/pages/timetable";
@@ -812,6 +813,7 @@ function AppLayout() {
               <Route path="/analytics"           component={AnalyticsPage} />
               <Route path="/reports"             component={ReportsPage} />
               <Route path="/subscription"        component={SubscriptionPage} />
+              <Route path="/payment-demo"         component={PaymentDemoPage} />
               <Route path="/admin"               component={AdminPage} />
               <Route path="/preorient/tracking" component={PreOrientTrackingPage} />
               <Route path="/preorient/first"    component={PreOrientFirstPage} />

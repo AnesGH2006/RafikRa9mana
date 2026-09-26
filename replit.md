@@ -53,6 +53,7 @@ Set `DATABASE_URL` to the PostgreSQL connection string for the environment.
 | `CHARGILY_WEBHOOK_SECRET` | Payment required | Secret used to verify Chargily payment webhooks |
 | `CHARGILY_MODE` | Optional | Use `test` for the Chargily test API; production is the default |
 | `CHARGILY_API_URL` | Optional | Override the Chargily checkout endpoint |
+| `PAYMENTS_MODE` | Optional | Set to `demo` for simulated payments; use `chargily` for real provider checkout |
 
 ## Project structure
 

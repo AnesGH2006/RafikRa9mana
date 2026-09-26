@@ -93,7 +93,7 @@ export default function PaywallScreen() {
     setCheckoutBusy(true);
     setCheckoutError("");
     try {
-      const response = await fetch(`${import.meta.env.BASE_URL}api/payments/chargily/checkout`, {
+      const response = await fetch(`${import.meta.env.BASE_URL}api/payments/checkout`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

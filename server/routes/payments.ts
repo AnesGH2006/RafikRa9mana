@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { generateActivationBatch, redeemActivationCode } from "../services/activationCodeService.js";
-import { createChargilyCheckout, settleChargilyPayment, verifyChargilySignature } from "../services/paymentService.js";
+import { completeDemoPayment, createDemoCheckout, createChargilyCheckout, settleChargilyPayment, verifyChargilySignature } from "../services/paymentService.js";
 
 const router = Router();
 
@@ -33,6 +33,37 @@ router.post("/payments/redeem-code", async (req, res): Promise<void> => {
     res.json(await redeemActivationCode(String(req.body?.code ?? ""), req.user!.id));
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Unable to redeem code" });
+  }
+});
+
+router.post("/payments/checkout", async (req, res): Promise<void> => {
+  if (!requireAuth(req, res)) return;
+  if (process.env.PAYMENTS_MODE !== "demo") {
+    res.status(404).json({ error: "Demo payments are disabled" });
+    return;
+  }
+  const returnUrl = typeof req.body?.returnUrl === "string" ? req.body.returnUrl : "/";
+  const amountDzd = Number(req.body?.amountDzd ?? 1000);
+  try {
+    const payment = await createDemoCheckout(req.user!.id, returnUrl, amountDzd);
+    res.status(201).json({ id: payment!.id, checkoutUrl: payment!.checkoutUrl, amountDzd: payment!.amountDzd });
+  } catch (error) {
+    res.status(503).json({ error: error instanceof Error ? error.message : "Demo payment unavailable" });
+  }
+});
+
+router.post("/payments/demo/complete", async (req, res): Promise<void> => {
+  if (!requireAuth(req, res)) return;
+  if (process.env.PAYMENTS_MODE !== "demo") {
+    res.status(404).json({ error: "Demo payments are disabled" });
+    return;
+  }
+  try {
+    const payment = await completeDemoPayment(String(req.body?.paymentId ?? ""), req.user!.id);
+    const metadata = payment.metadata as { returnUrl?: string } | null;
+    res.json({ success: true, returnUrl: metadata?.returnUrl ?? "/" });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Unable to complete demo payment" });
   }
 });
 
