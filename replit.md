@@ -49,6 +49,10 @@ Set `DATABASE_URL` to the PostgreSQL connection string for the environment.
 | `SMTP_HOST/USER/PASS/PORT` | Optional | Email notifications |
 | `TWILIO_ACCOUNT_SID` | Optional | SMS/WhatsApp via Twilio |
 | `SMS_API_KEY` | Optional | Alternate SMS gateway |
+| `CHARGILY_API_KEY` | Payment required | Chargily Pay API key for checkout creation |
+| `CHARGILY_WEBHOOK_SECRET` | Payment required | Secret used to verify Chargily payment webhooks |
+| `CHARGILY_MODE` | Optional | Use `test` for the Chargily test API; production is the default |
+| `CHARGILY_API_URL` | Optional | Override the Chargily checkout endpoint |
 
 ## Project structure
 

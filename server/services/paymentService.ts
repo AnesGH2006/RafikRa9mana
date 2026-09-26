@@ -17,7 +17,10 @@ export function verifyChargilySignature(rawBody: string, signature: string | und
 export async function createChargilyCheckout(userId: string, returnUrl: string, requestedAmountDzd = DEFAULT_AMOUNT_DZD) {
   const amountDzd = ALLOWED_AMOUNTS_DZD.has(requestedAmountDzd) ? requestedAmountDzd : DEFAULT_AMOUNT_DZD;
   const apiKey = process.env.CHARGILY_API_KEY;
-  const endpoint = process.env.CHARGILY_API_URL ?? "https://pay.chargily.com/test/api/v2/checkouts";
+  const endpoint = process.env.CHARGILY_API_URL
+    ?? (process.env.CHARGILY_MODE === "test"
+      ? "https://pay.chargily.com/test/api/v2/checkouts"
+      : "https://pay.chargily.com/api/v2/checkouts");
   if (!apiKey) throw new Error("CHARGILY_API_KEY is not configured");
 
   const [payment] = await db.insert(paymentsTable).values({
@@ -37,7 +40,15 @@ export async function createChargilyCheckout(userId: string, returnUrl: string, 
   });
   if (!response.ok) {
     await db.update(paymentsTable).set({ status: "failed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
-    throw new Error(`Chargily checkout failed with HTTP ${response.status}`);
+    const providerMessage = await response.text().catch(() => "");
+    let detail = providerMessage.trim();
+    try {
+      const parsed = JSON.parse(detail) as { message?: string; error?: string };
+      detail = parsed.message ?? parsed.error ?? detail;
+    } catch {
+      // Keep the raw provider response when it is not JSON.
+    }
+    throw new Error(`Chargily checkout failed with HTTP ${response.status}${detail ? `: ${detail.slice(0, 240)}` : ""}`);
   }
 
   const payload = await response.json() as { id?: string; checkout_url?: string; url?: string };
