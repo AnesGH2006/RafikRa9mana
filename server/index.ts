@@ -66,6 +66,21 @@ async function probeDb(attempt = 1): Promise<void> {
     await db.execute(sql`SELECT 1`);
     // Keep the parent feed compatible with databases created before assessment types existed.
     await db.execute(sql`ALTER TABLE grades ADD COLUMN IF NOT EXISTS grade_type varchar(20) NOT NULL DEFAULT 'general'`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS student_daily_attendance (
+        id varchar(64) PRIMARY KEY,
+        user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        student_id varchar(64) NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        attendance_date varchar(10) NOT NULL,
+        status varchar(100) NOT NULL,
+        is_absent boolean NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS "UQ_student_daily_attendance_user_student_date"
+        ON student_daily_attendance(user_id, student_id, attendance_date);
+      CREATE INDEX IF NOT EXISTS "IDX_student_daily_attendance_user_date"
+        ON student_daily_attendance(user_id, attendance_date);
+    `);
     // Repair names imported from combined Excel name columns before the parser fix.
     await db.execute(sql`UPDATE students SET nom_prenom = regexp_replace(nom_prenom, '^(.+)\\s+\\1$', '\\1') WHERE nom_prenom ~ '^(.+)\\s+\\1$'`);
     logger.info("Database connection verified");

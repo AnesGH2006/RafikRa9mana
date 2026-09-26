@@ -4,6 +4,7 @@ import multer from "multer";
 import XLSX from "xlsx";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { db, dailyAbsenceReportsTable, studentDailyAttendanceTable, studentsTable } from "../../shared/db.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -60,28 +61,33 @@ router.post("/absences/daily-students", async (req, res): Promise<void> => {
 
   const userId = req.user!.id;
   const studentIds = [...normalized.keys()];
-  const ownedStudents = await db.select({ id: studentsTable.id }).from(studentsTable)
-    .where(and(eq(studentsTable.userId, userId), inArray(studentsTable.id, studentIds)));
-  if (ownedStudents.length !== studentIds.length) {
-    res.status(400).json({ error: "One or more students do not belong to this account" });
-    return;
-  }
+  try {
+    const ownedStudents = await db.select({ id: studentsTable.id }).from(studentsTable)
+      .where(and(eq(studentsTable.userId, userId), inArray(studentsTable.id, studentIds)));
+    if (ownedStudents.length !== studentIds.length) {
+      res.status(400).json({ error: "One or more students do not belong to this account" });
+      return;
+    }
 
-  const rows = studentIds.map(studentId => ({
-    id: crypto.randomBytes(16).toString("hex"),
-    userId,
-    studentId,
-    attendanceDate,
-    ...normalized.get(studentId)!,
-  }));
-  const saved = await db.insert(studentDailyAttendanceTable).values(rows).onConflictDoUpdate({
-    target: [studentDailyAttendanceTable.userId, studentDailyAttendanceTable.studentId, studentDailyAttendanceTable.attendanceDate],
-    set: {
-      status: studentDailyAttendanceTable.status,
-      isAbsent: studentDailyAttendanceTable.isAbsent,
-    },
-  }).returning({ id: studentDailyAttendanceTable.id, studentId: studentDailyAttendanceTable.studentId });
-  res.json({ success: true, saved: saved.length });
+    const rows = studentIds.map(studentId => ({
+      id: crypto.randomBytes(16).toString("hex"),
+      userId,
+      studentId,
+      attendanceDate,
+      ...normalized.get(studentId)!,
+    }));
+    const saved = await db.insert(studentDailyAttendanceTable).values(rows).onConflictDoUpdate({
+      target: [studentDailyAttendanceTable.userId, studentDailyAttendanceTable.studentId, studentDailyAttendanceTable.attendanceDate],
+      set: {
+        status: studentDailyAttendanceTable.status,
+        isAbsent: studentDailyAttendanceTable.isAbsent,
+      },
+    }).returning({ id: studentDailyAttendanceTable.id, studentId: studentDailyAttendanceTable.studentId });
+    res.json({ success: true, saved: saved.length });
+  } catch (error) {
+    logger.error({ err: error, attendanceDate, rowCount: studentIds.length }, "Daily student attendance save failed");
+    res.status(500).json({ error: "فشل حفظ سجل الحضور اليومي. أعد تشغيل الخادم لتحديث قاعدة البيانات ثم أعد المحاولة." });
+  }
 });
 
 router.delete("/absences/daily-students/:id", async (req, res): Promise<void> => {
