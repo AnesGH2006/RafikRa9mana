@@ -285,8 +285,9 @@ export default function UploadGradesOcrPage() {
   const effectiveAbsent     = (r: OcrRow) => r.editedAbsent !== undefined ? r.editedAbsent : r.isAbsent ?? null;
 
   async function fetchStudents(): Promise<Array<{ id: string; nomPrenom: string }>> {
-    if (!classe || (mode === "grades" && !niveau)) return [];
-    const params = new URLSearchParams({ annee, classe });
+    if ((mode !== "daily_register" && !classe) || (mode === "grades" && !niveau)) return [];
+    const params = new URLSearchParams({ annee });
+    if (classe) params.set("classe", classe);
     if (mode === "grades") params.set("niveau", niveau);
     try {
       const res = await fetch(
@@ -300,7 +301,7 @@ export default function UploadGradesOcrPage() {
   }
 
   const handleSave = async () => {
-    if (!classe || (mode === "grades" && !niveau)) {
+    if ((mode !== "daily_register" && !classe) || (mode === "grades" && !niveau)) {
       toast({ variant: "destructive", title: "خطأ", description: mode === "grades" ? "يرجى تحديد المستوى والفوج قبل الحفظ" : "يرجى تحديد الفوج قبل الحفظ" });
       return;
     }
@@ -324,7 +325,9 @@ export default function UploadGradesOcrPage() {
     if (students.length === 0) {
       const msg = mode === "grades"
         ? `لم يتم العثور على أي تلميذ في ${niveau} — الفوج ${classe} — سنة ${annee}. تحقق من صحة المستوى والفوج المحددين أو تأكد من استيراد القائمة أولاً.`
-        : `لم يتم العثور على أي تلميذ في الفوج ${classe} — سنة ${annee}. تحقق من الفوج أو تأكد من استيراد القائمة أولاً.`;
+        : classe
+          ? `لم يتم العثور على أي تلميذ في الفوج ${classe} — سنة ${annee}. تحقق من الفوج أو تأكد من استيراد القائمة أولاً.`
+          : `لم يتم العثور على تلاميذ في سنة ${annee}. تأكد من استيراد القائمة أولاً.`;
       setSaveState({ phase: "done", saved: 0, failed: rows.length, errors: [msg] });
       setRows(prev => prev.map(r => ({ ...r, saveError: "لا يوجد تلاميذ في هذا الفوج" })));
       toast({ variant: "destructive", title: "لم يتم العثور على تلاميذ", description: msg });
@@ -343,7 +346,9 @@ export default function UploadGradesOcrPage() {
       rows.forEach((row, index) => {
         const matches = findStudents(effectiveName(row));
         if (matches.length !== 1) {
-          const message = matches.length > 1 ? "الاسم مطابق لأكثر من تلميذ في الفوج" : "لم يُعثر على التلميذ في الفوج";
+          const message = matches.length > 1
+            ? classe ? "الاسم مطابق لأكثر من تلميذ في الفوج" : "الاسم مطابق لأكثر من تلميذ؛ حدد الفوج لتضييق البحث"
+            : "لم يُعثر على التلميذ في القائمة";
           errors.push(`صف ${row.rowNumber}: ${message}`);
           updatedRows[index] = { ...row, saveError: message };
           return;
@@ -481,7 +486,11 @@ export default function UploadGradesOcrPage() {
   };
 
   const lowConfCount = rows.filter(r => r.lowConfidence).length;
-  const canSave = mode === "grades" ? !!(niveau && classe && subject) : !!classe;
+  const canSave = mode === "grades"
+    ? !!(niveau && classe && subject)
+    : mode === "daily_register"
+      ? isIsoDate(reportDate) && rows.length > 0 && rows.every(row => effectiveAbsent(row) !== null && Boolean(effectiveStatus(row)))
+      : !!classe;
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"
@@ -545,7 +554,7 @@ export default function UploadGradesOcrPage() {
           </Select>
         )}
         <Input
-          placeholder={mode === "grades" ? "الفوج (مثال: 1 أو A)" : "الفوج (للحفظ، اختياري أثناء القراءة)"}
+          placeholder={mode === "grades" ? "الفوج (مثال: 1 أو A)" : mode === "daily_register" ? "الفوج (اختياري لتسهيل المطابقة)" : "الفوج (للحفظ، اختياري أثناء القراءة)"}
           value={classe}
           onChange={e => setClasse(e.target.value)}
         />
@@ -572,7 +581,7 @@ export default function UploadGradesOcrPage() {
         ) : mode === "daily_register" ? (
           <div className="flex items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/50 text-xs text-emerald-700 dark:text-emerald-400 font-medium gap-1.5">
             <ClipboardCheck className="w-3.5 h-3.5" />
-            سجل يومي · تُراجع العلامات قبل الحفظ
+            سجل يومي · الفوج اختياري · راجع العلامات قبل الحفظ
           </div>
         ) : (
           <div className="flex items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 text-xs text-amber-700 dark:text-amber-400 font-medium gap-1.5">
@@ -769,6 +778,12 @@ export default function UploadGradesOcrPage() {
                             <th key={h} className="px-4 py-2.5 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                           ))}
                         </>
+                      ) : mode === "daily_register" ? (
+                        <>
+                          {["#", "اسم التلميذ (قابل للتعديل)", "العلامة في السجل", "الحالة المراجعة", "الثقة", "الحالة"].map(h => (
+                            <th key={h} className="px-4 py-2.5 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                          ))}
+                        </>
                       ) : (
                         <>
                           {["#", "اسم التلميذ (قابل للتعديل)", "مبرر (ساعة)", "غير مبرر (ساعة)", "المجموع", "الحالة"].map(h => (
@@ -824,6 +839,38 @@ export default function UploadGradesOcrPage() {
                                 row.confidence >= 85 ? "text-emerald-600" :
                                 row.confidence >= 70 ? "text-amber-600"   : "text-red-500"
                               }`}>{row.confidence}%</span>
+                            </td>
+                          </>
+                        ) : mode === "daily_register" ? (
+                          <>
+                            <td className="px-4 py-2 w-32">
+                              <Input
+                                value={effectiveStatus(row)}
+                                onChange={e => updateRow(idx, { editedStatus: e.target.value })}
+                                className="h-7 text-xs text-center"
+                                aria-label="علامة الحضور في السجل"
+                              />
+                            </td>
+                            <td className="px-4 py-2 min-w-40">
+                              <div className="flex gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={effectiveAbsent(row) === false ? "default" : "outline"}
+                                  className={`h-7 px-2 text-xs ${effectiveAbsent(row) === false ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}
+                                  onClick={() => updateRow(idx, { editedAbsent: false })}
+                                >حاضر</Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={effectiveAbsent(row) === true ? "default" : "outline"}
+                                  className={`h-7 px-2 text-xs ${effectiveAbsent(row) === true ? "bg-rose-600 hover:bg-rose-700" : ""}`}
+                                  onClick={() => updateRow(idx, { editedAbsent: true })}
+                                >غائب</Button>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 w-20">
+                              <span className={`text-xs font-mono ${row.confidence >= 85 ? "text-emerald-600" : row.confidence >= 70 ? "text-amber-600" : "text-red-500"}`}>{row.confidence}%</span>
                             </td>
                           </>
                         ) : (
@@ -882,7 +929,9 @@ export default function UploadGradesOcrPage() {
                 <AlertTriangle className="w-3.5 h-3.5" />
                 {mode === "grades"
                   ? "حدد المستوى والفوج والمادة أعلاه لتفعيل زر الحفظ"
-                  : "حدد الفوج أعلاه لتفعيل زر الحفظ"}
+                  : mode === "daily_register"
+                    ? "أدخل تاريخ السجل وراجع حالة كل تلميذ لتفعيل الحفظ؛ الفوج اختياري"
+                    : "حدد الفوج أعلاه لتفعيل زر الحفظ"}
               </p>
             )}
           </motion.div>
