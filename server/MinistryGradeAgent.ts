@@ -121,7 +121,14 @@ class GradeRepository {
           )
         );
 
-      return records as GradeRecord[];
+      return records.map((record): GradeRecord => ({
+        matricule: record.matricule ?? "",
+        student_name: record.student_name ?? "",
+        subject_code: record.subject_code ?? "",
+        exam: record.exam !== null && record.exam !== undefined ? Number(record.exam) : undefined,
+        trimestre: record.trimestre,
+        annee: record.annee,
+      }));
     } catch (error) {
       console.error("Database fetch failed:", error);
       throw error;

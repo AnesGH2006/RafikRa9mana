@@ -174,17 +174,30 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
 
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
 
-  // Grades for the current year
-  const allGrades = await db
+  // Prefer the selected year, but fall back to the latest available school year
+  // when the current year has no data yet. This prevents a blank parent dashboard
+  // when the student has valid attendance/grade rows recorded under the prior year.
+  const allStudentGrades = await db
     .select()
     .from(gradesTable)
-    .where(and(eq(gradesTable.studentId, linkedStudentId), eq(gradesTable.annee, annee)));
+    .where(eq(gradesTable.studentId, linkedStudentId));
 
-  // Absences for the current year
-  const absences = await db
+  const allStudentAbsences = await db
     .select()
     .from(absencesTable)
-    .where(and(eq(absencesTable.studentId, linkedStudentId), eq(absencesTable.annee, annee)));
+    .where(eq(absencesTable.studentId, linkedStudentId));
+
+  const fallbackYear = [...new Set([
+    ...allStudentGrades.map(g => g.annee),
+    ...allStudentAbsences.map(a => a.annee),
+  ])].sort().at(-1) ?? annee;
+
+  const hasCurrentYearData = allStudentGrades.some(g => g.annee === annee)
+    || allStudentAbsences.some(a => a.annee === annee);
+  const selectedYear = hasCurrentYearData ? annee : fallbackYear;
+
+  const allGrades = allStudentGrades.filter(g => g.annee === selectedYear);
+  const absences = allStudentAbsences.filter(a => a.annee === selectedYear);
 
   const [schoolInfo] = await db
     .select({ nom: schoolInfoTable.nom, wilaya: schoolInfoTable.wilaya, commune: schoolInfoTable.commune })

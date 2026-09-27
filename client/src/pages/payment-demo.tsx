@@ -35,6 +35,9 @@ export default function PaymentDemoPage() {
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
             <CreditCard className="h-7 w-7" />
           </div>
+          <div className="mb-2 inline-flex items-center rounded-full border border-amber-200/60 bg-amber-400/20 px-3 py-1 text-[10px] font-bold tracking-wide text-amber-50">
+            DEMO MODE • وضع تجريبي
+          </div>
           <p className="text-xs text-emerald-100">بيئة دفع تجريبية</p>
           <h1 className="mt-1 text-2xl font-extrabold">تأكيد الاشتراك</h1>
         </div>
