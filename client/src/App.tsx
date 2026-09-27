@@ -993,6 +993,7 @@ function LoginScreen() {
 // ── Auth gate ─────────────────────────────────────────────────────────────────
 function AuthGate() {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const [loc] = useLocation();
   if (isLoading) return (
     <div className="min-h-screen flex items-center justify-center">
       <motion.div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full"
@@ -1009,6 +1010,8 @@ function AuthGate() {
     <AnimatePresence mode="wait">
       {!isAuthenticated
         ? <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}><LoginScreen /></motion.div>
+        : loc === "/payment-demo"
+          ? <motion.div key="payment-demo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}><PaymentDemoPage /></motion.div>
         : !isSubscribed
           ? <motion.div key="paywall" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}><PaywallScreen /></motion.div>
           : <motion.div key="app" className="h-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}><AppLayout /></motion.div>
