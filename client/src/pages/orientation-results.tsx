@@ -26,6 +26,11 @@ const ARTS_SUBJECTS = [
   { key: "francais",label: "اللغة الفرنسية",  color: "#ec4899" },
 ];
 
+type TrackCapacity = "science" | "arts";
+type TrackCapacities = Record<TrackCapacity, number>;
+const DEFAULT_CAPACITIES: TrackCapacities = { science: 30, arts: 30 };
+const CAPACITY_STORAGE_KEY = "orientation-track-capacities";
+
 function splitName(nomPrenom: string) {
   const parts = nomPrenom.trim().split(/\s+/);
   if (parts.length === 1) return { nom: parts[0] ?? "", prenom: "" };
@@ -158,6 +163,18 @@ export default function OrientationResultsPage() {
   const [filterSexe, setFilterSexe]     = useState("");
   const [filterTrack, setFilterTrack]   = useState("");
   const [expandedId, setExpandedId]     = useState<string | null>(null);
+  const [capacitiesByYear, setCapacitiesByYear] = useState<Record<string, TrackCapacities>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      return JSON.parse(localStorage.getItem(CAPACITY_STORAGE_KEY) ?? "{}") as Record<string, TrackCapacities>;
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(CAPACITY_STORAGE_KEY, JSON.stringify(capacitiesByYear));
+  }, [capacitiesByYear]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -174,6 +191,35 @@ export default function OrientationResultsPage() {
   const eligible = results
     .filter(r => r.passed && r.annualAvg !== null)
     .sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
+
+  const capacities = capacitiesByYear[annee] ?? DEFAULT_CAPACITIES;
+  const updateCapacity = (track: TrackCapacity, value: number) => {
+    setCapacitiesByYear(current => ({
+      ...current,
+      [annee]: { ...(current[annee] ?? DEFAULT_CAPACITIES), [track]: Math.max(0, Math.min(500, value)) },
+    }));
+  };
+  const rankForTrack = (trackKey: TrackCapacity) => eligible
+    .filter(result => {
+      const recommendation = orientTrack(result);
+      return recommendation.key === trackKey && recommendation.qualifies;
+    })
+    .sort((a, b) => {
+      const scoreA = orientTrack(a).trackAvg ?? a.annualAvg ?? 0;
+      const scoreB = orientTrack(b).trackAvg ?? b.annualAvg ?? 0;
+      return scoreB - scoreA || (b.annualAvg ?? 0) - (a.annualAvg ?? 0);
+    });
+  const scienceApplicants = rankForTrack("science");
+  const artsApplicants = rankForTrack("arts");
+  const scienceWithinCapacity = new Set(scienceApplicants.slice(0, capacities.science).map(r => r.student.id));
+  const artsWithinCapacity = new Set(artsApplicants.slice(0, capacities.arts).map(r => r.student.id));
+  const estimatedCutoff = (applicants: StudentResult[], capacity: number) => {
+    if (capacity <= 0 || applicants.length <= capacity) return null;
+    const lastSeat = applicants[capacity - 1];
+    return lastSeat ? orientTrack(lastSeat).trackAvg ?? lastSeat.annualAvg : null;
+  };
+  const scienceCutoff = estimatedCutoff(scienceApplicants, capacities.science);
+  const artsCutoff = estimatedCutoff(artsApplicants, capacities.arts);
 
   const classes = [...new Set(eligible.map(r => r.student.classe))].sort();
   const tracks  = [...new Set(eligible.map(r => orientTrack(r).key))];
@@ -280,6 +326,61 @@ export default function OrientationResultsPage() {
           تلاميذ السنة الرابعة الناجحون — مع نقاط مواد كل شعبة
         </p>
       </motion.div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">شروط الانتقال والتوجيه الإلكتروني</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-5 text-sm lg:grid-cols-2">
+          <div className="space-y-2">
+            <h2 className="font-bold">الانتقال إلى السنة الأولى ثانوي</h2>
+            <p className="text-muted-foreground">ينتقل التلميذ مباشرةً إذا كان معدل شهادة التعليم المتوسط 10/20 أو أكثر. إذا كان أقل من 10، يُعتمد متوسط معدل الشهادة والمعدل السنوي للسنة الرابعة؛ النجاح عند بلوغ 10/20.</p>
+            <p className="text-xs text-muted-foreground">بعد استيفاء شرط الانتقال، يدرس مجلس القبول والتوجيه النتائج والقدرات في المواد، بطاقة الرغبات، وآراء الفريق التربوي مع مراعاة المقاعد المتاحة.</p>
+          </div>
+          <div className="space-y-2">
+            <h2 className="font-bold">الخطوات داخل التطبيق</h2>
+            <ol className="list-inside list-decimal space-y-1 text-muted-foreground">
+              <li>تأكد من إدخال نتائج السنة الرابعة ونتيجة BEM.</li>
+              <li>استورد بطاقة الرغبات للسنة المحددة من <a href="/orientation-wishes" className="font-semibold text-blue-600 hover:underline">إدارة الرغبات</a>.</li>
+              <li>راجع المعدل السنوي ومتوسط مواد كل جذع ومطابقة الرغبة الأولى.</li>
+              <li>أدخل المقاعد المتاحة، ثم راجع ترتيب المؤهلين والعتبة التقديرية.</li>
+              <li>يعتمد المجلس الترتيب النهائي ويُسجل القرار بعد مراجعة الرغبات وآراء الأساتذة.</li>
+            </ol>
+          </div>
+        </CardContent>
+      </Card>
+
+      {!loading && eligible.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">القدرات والمقاعد ومعدلات القبول التقديرية · {annee}</CardTitle>
+            <p className="text-xs text-muted-foreground">ترتيب أولي حسب متوسط مواد الجذع، ثم المعدل السنوي. عدّل السعة الافتراضية (30 مقعدًا) لتطابق مقاعد المؤسسة؛ العتبة تقدير محلي وليست معدلًا وطنيًا ثابتًا.</p>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            {([
+              { key: "science" as const, title: "جذع مشترك علوم وتكنولوجيا", applicants: scienceApplicants, cutoff: scienceCutoff, accepted: scienceWithinCapacity, color: "text-blue-600" },
+              { key: "arts" as const, title: "جذع مشترك آداب", applicants: artsApplicants, cutoff: artsCutoff, accepted: artsWithinCapacity, color: "text-violet-600" },
+            ]).map(track => (
+              <div key={track.key} className="rounded-xl border bg-muted/20 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className={`font-bold ${track.color}`}>{track.title}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">{track.applicants.length} مؤهل حسب المواد · {track.accepted.size} ضمن السعة</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    المقاعد
+                    <input type="number" min={0} max={500} value={capacities[track.key]} onChange={event => updateCapacity(track.key, Number(event.target.value) || 0)} className="h-9 w-20 rounded-md border bg-background px-2 text-center font-bold text-foreground" aria-label={`سعة ${track.title}`} />
+                  </label>
+                </div>
+                <div className="mt-4 border-t pt-3">
+                  <p className="text-xs text-muted-foreground">معدل آخر مقعد تقديري</p>
+                  <p className="mt-1 text-2xl font-black tabular-nums">{track.cutoff === null ? track.applicants.length <= capacities[track.key] ? "لا يوجد ضغط على المقاعد" : "لا توجد مقاعد" : `${track.cutoff.toFixed(2)} / 20`}</p>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <motion.div className="flex flex-wrap gap-2"
@@ -601,6 +702,11 @@ export default function OrientationResultsPage() {
               const { nom, prenom } = splitName(r.student.nomPrenom);
               const expanded = expandedId === r.student.id;
               const TrackIcon = track.icon;
+              const capacityOutcome = track.key === "science"
+                ? track.qualifies ? scienceWithinCapacity.has(r.student.id) ? "ضمن السعة التقديرية" : "يتجاوز السعة" : "راجع معدل المواد"
+                : track.key === "arts"
+                  ? track.qualifies ? artsWithinCapacity.has(r.student.id) ? "ضمن السعة التقديرية" : "يتجاوز السعة" : "راجع معدل المواد"
+                  : null;
               return (
                 <motion.div key={r.student.id}
                   initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}
@@ -635,6 +741,7 @@ export default function OrientationResultsPage() {
                     <span className={`text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 ${track.color}`}>
                       {track.label}
                     </span>
+                    {capacityOutcome && <Badge variant={capacityOutcome === "ضمن السعة التقديرية" ? "secondary" : "outline"} className="shrink-0 text-[10px]">{capacityOutcome}</Badge>}
 
                     {/* Annual avg */}
                     <span className={`text-xl font-extrabold tabular-nums w-14 text-end shrink-0 ${avgColor(r.annualAvg!)}`}>
