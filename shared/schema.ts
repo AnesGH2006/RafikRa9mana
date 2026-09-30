@@ -114,6 +114,7 @@ export const studentDailyAttendanceTable = pgTable("student_daily_attendance", {
   userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   studentId: varchar("student_id", { length: 64 }).notNull().references(() => studentsTable.id, { onDelete: "cascade" }),
   attendanceDate: varchar("attendance_date", { length: 10 }).notNull(),
+  annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
   status: varchar("status", { length: 100 }).notNull(),
   isAbsent: boolean("is_absent").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

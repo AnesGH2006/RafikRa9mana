@@ -14,6 +14,12 @@ function isIsoDate(value: unknown): value is string {
     new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
 }
 
+function isAcademicYear(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4})-(\d{4})$/.exec(value);
+  return !!match && Number(match[2]) === Number(match[1]) + 1;
+}
+
 router.get("/absences/daily-students", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
@@ -42,11 +48,20 @@ router.get("/absences/daily-students", async (req, res): Promise<void> => {
 
 router.post("/absences/daily-students", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
-  const { attendanceDate, entries } = req.body ?? {};
+  const { attendanceDate, annee, entries } = req.body ?? {};
   if (!isIsoDate(attendanceDate) || !Array.isArray(entries) || entries.length === 0 || entries.length > 1000) {
     res.status(400).json({ error: "Invalid attendance report" });
     return;
   }
+  if (annee !== undefined && !isAcademicYear(annee)) {
+    res.status(400).json({ error: "Invalid school year" });
+    return;
+  }
+  const schoolYear = isAcademicYear(annee)
+    ? annee
+    : Number(attendanceDate.slice(5, 7)) >= 9
+      ? `${attendanceDate.slice(0, 4)}-${Number(attendanceDate.slice(0, 4)) + 1}`
+      : `${Number(attendanceDate.slice(0, 4)) - 1}-${attendanceDate.slice(0, 4)}`;
 
   const normalized = new Map<string, { status: string; isAbsent: boolean }>();
   for (const entry of entries) {
@@ -74,11 +89,13 @@ router.post("/absences/daily-students", async (req, res): Promise<void> => {
       userId,
       studentId,
       attendanceDate,
+      annee: schoolYear,
       ...normalized.get(studentId)!,
     }));
     const saved = await db.insert(studentDailyAttendanceTable).values(rows).onConflictDoUpdate({
       target: [studentDailyAttendanceTable.userId, studentDailyAttendanceTable.studentId, studentDailyAttendanceTable.attendanceDate],
       set: {
+        annee: schoolYear,
         status: studentDailyAttendanceTable.status,
         isAbsent: studentDailyAttendanceTable.isAbsent,
       },

@@ -109,6 +109,7 @@ async function migrate() {
       user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       student_id varchar(64) NOT NULL REFERENCES students(id) ON DELETE CASCADE,
       attendance_date varchar(10) NOT NULL,
+      annee varchar(20) NOT NULL DEFAULT '2025-2026',
       status varchar(100) NOT NULL,
       is_absent boolean NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
@@ -118,6 +119,8 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS "IDX_student_daily_attendance_user_date"
       ON student_daily_attendance(user_id, attendance_date);
   `);
+
+  await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS annee varchar(20) NOT NULL DEFAULT '2025-2026'`);
 
   await db.execute(sql`DO $$ BEGIN CREATE TYPE payment_status AS ENUM ('pending','paid','failed','refunded'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
   await db.execute(sql`DO $$ BEGIN CREATE TYPE payment_provider AS ENUM ('chargily','activation_code'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);

@@ -19,13 +19,6 @@ import { calcAnnualAvg, calcWeightedAvg, getSubjectsForLevel } from "../../share
 
 const router = Router();
 
-function academicYearForDate(date: string): string {
-  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
-  if (!match) return "";
-  const year = Number(match[1]);
-  return Number(match[2]) >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
-}
-
 /** Only a head-admin (subscribed, non-member user) may manage members. */
 function isHeadAdmin(req: Request): boolean {
   return req.isAuthenticated() && !req.memberContext;
@@ -165,7 +158,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   if (!linkedStudentId) { res.json({ student: null }); return; }
 
   const annee = String(req.query.annee ?? "2025-2026");
-  const cacheKey = `parent-feed:v3:${schoolUserId}:${linkedStudentId}:${annee}`;
+  const cacheKey = `parent-feed:v4:${schoolUserId}:${linkedStudentId}:${annee}`;
   const cached = await getCachedJson<Record<string, unknown>>(cacheKey);
   if (cached) {
     res.set("Cache-Control", "private, max-age=60");
@@ -198,6 +191,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
     .select({
       id: studentDailyAttendanceTable.id,
       attendanceDate: studentDailyAttendanceTable.attendanceDate,
+      annee: studentDailyAttendanceTable.annee,
       status: studentDailyAttendanceTable.status,
       isAbsent: studentDailyAttendanceTable.isAbsent,
     })
@@ -211,18 +205,18 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   const fallbackYear = [...new Set([
     ...allStudentGrades.map(g => g.annee),
     ...allStudentAbsences.map(a => a.annee),
-    ...allStudentDailyAttendance.map(a => academicYearForDate(a.attendanceDate)).filter(Boolean),
+    ...allStudentDailyAttendance.map(a => a.annee),
   ])].sort().at(-1) ?? annee;
 
   const hasCurrentYearData = allStudentGrades.some(g => g.annee === annee)
     || allStudentAbsences.some(a => a.annee === annee)
-    || allStudentDailyAttendance.some(a => academicYearForDate(a.attendanceDate) === annee);
+    || allStudentDailyAttendance.some(a => a.annee === annee);
   const selectedYear = hasCurrentYearData ? annee : fallbackYear;
 
   const allGrades = allStudentGrades.filter(g => g.annee === selectedYear);
   const absences = allStudentAbsences.filter(a => a.annee === selectedYear);
   const dailyAbsences = allStudentDailyAttendance.filter(a =>
-    a.isAbsent && academicYearForDate(a.attendanceDate) === selectedYear,
+    a.isAbsent && a.annee === selectedYear,
   );
 
   const [schoolInfo] = await db

@@ -377,7 +377,7 @@ export default function UploadGradesOcrPage() {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ attendanceDate: reportDate, entries }),
+          body: JSON.stringify({ attendanceDate: reportDate, annee, entries }),
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error ?? "فشل حفظ السجل اليومي");

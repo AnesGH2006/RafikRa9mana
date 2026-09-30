@@ -72,6 +72,7 @@ async function probeDb(attempt = 1): Promise<void> {
         user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         student_id varchar(64) NOT NULL REFERENCES students(id) ON DELETE CASCADE,
         attendance_date varchar(10) NOT NULL,
+        annee varchar(20) NOT NULL DEFAULT '2025-2026',
         status varchar(100) NOT NULL,
         is_absent boolean NOT NULL,
         created_at timestamptz NOT NULL DEFAULT now()
@@ -81,6 +82,7 @@ async function probeDb(attempt = 1): Promise<void> {
       CREATE INDEX IF NOT EXISTS "IDX_student_daily_attendance_user_date"
         ON student_daily_attendance(user_id, attendance_date);
     `);
+    await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS annee varchar(20) NOT NULL DEFAULT '2025-2026'`);
     // Repair names imported from combined Excel name columns before the parser fix.
     await db.execute(sql`UPDATE students SET nom_prenom = regexp_replace(nom_prenom, '^(.+)\\s+\\1$', '\\1') WHERE nom_prenom ~ '^(.+)\\s+\\1$'`);
     logger.info("Database connection verified");
