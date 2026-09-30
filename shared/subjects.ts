@@ -8,6 +8,8 @@ export interface Subject {
   coef: number;
 }
 
+export type LyceeBacFiliere = "science" | "math" | "technical" | "management" | "letters" | "languages";
+
 const SUBJECTS_LYCEE: Subject[] = [
   { key: "arabe", arLabel: "اللغة العربية", frLabel: "Langue Arabe", coef: 4 },
   { key: "francais", arLabel: "اللغة الفرنسية", frLabel: "Langue Française", coef: 3 },
@@ -20,6 +22,83 @@ const SUBJECTS_LYCEE: Subject[] = [
   { key: "civique", arLabel: "التربية المدنية", frLabel: "Éducation Civique", coef: 1 },
   { key: "eps", arLabel: "التربية البدنية", frLabel: "EPS", coef: 1 },
 ];
+
+const BAC_SUBJECTS_BY_FILIERE: Record<LyceeBacFiliere, Subject[]> = {
+  science: [
+    { key: "arabe", arLabel: "اللغة العربية", frLabel: "Langue Arabe", coef: 2 },
+    { key: "maths", arLabel: "الرياضيات", frLabel: "Mathématiques", coef: 6 },
+    { key: "physique", arLabel: "العلوم الفيزيائية", frLabel: "Physique", coef: 6 },
+    { key: "svt", arLabel: "علوم الطبيعة والحياة", frLabel: "Sciences naturelles", coef: 6 },
+    { key: "francais", arLabel: "اللغة الفرنسية", frLabel: "Français", coef: 2 },
+    { key: "anglais", arLabel: "اللغة الإنجليزية", frLabel: "Anglais", coef: 2 },
+    { key: "histoire_geo", arLabel: "التاريخ والجغرافيا", frLabel: "Histoire-Géographie", coef: 1 },
+    { key: "philosophy", arLabel: "الفلسفة", frLabel: "Philosophie", coef: 1 },
+    { key: "islam", arLabel: "التربية الإسلامية", frLabel: "Éducation Islamique", coef: 1 },
+    { key: "eps", arLabel: "التربية البدنية", frLabel: "EPS", coef: 1 },
+  ],
+  math: [
+    { key: "arabe", arLabel: "اللغة العربية", frLabel: "Langue Arabe", coef: 2 },
+    { key: "maths", arLabel: "الرياضيات", frLabel: "Mathématiques", coef: 9 },
+    { key: "physique", arLabel: "العلوم الفيزيائية", frLabel: "Physique", coef: 7 },
+    { key: "svt", arLabel: "علوم الطبيعة والحياة", frLabel: "Sciences naturelles", coef: 2 },
+    { key: "francais", arLabel: "اللغة الفرنسية", frLabel: "Français", coef: 2 },
+    { key: "anglais", arLabel: "اللغة الإنجليزية", frLabel: "Anglais", coef: 2 },
+    { key: "histoire_geo", arLabel: "التاريخ والجغرافيا", frLabel: "Histoire-Géographie", coef: 1 },
+    { key: "philosophy", arLabel: "الفلسفة", frLabel: "Philosophie", coef: 1 },
+    { key: "islam", arLabel: "التربية الإسلامية", frLabel: "Éducation Islamique", coef: 1 },
+    { key: "eps", arLabel: "التربية البدنية", frLabel: "EPS", coef: 1 },
+  ],
+  technical: [
+    { key: "arabe", arLabel: "اللغة العربية", frLabel: "Langue Arabe", coef: 2 },
+    { key: "maths", arLabel: "الرياضيات", frLabel: "Mathématiques", coef: 6 },
+    { key: "physique", arLabel: "العلوم الفيزيائية", frLabel: "Physique", coef: 5 },
+    { key: "technical", arLabel: "التكنولوجيا (حسب التخصص)", frLabel: "Technique (selon la spécialité)", coef: 6 },
+    { key: "francais", arLabel: "اللغة الفرنسية", frLabel: "Français", coef: 2 },
+    { key: "anglais", arLabel: "اللغة الإنجليزية", frLabel: "Anglais", coef: 2 },
+    { key: "histoire_geo", arLabel: "التاريخ والجغرافيا", frLabel: "Histoire-Géographie", coef: 1 },
+    { key: "philosophy", arLabel: "الفلسفة", frLabel: "Philosophie", coef: 1 },
+    { key: "islam", arLabel: "التربية الإسلامية", frLabel: "Éducation Islamique", coef: 1 },
+    { key: "eps", arLabel: "التربية البدنية", frLabel: "EPS", coef: 1 },
+  ],
+  management: [
+    { key: "arabe", arLabel: "اللغة العربية", frLabel: "Langue Arabe", coef: 2 },
+    { key: "maths", arLabel: "الرياضيات", frLabel: "Mathématiques", coef: 4 },
+    { key: "accounting", arLabel: "التسيير المحاسبي والمالي", frLabel: "Comptabilité", coef: 6 },
+    { key: "economics", arLabel: "الاقتصاد والمناجمنت", frLabel: "Économie et management", coef: 4 },
+    { key: "law", arLabel: "القانون", frLabel: "Droit", coef: 2 },
+    { key: "francais", arLabel: "اللغة الفرنسية", frLabel: "Français", coef: 3 },
+    { key: "anglais", arLabel: "اللغة الإنجليزية", frLabel: "Anglais", coef: 3 },
+    { key: "histoire_geo", arLabel: "التاريخ والجغرافيا", frLabel: "Histoire-Géographie", coef: 2 },
+    { key: "philosophy", arLabel: "الفلسفة", frLabel: "Philosophie", coef: 1 },
+    { key: "islam", arLabel: "التربية الإسلامية", frLabel: "Éducation Islamique", coef: 1 },
+    { key: "eps", arLabel: "التربية البدنية", frLabel: "EPS", coef: 1 },
+  ],
+  letters: [
+    { key: "arabe", arLabel: "اللغة العربية وآدابها", frLabel: "Langue et littérature arabes", coef: 5 },
+    { key: "philosophy", arLabel: "الفلسفة", frLabel: "Philosophie", coef: 4 },
+    { key: "histoire_geo", arLabel: "التاريخ والجغرافيا", frLabel: "Histoire-Géographie", coef: 4 },
+    { key: "francais", arLabel: "اللغة الفرنسية", frLabel: "Français", coef: 4 },
+    { key: "anglais", arLabel: "اللغة الإنجليزية", frLabel: "Anglais", coef: 4 },
+    { key: "maths", arLabel: "الرياضيات", frLabel: "Mathématiques", coef: 1 },
+    { key: "svt", arLabel: "علوم الطبيعة والحياة", frLabel: "Sciences naturelles", coef: 1 },
+    { key: "islam", arLabel: "التربية الإسلامية", frLabel: "Éducation Islamique", coef: 2 },
+    { key: "eps", arLabel: "التربية البدنية", frLabel: "EPS", coef: 1 },
+  ],
+  languages: [
+    { key: "arabe", arLabel: "اللغة العربية", frLabel: "Langue Arabe", coef: 3 },
+    { key: "francais", arLabel: "اللغة الفرنسية", frLabel: "Français", coef: 5 },
+    { key: "anglais", arLabel: "اللغة الإنجليزية", frLabel: "Anglais", coef: 5 },
+    { key: "third_language", arLabel: "اللغة الأجنبية الثالثة", frLabel: "Troisième langue étrangère", coef: 4 },
+    { key: "histoire_geo", arLabel: "التاريخ والجغرافيا", frLabel: "Histoire-Géographie", coef: 2 },
+    { key: "philosophy", arLabel: "الفلسفة", frLabel: "Philosophie", coef: 2 },
+    { key: "maths", arLabel: "الرياضيات", frLabel: "Mathématiques", coef: 2 },
+    { key: "islam", arLabel: "التربية الإسلامية", frLabel: "Éducation Islamique", coef: 2 },
+  ],
+};
+
+export function getBacSubjectsForFiliere(filiere: LyceeBacFiliere): Subject[] {
+  return BAC_SUBJECTS_BY_FILIERE[filiere];
+}
 
 // ── 1AM & 2AM ─────────────────────────────────────────────────────────────────
 const SUBJECTS_1_2AM: Subject[] = [
@@ -72,7 +151,8 @@ const SUBJECTS_4AM: Subject[] = [
 // ── Lookup ────────────────────────────────────────────────────────────────────
 export type Niveau = "1AM" | "2AM" | "3AM" | "4AM" | "1AS" | "2AS" | "3AS";
 
-export function getSubjectsForLevel(niveau: Niveau): Subject[] {
+export function getSubjectsForLevel(niveau: Niveau, filiere?: LyceeBacFiliere): Subject[] {
+  if (niveau === "3AS" && filiere) return getBacSubjectsForFiliere(filiere);
   switch (niveau) {
     case "1AM":
     case "2AM": return SUBJECTS_1_2AM;
