@@ -12,12 +12,19 @@
  * POST   /api/parent-register   — parent claims their child using school join code + student national ID
  */
 import { Router, type Request, type Response } from "express";
-import { and, eq, inArray } from "drizzle-orm";
-import { db, schoolMembersTable, studentsTable, gradesTable, absencesTable, schoolInfoTable } from "../../shared/db.js";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { db, schoolMembersTable, studentsTable, gradesTable, absencesTable, studentDailyAttendanceTable, schoolInfoTable } from "../../shared/db.js";
 import { getCachedJson, setCachedJson } from "../services/redisCache.js";
 import { calcAnnualAvg, calcWeightedAvg, getSubjectsForLevel } from "../../shared/subjects.js";
 
 const router = Router();
+
+function academicYearForDate(date: string): string {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(date);
+  if (!match) return "";
+  const year = Number(match[1]);
+  return Number(match[2]) >= 9 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+}
 
 /** Only a head-admin (subscribed, non-member user) may manage members. */
 function isHeadAdmin(req: Request): boolean {
@@ -158,7 +165,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   if (!linkedStudentId) { res.json({ student: null }); return; }
 
   const annee = String(req.query.annee ?? "2025-2026");
-  const cacheKey = `parent-feed:v2:${schoolUserId}:${linkedStudentId}:${annee}`;
+  const cacheKey = `parent-feed:v3:${schoolUserId}:${linkedStudentId}:${annee}`;
   const cached = await getCachedJson<Record<string, unknown>>(cacheKey);
   if (cached) {
     res.set("Cache-Control", "private, max-age=60");
@@ -187,17 +194,36 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
     .from(absencesTable)
     .where(eq(absencesTable.studentId, linkedStudentId));
 
+  const allStudentDailyAttendance = await db
+    .select({
+      id: studentDailyAttendanceTable.id,
+      attendanceDate: studentDailyAttendanceTable.attendanceDate,
+      status: studentDailyAttendanceTable.status,
+      isAbsent: studentDailyAttendanceTable.isAbsent,
+    })
+    .from(studentDailyAttendanceTable)
+    .where(and(
+      eq(studentDailyAttendanceTable.userId, schoolUserId),
+      eq(studentDailyAttendanceTable.studentId, linkedStudentId),
+    ))
+    .orderBy(desc(studentDailyAttendanceTable.attendanceDate));
+
   const fallbackYear = [...new Set([
     ...allStudentGrades.map(g => g.annee),
     ...allStudentAbsences.map(a => a.annee),
+    ...allStudentDailyAttendance.map(a => academicYearForDate(a.attendanceDate)).filter(Boolean),
   ])].sort().at(-1) ?? annee;
 
   const hasCurrentYearData = allStudentGrades.some(g => g.annee === annee)
-    || allStudentAbsences.some(a => a.annee === annee);
+    || allStudentAbsences.some(a => a.annee === annee)
+    || allStudentDailyAttendance.some(a => academicYearForDate(a.attendanceDate) === annee);
   const selectedYear = hasCurrentYearData ? annee : fallbackYear;
 
   const allGrades = allStudentGrades.filter(g => g.annee === selectedYear);
   const absences = allStudentAbsences.filter(a => a.annee === selectedYear);
+  const dailyAbsences = allStudentDailyAttendance.filter(a =>
+    a.isAbsent && academicYearForDate(a.attendanceDate) === selectedYear,
+  );
 
   const [schoolInfo] = await db
     .select({ nom: schoolInfoTable.nom, wilaya: schoolInfoTable.wilaya, commune: schoolInfoTable.commune })
@@ -241,6 +267,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
     student,
     grades,
     absences,
+    dailyAbsences,
     t1Avg,
     t2Avg,
     t3Avg,
