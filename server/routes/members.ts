@@ -218,6 +218,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   const dailyAbsences = allStudentDailyAttendance.filter(a =>
     a.isAbsent && a.annee === selectedYear,
   );
+  const dailyAttendanceCount = allStudentDailyAttendance.filter(a => a.annee === selectedYear).length;
 
   const [schoolInfo] = await db
     .select({ nom: schoolInfoTable.nom, wilaya: schoolInfoTable.wilaya, commune: schoolInfoTable.commune })
@@ -262,6 +263,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
     grades,
     absences,
     dailyAbsences,
+    dailyAttendanceCount,
     t1Avg,
     t2Avg,
     t3Avg,

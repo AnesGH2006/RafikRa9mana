@@ -33,6 +33,7 @@ interface StudentData {
   grades: { id: string; studentId: string; annee: string; trimestre: number; subject: string; score: number; gradeType?: "general" | "continuous" | "test" | "exam" }[];
   absences: { id: string; studentId: string; annee: string; trimestre: number; justifiedHours: number; unjustifiedHours: number }[];
   dailyAbsences?: { id: string; attendanceDate: string; status: string }[];
+  dailyAttendanceCount?: number;
   /** Pre-computed by the server using the same logic as /api/results (Ministry averages take precedence). */
   t1Avg: number | null;
   t2Avg: number | null;
@@ -231,7 +232,10 @@ export default function MyChildPage() {
   const latestDailyAbsence = dailyAbsences[0];
   const latestAbsence = absenceRecords[absenceRecords.length - 1];
   const totalAbsenceHours = totalJustified + totalUnjustified;
-  const attendanceRate = totalAbsenceHours > 0 ? Math.max(0, 100 - (totalAbsenceHours * 2)) : 100;
+  const dailyAbsenceDays = new Set(dailyAbsences.map(absence => absence.attendanceDate)).size;
+  const attendanceRate = (data.dailyAttendanceCount ?? 0) > 0
+    ? ((data.dailyAttendanceCount! - dailyAbsenceDays) / data.dailyAttendanceCount!) * 100
+    : totalAbsenceHours > 0 ? Math.max(0, 100 - (totalAbsenceHours * 2)) : 100;
   const absenceByTrimester = [1, 2, 3].map(trimestre => {
     const record = absences.find(absence => absence.trimestre === trimestre);
     return (record?.justifiedHours ?? 0) + (record?.unjustifiedHours ?? 0);
@@ -335,7 +339,7 @@ export default function MyChildPage() {
               </div>
             </div>
 
-            <div className="rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6"><div className="flex items-start justify-between"><div><p className="text-xs text-slate-500">حسب الفصول الدراسية</p><h2 className="mt-1 text-xl font-bold text-white">ساعات الغياب</h2></div><div className="rounded-xl bg-emerald-400/10 p-2 text-emerald-300"><TrendingUp className="h-4 w-4" /></div></div><div className="mt-8 flex h-36 items-end gap-4 border-b border-white/10 px-3">{absenceByTrimester.map((hours, index) => <div key={index} className="group flex flex-1 flex-col items-center gap-2"><span className="text-[10px] text-slate-500 opacity-0 transition group-hover:opacity-100">{hours} س</span><div className="w-full max-w-10 rounded-t-md bg-gradient-to-t from-blue-500 to-cyan-300 opacity-80 transition group-hover:opacity-100" style={{ height: `${Math.max(hours * 8, 8)}%` }} /></div>)}</div><div className="mt-3 flex justify-between px-2 text-[10px] text-slate-600"><span>الفصل الأول</span><span>الفصل الثاني</span><span>الفصل الثالث</span></div><div className="mt-7 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300"><Clock3 className="h-4 w-4" /></div><div><p className="text-xs text-slate-500">إجمالي الساعات</p><p className="text-sm font-bold text-white">{totalAbsenceHours} ساعة <span className="mr-1 text-xs font-normal text-slate-500">مسجلة</span></p></div></div></div>
+            <div className="rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6"><div className="flex items-start justify-between"><div><p className="text-xs text-slate-500">حسب الفصول الدراسية</p><h2 className="mt-1 text-xl font-bold text-white">ساعات الغياب</h2></div><div className="rounded-xl bg-emerald-400/10 p-2 text-emerald-300"><TrendingUp className="h-4 w-4" /></div></div><div className="mt-8 flex h-36 items-end gap-4 border-b border-white/10 px-3">{absenceByTrimester.map((hours, index) => <div key={index} className="group flex flex-1 flex-col items-center gap-2"><span className="text-[10px] text-slate-500 opacity-0 transition group-hover:opacity-100">{hours} س</span><div className="w-full max-w-10 rounded-t-md bg-gradient-to-t from-blue-500 to-cyan-300 opacity-80 transition group-hover:opacity-100" style={{ height: `${Math.max(hours * 8, 8)}%` }} /></div>)}</div><div className="mt-3 flex justify-between px-2 text-[10px] text-slate-600"><span>الفصل الأول</span><span>الفصل الثاني</span><span>الفصل الثالث</span></div><div className="mt-7 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300"><Calendar className="h-4 w-4" /></div><div className="grid grid-cols-2 gap-5"><div><p className="text-xs text-slate-500">أيام الغياب اليومي</p><p className="text-sm font-bold text-white">{dailyAbsenceDays} يوم</p></div><div><p className="text-xs text-slate-500">الساعات المسجلة</p><p className="text-sm font-bold text-white">{totalAbsenceHours} ساعة</p></div></div></div></div>
           </section>
 
           <section id="parent-grades" className="mt-5 scroll-mt-6 rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6">
@@ -346,7 +350,7 @@ export default function MyChildPage() {
           <section className="mt-5 grid gap-5 md:grid-cols-3">
             {[
               { label: "المعدل الفصلي", value: t1Avg !== null ? t1Avg.toFixed(2) : "—", note: "الفصل الأول", icon: Award, color: "text-blue-300" },
-              { label: "ساعات الغياب", value: String(totalAbsenceHours), note: "مبررة وغير مبررة", icon: Calendar, color: "text-cyan-300" },
+              { label: "أيام الغياب المسجلة", value: `${dailyAbsenceDays} يوم`, note: `${totalAbsenceHours} ساعة مسجلة`, icon: Calendar, color: "text-cyan-300" },
               { label: "درجات مسجلة", value: String(grades.length), note: "من السجلات المتاحة", icon: BarChart3, color: "text-violet-300" },
             ].map(metric => <div key={metric.label} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-[#111a2c]/70 p-4"><div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ${metric.color}`}><metric.icon className="h-5 w-5" /></div><div><p className="text-[11px] text-slate-500">{metric.label}</p><p className="text-lg font-bold text-white">{metric.value}</p><p className="text-[10px] text-slate-500">{metric.note}</p></div></div>)}
           </section>

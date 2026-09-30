@@ -4,6 +4,7 @@ import multer from "multer";
 import XLSX from "xlsx";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { db, dailyAbsenceReportsTable, studentDailyAttendanceTable, studentsTable } from "../../shared/db.js";
+import { notifyParentOfAbsence } from "../services/absenceAlerts.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
@@ -84,6 +85,19 @@ router.post("/absences/daily-students", async (req, res): Promise<void> => {
       return;
     }
 
+    const previousRows = await db.select({ studentId: studentDailyAttendanceTable.studentId })
+      .from(studentDailyAttendanceTable)
+      .where(and(
+        eq(studentDailyAttendanceTable.userId, userId),
+        eq(studentDailyAttendanceTable.attendanceDate, attendanceDate),
+        inArray(studentDailyAttendanceTable.studentId, studentIds),
+        eq(studentDailyAttendanceTable.isAbsent, true),
+      ));
+    const previouslyAbsent = new Set(previousRows.map(row => row.studentId));
+    const newlyAbsent = studentIds.filter(studentId =>
+      normalized.get(studentId)?.isAbsent && !previouslyAbsent.has(studentId),
+    );
+
     const rows = studentIds.map(studentId => ({
       id: crypto.randomBytes(16).toString("hex"),
       userId,
@@ -100,6 +114,14 @@ router.post("/absences/daily-students", async (req, res): Promise<void> => {
         isAbsent: studentDailyAttendanceTable.isAbsent,
       },
     }).returning({ id: studentDailyAttendanceTable.id, studentId: studentDailyAttendanceTable.studentId });
+
+    await Promise.all(newlyAbsent.map(async studentId => {
+      try {
+        await notifyParentOfAbsence({ schoolUserId: userId, studentId, annee: schoolYear, date: attendanceDate });
+      } catch (error) {
+        logger.error({ err: error, studentId, attendanceDate }, "Daily absence parent alert failed");
+      }
+    }));
     res.json({ success: true, saved: saved.length });
   } catch (error) {
     logger.error({ err: error, attendanceDate, rowCount: studentIds.length }, "Daily student attendance save failed");
