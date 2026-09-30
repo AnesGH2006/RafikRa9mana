@@ -36,6 +36,20 @@ interface DailyReport {
   cafeteriaSuspended: boolean | null; createdAt: string;
 }
 
+interface DailyStudentAttendance {
+  id: string;
+  studentId: string;
+  studentName: string;
+  niveau: string;
+  classe: string;
+  attendanceDate: string;
+  annee: string;
+  status: string;
+  isAbsent: boolean;
+  parentAbsenceReason: string | null;
+  parentAbsenceReasonAt: string | null;
+}
+
 const RISK_THRESHOLD = 10;
 
 function MiniTooltip({ active, payload, label }: any) {
@@ -235,6 +249,7 @@ export default function AbsencesPage() {
   const [absences, setAbsences]   = useState<AbsenceRow[]>([]);
   const [students, setStudents]   = useState<StudentRow[]>([]);
   const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
+  const [dailyStudentAttendance, setDailyStudentAttendance] = useState<DailyStudentAttendance[]>([]);
   const [annee, setAnnee]         = useState(DEFAULT_YEAR);
   const [trimestre, setTrimestre] = useState<string>("");
   const [loading, setLoading]     = useState(true);
@@ -243,20 +258,25 @@ export default function AbsencesPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [aRes, sRes, dRes] = await Promise.all([
+      const [aRes, sRes, dRes, studentAttendanceRes] = await Promise.all([
         fetch(`${BASE}api/absences?annee=${annee}`, { credentials: "include" }),
         fetch(`${BASE}api/students?annee=${annee}`, { credentials: "include" }),
         fetch(`${BASE}api/absences/daily`, { credentials: "include" }),
+        fetch(`${BASE}api/absences/daily-students`, { credentials: "include" }),
       ]);
       if (aRes.ok) setAbsences(await aRes.json());
       if (sRes.ok) { const d = await sRes.json(); setStudents(d.students ?? d); }
       if (dRes.ok) setDailyReports(await dRes.json());
+      if (studentAttendanceRes.ok) setDailyStudentAttendance(await studentAttendanceRes.json());
     } finally { setLoading(false); }
   }, [annee]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const studentMap = Object.fromEntries(students.map(s => [s.id, s]));
+  const dailyAbsenceReplies = dailyStudentAttendance
+    .filter(record => record.annee === annee && record.isAbsent)
+    .sort((a, b) => b.attendanceDate.localeCompare(a.attendanceDate));
   const filtered   = trimestre ? absences.filter(a => a.trimestre === parseInt(trimestre)) : absences;
 
   const totals: Record<string, { justified: number; unjustified: number; total: number }> = {};
@@ -357,6 +377,36 @@ export default function AbsencesPage() {
           <DailyTrendChart reports={dailyReports} />
         )}
       </motion.div>
+
+      <Card className="border-red-200/70 dark:border-red-900/50">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div>
+            <CardTitle className="text-sm">غيابات التلاميذ وردود الأولياء</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">سنة {annee}</p>
+          </div>
+          <Badge variant="secondary">{dailyAbsenceReplies.filter(record => record.parentAbsenceReason).length} رد</Badge>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {dailyAbsenceReplies.length === 0 ? (
+            <p className="rounded-lg border border-dashed p-5 text-center text-xs text-muted-foreground">لا توجد غيابات يومية مسجلة لهذه السنة.</p>
+          ) : dailyAbsenceReplies.map(record => (
+            <div key={record.id} className="grid gap-2 rounded-xl border bg-muted/20 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-bold">{record.studentName}</span>
+                  <Badge variant="outline" className="text-[10px]">{record.niveau} · {record.classe}</Badge>
+                  <span className="text-xs text-muted-foreground">{record.attendanceDate}</span>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">رد ولي الأمر</p>
+                <p className={`text-sm ${record.parentAbsenceReason ? "text-foreground" : "text-amber-600 dark:text-amber-400"}`}>
+                  {record.parentAbsenceReason || "لم يرسل ولي الأمر سبب الغياب بعد"}
+                </p>
+              </div>
+              {record.parentAbsenceReasonAt && <span className="text-[10px] text-muted-foreground">{new Date(record.parentAbsenceReasonAt).toLocaleString("ar-DZ")}</span>}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       {/* ── SECTION 2: Per-student absence tracker ─────────────────────────── */}
       <div className="space-y-4">
