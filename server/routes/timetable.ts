@@ -333,13 +333,13 @@ router.get("/timetable/classes", async (req, res): Promise<void> => {
   // A timetable can be prepared before students are imported, so include
   // classes from both the student register and existing timetable slots.
   const studentRows = await db
-    .selectDistinct({ classe: studentsTable.classe })
+    .selectDistinct({ niveau: studentsTable.niveau, classe: studentsTable.classe })
     .from(studentsTable)
     .where(and(
       eq(studentsTable.userId, req.user!.id),
       eq(studentsTable.annee, annee),
     ))
-    .orderBy(studentsTable.classe);
+    .orderBy(studentsTable.niveau, studentsTable.classe);
   const slotRows = await db
     .selectDistinct({ classe: timetableSlotsTable.classe })
     .from(timetableSlotsTable)
@@ -348,9 +348,16 @@ router.get("/timetable/classes", async (req, res): Promise<void> => {
       eq(timetableSlotsTable.annee, annee),
     ))
     .orderBy(timetableSlotsTable.classe);
-  const classes = [...new Set([...studentRows, ...slotRows]
-    .map(row => row.classe?.trim())
-    .filter((classe): classe is string => Boolean(classe)))].sort();
+  const normalizeClass = (niveau: string, classe: string) =>
+    new RegExp(`^${niveau}(?:[-_ ]|$)`, "i").test(classe) ? classe : `${niveau}-${classe}`;
+  const normalizedStudentClasses = studentRows
+    .map(row => ({ raw: row.classe?.trim(), normalized: row.classe?.trim() ? normalizeClass(row.niveau, row.classe.trim()) : "" }))
+    .filter(row => row.raw && row.normalized);
+  const knownRawClassNames = new Set(normalizedStudentClasses.map(row => row.raw));
+  const classes = [...new Set([
+    ...normalizedStudentClasses.map(row => row.normalized),
+    ...slotRows.map(row => row.classe?.trim()).filter((classe): classe is string => Boolean(classe) && !knownRawClassNames.has(classe)),
+  ])].sort();
   res.json(classes);
 });
 
