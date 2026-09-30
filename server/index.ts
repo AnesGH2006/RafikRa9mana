@@ -75,6 +75,8 @@ async function probeDb(attempt = 1): Promise<void> {
         annee varchar(20) NOT NULL DEFAULT '2025-2026',
         status varchar(100) NOT NULL,
         is_absent boolean NOT NULL,
+        parent_absence_reason varchar(500),
+        parent_absence_reason_at timestamptz,
         created_at timestamptz NOT NULL DEFAULT now()
       );
       CREATE UNIQUE INDEX IF NOT EXISTS "UQ_student_daily_attendance_user_student_date"
@@ -83,6 +85,8 @@ async function probeDb(attempt = 1): Promise<void> {
         ON student_daily_attendance(user_id, attendance_date);
     `);
     await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS annee varchar(20) NOT NULL DEFAULT '2025-2026'`);
+    await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS parent_absence_reason varchar(500)`);
+    await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS parent_absence_reason_at timestamptz`);
     // Repair names imported from combined Excel name columns before the parser fix.
     await db.execute(sql`UPDATE students SET nom_prenom = regexp_replace(nom_prenom, '^(.+)\\s+\\1$', '\\1') WHERE nom_prenom ~ '^(.+)\\s+\\1$'`);
     logger.info("Database connection verified");

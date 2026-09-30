@@ -14,7 +14,7 @@
 import { Router, type Request, type Response } from "express";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, schoolMembersTable, studentsTable, gradesTable, absencesTable, studentDailyAttendanceTable, schoolInfoTable } from "../../shared/db.js";
-import { getCachedJson, setCachedJson } from "../services/redisCache.js";
+import { deleteCachedJson, getCachedJson, setCachedJson } from "../services/redisCache.js";
 import { calcAnnualAvg, calcWeightedAvg, getSubjectsForLevel } from "../../shared/subjects.js";
 
 const router = Router();
@@ -158,7 +158,7 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   if (!linkedStudentId) { res.json({ student: null }); return; }
 
   const annee = String(req.query.annee ?? "2025-2026");
-  const cacheKey = `parent-feed:v4:${schoolUserId}:${linkedStudentId}:${annee}`;
+  const cacheKey = `parent-feed:v5:${schoolUserId}:${linkedStudentId}:${annee}`;
   const cached = await getCachedJson<Record<string, unknown>>(cacheKey);
   if (cached) {
     res.set("Cache-Control", "private, max-age=60");
@@ -194,6 +194,8 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
       annee: studentDailyAttendanceTable.annee,
       status: studentDailyAttendanceTable.status,
       isAbsent: studentDailyAttendanceTable.isAbsent,
+      parentAbsenceReason: studentDailyAttendanceTable.parentAbsenceReason,
+      parentAbsenceReasonAt: studentDailyAttendanceTable.parentAbsenceReasonAt,
     })
     .from(studentDailyAttendanceTable)
     .where(and(
@@ -272,6 +274,43 @@ router.get("/my-child", async (req: Request, res: Response): Promise<void> => {
   await setCachedJson(cacheKey, payload, 600);
   res.set("Cache-Control", "private, max-age=60");
   res.json(payload);
+});
+
+router.post("/my-child/absences/:id/reason", async (req: Request, res: Response): Promise<void> => {
+  if (!req.isAuthenticated() || req.memberContext?.role !== "parent") {
+    res.status(403).json({ error: "Parents only" });
+    return;
+  }
+  if (req.user!.subscriptionStatus !== "active") {
+    res.status(402).json({ error: "Parent service subscription required" });
+    return;
+  }
+
+  const { linkedStudentId, schoolUserId } = req.memberContext;
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+  if (!linkedStudentId || reason.length < 3 || reason.length > 500) {
+    res.status(400).json({ error: "Enter an absence reason between 3 and 500 characters" });
+    return;
+  }
+  const annee = typeof req.body?.annee === "string" ? req.body.annee : "2025-2026";
+
+  const [updatedAbsence] = await db.update(studentDailyAttendanceTable)
+    .set({ parentAbsenceReason: reason, parentAbsenceReasonAt: new Date() })
+    .where(and(
+      eq(studentDailyAttendanceTable.id, req.params.id!),
+      eq(studentDailyAttendanceTable.userId, schoolUserId),
+      eq(studentDailyAttendanceTable.studentId, linkedStudentId),
+      eq(studentDailyAttendanceTable.isAbsent, true),
+    ))
+    .returning({ id: studentDailyAttendanceTable.id, parentAbsenceReason: studentDailyAttendanceTable.parentAbsenceReason, parentAbsenceReasonAt: studentDailyAttendanceTable.parentAbsenceReasonAt });
+
+  if (!updatedAbsence) {
+    res.status(404).json({ error: "Absence record not found" });
+    return;
+  }
+
+  await deleteCachedJson(`parent-feed:v5:${schoolUserId}:${linkedStudentId}:${annee}`);
+  res.json({ success: true, ...updatedAbsence });
 });
 
 // ── GET /api/teacher/students ─────────────────────────────────────────────────

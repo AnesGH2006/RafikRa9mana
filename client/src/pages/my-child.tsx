@@ -32,7 +32,7 @@ interface StudentData {
   };
   grades: { id: string; studentId: string; annee: string; trimestre: number; subject: string; score: number; gradeType?: "general" | "continuous" | "test" | "exam" }[];
   absences: { id: string; studentId: string; annee: string; trimestre: number; justifiedHours: number; unjustifiedHours: number }[];
-  dailyAbsences?: { id: string; attendanceDate: string; status: string }[];
+  dailyAbsences?: { id: string; attendanceDate: string; status: string; parentAbsenceReason?: string | null; parentAbsenceReasonAt?: string | null }[];
   dailyAttendanceCount?: number;
   /** Pre-computed by the server using the same logic as /api/results (Ministry averages take precedence). */
   t1Avg: number | null;
@@ -75,6 +75,10 @@ export default function MyChildPage() {
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
+  const [termFilter, setTermFilter] = useState("all");
+  const [absenceReasonDrafts, setAbsenceReasonDrafts] = useState<Record<string, string>>({});
+  const [reasonSavingId, setReasonSavingId] = useState<string | null>(null);
+  const [reasonError, setReasonError] = useState("");
 
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
@@ -218,6 +222,42 @@ export default function MyChildPage() {
     requestAnimationFrame(() => document.getElementById(`parent-${tabId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
+  async function submitAbsenceReason(absenceId: string, savedReason?: string | null) {
+    const reason = (absenceReasonDrafts[absenceId] ?? savedReason ?? "").trim();
+    if (reason.length < 3) {
+      setReasonError("يرجى كتابة سبب الغياب (3 أحرف على الأقل).");
+      return;
+    }
+    setReasonSavingId(absenceId);
+    setReasonError("");
+    try {
+      const response = await fetch(`${BASE}api/my-child/absences/${encodeURIComponent(absenceId)}/reason`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason, annee }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "تعذر إرسال سبب الغياب");
+      setData(current => current ? {
+        ...current,
+        dailyAbsences: current.dailyAbsences?.map(absence => absence.id === absenceId
+          ? { ...absence, parentAbsenceReason: reason, parentAbsenceReasonAt: new Date().toISOString() }
+          : absence),
+      } : current);
+      setAbsenceReasonDrafts(current => ({ ...current, [absenceId]: reason }));
+    } catch (error) {
+      setReasonError(error instanceof Error ? error.message : "تعذر إرسال سبب الغياب");
+    } finally {
+      setReasonSavingId(null);
+    }
+  }
+
+  function getAbsenceTerm(date: string): number {
+    const month = new Date(`${date}T00:00:00`).getMonth() + 1;
+    return month >= 9 ? 1 : month <= 3 ? 2 : 3;
+  }
+
   const tabItems = [
     { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
     { id: "attendance", label: "الغيابات", icon: ClipboardCheck },
@@ -229,6 +269,12 @@ export default function MyChildPage() {
   const schoolName = data.school?.nom || "المؤسسة التعليمية";
   const absenceRecords = absences.filter(absence => absence.justifiedHours > 0 || absence.unjustifiedHours > 0);
   const dailyAbsences = data.dailyAbsences ?? [];
+  const visibleDailyAbsences = termFilter === "all"
+    ? dailyAbsences
+    : dailyAbsences.filter(absence => getAbsenceTerm(absence.attendanceDate) === Number(termFilter));
+  const visibleAbsenceRecords = termFilter === "all"
+    ? absenceRecords
+    : absenceRecords.filter(absence => String(absence.trimestre) === termFilter);
   const latestDailyAbsence = dailyAbsences[0];
   const latestAbsence = absenceRecords[absenceRecords.length - 1];
   const totalAbsenceHours = totalJustified + totalUnjustified;
@@ -331,10 +377,14 @@ export default function MyChildPage() {
           <section id="parent-attendance" className="scroll-mt-6 grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
             <div className="rounded-[26px] border border-white/10 bg-[#111a2c]/85 p-5 shadow-xl shadow-black/10 sm:p-6">
               <div className="mb-6 flex items-center justify-between"><div><p className="text-xs text-slate-500">تحديثات اليوم</p><h2 className="mt-1 text-xl font-bold text-white">سجل الحضور والغياب</h2></div><button onClick={() => selectTab("attendance")} className="flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200">كل السجلات <ChevronLeft className="h-4 w-4" /></button></div>
+              <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="تصفية الغيابات حسب الفصل">
+                {[{ value: "all", label: "كل الفصول" }, { value: "1", label: "الفصل الأول" }, { value: "2", label: "الفصل الثاني" }, { value: "3", label: "الفصل الثالث" }].map(term => <button key={term.value} type="button" aria-pressed={termFilter === term.value} onClick={() => setTermFilter(term.value)} className={`rounded-lg border px-3 py-2 text-xs transition ${termFilter === term.value ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200" : "border-white/10 text-slate-400 hover:bg-white/5 hover:text-white"}`}>{term.label}</button>)}
+              </div>
+              {reasonError && <p role="alert" className="mb-4 rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{reasonError}</p>}
               <div className="relative space-y-1 before:absolute before:right-[18px] before:top-5 before:h-[calc(100%-40px)] before:w-px before:bg-white/10">
-                  {absenceRecords.length === 0 && dailyAbsences.length === 0 ? <div className="relative flex gap-4 p-4"><div className="z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] bg-emerald-500/20 text-emerald-300"><CheckCircle2 className="h-4 w-4" /></div><div className="flex-1"><p className="text-sm font-bold text-white">لا توجد غيابات</p><p className="mt-1 text-xs text-slate-500">سجل الحضور خالٍ من الغيابات لهذا العام الدراسي</p></div></div> : <>
-                    {dailyAbsences.map(absence => <div key={`daily-${absence.id}`} className="relative flex gap-4 rounded-2xl border border-red-400/20 bg-red-500/[0.07] p-4"><div className="z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] bg-red-500 text-white"><CircleAlert className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><span className="rounded-md bg-red-400/15 px-2 py-1 text-[11px] font-bold text-red-300">غياب يومي</span><span className="text-[11px] text-slate-500">{new Date(`${absence.attendanceDate}T00:00:00`).toLocaleDateString("ar-DZ")}</span></div><p className="mt-3 text-sm font-bold text-white">{absence.status}</p></div></div>)}
-                    {absenceRecords.map(absence => <div key={absence.id} className={`relative flex gap-4 rounded-2xl p-4 ${absence.unjustifiedHours > 0 ? "border border-red-400/20 bg-red-500/[0.07]" : "border border-emerald-400/10 bg-emerald-500/[0.04]"}`}><div className={`z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] ${absence.unjustifiedHours > 0 ? "bg-red-500 text-white" : "bg-emerald-500/20 text-emerald-300"}`}>{absence.unjustifiedHours > 0 ? <CircleAlert className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><div><span className={`rounded-md px-2 py-1 text-[11px] font-bold ${absence.unjustifiedHours > 0 ? "bg-red-400/15 text-red-300" : "bg-emerald-400/15 text-emerald-300"}`}>{absence.unjustifiedHours > 0 ? "غياب غير مبرر" : "غياب مبرر"}</span><span className="mr-2 text-xs text-slate-500">{TRIMESTRE_LABELS[absence.trimestre]}</span></div><span className="text-[11px] text-slate-500">{absence.justifiedHours + absence.unjustifiedHours} ساعة</span></div><p className="mt-3 text-sm font-bold text-white">ملخص الغياب الفصلي</p><p className="mt-1 text-xs text-slate-400">{absence.justifiedHours} ساعة مبررة <span className="mx-1 text-slate-600">•</span> {absence.unjustifiedHours} ساعة غير مبررة</p></div></div>)}
+                  {visibleAbsenceRecords.length === 0 && visibleDailyAbsences.length === 0 ? <div className="relative flex gap-4 p-4"><div className="z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] bg-emerald-500/20 text-emerald-300"><CheckCircle2 className="h-4 w-4" /></div><div className="flex-1"><p className="text-sm font-bold text-white">لا توجد غيابات</p><p className="mt-1 text-xs text-slate-500">لا توجد غيابات مسجلة في الفصل المحدد</p></div></div> : <>
+                    {visibleDailyAbsences.map(absence => <div key={`daily-${absence.id}`} className="relative flex gap-4 rounded-2xl border border-red-400/20 bg-red-500/[0.07] p-4"><div className="z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] bg-red-500 text-white"><CircleAlert className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><span className="rounded-md bg-red-400/15 px-2 py-1 text-[11px] font-bold text-red-300">غياب يومي</span><span className="text-[11px] text-slate-500">{new Date(`${absence.attendanceDate}T00:00:00`).toLocaleDateString("ar-DZ")}</span></div><p className="mt-3 text-sm font-bold text-white">{absence.status}</p>{absence.parentAbsenceReason && <p className="mt-3 rounded-lg border border-cyan-400/15 bg-cyan-400/[0.05] px-3 py-2 text-xs text-cyan-100">رد ولي الأمر: {absence.parentAbsenceReason}</p>}<label className="mt-3 block text-xs text-slate-400" htmlFor={`absence-reason-${absence.id}`}>أرسل سبب الغياب للمدرسة</label><textarea id={`absence-reason-${absence.id}`} maxLength={500} value={absenceReasonDrafts[absence.id] ?? absence.parentAbsenceReason ?? ""} onChange={event => setAbsenceReasonDrafts(current => ({ ...current, [absence.id]: event.target.value }))} placeholder="مثال: كان مريضاً" className="mt-1 min-h-20 w-full resize-y rounded-lg border border-white/10 bg-black/10 p-3 text-sm text-white placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none" /><button type="button" disabled={reasonSavingId === absence.id} onClick={() => submitAbsenceReason(absence.id, absence.parentAbsenceReason)} className="mt-2 rounded-lg bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-200 transition hover:bg-cyan-500/25 disabled:opacity-50">{reasonSavingId === absence.id ? "جارٍ الإرسال…" : absence.parentAbsenceReason ? "تحديث الرد" : "إرسال سبب الغياب"}</button></div></div>)}
+                    {visibleAbsenceRecords.map(absence => <div key={absence.id} className={`relative flex gap-4 rounded-2xl p-4 ${absence.unjustifiedHours > 0 ? "border border-red-400/20 bg-red-500/[0.07]" : "border border-emerald-400/10 bg-emerald-500/[0.04]"}`}><div className={`z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-[#111a2c] ${absence.unjustifiedHours > 0 ? "bg-red-500 text-white" : "bg-emerald-500/20 text-emerald-300"}`}>{absence.unjustifiedHours > 0 ? <CircleAlert className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><div><span className={`rounded-md px-2 py-1 text-[11px] font-bold ${absence.unjustifiedHours > 0 ? "bg-red-400/15 text-red-300" : "bg-emerald-400/15 text-emerald-300"}`}>{absence.unjustifiedHours > 0 ? "غياب غير مبرر" : "غياب مبرر"}</span><span className="mr-2 text-xs text-slate-500">{TRIMESTRE_LABELS[absence.trimestre]}</span></div><span className="text-[11px] text-slate-500">{absence.justifiedHours + absence.unjustifiedHours} ساعة</span></div><p className="mt-3 text-sm font-bold text-white">ملخص الغياب الفصلي</p><p className="mt-1 text-xs text-slate-400">{absence.justifiedHours} ساعة مبررة <span className="mx-1 text-slate-600">•</span> {absence.unjustifiedHours} ساعة غير مبررة</p></div></div>)}
                   </>}
               </div>
             </div>

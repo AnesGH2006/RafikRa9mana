@@ -34,3 +34,13 @@ export async function setCachedJson(key: string, value: unknown, ttlSeconds = 60
     logger.warn({ error, key }, "Redis cache write failed");
   }
 }
+
+export async function deleteCachedJson(key: string): Promise<void> {
+  const redis = getClient();
+  if (!redis) return;
+  try {
+    await redis.del(key);
+  } catch (error) {
+    logger.warn({ error, key }, "Redis cache deletion failed");
+  }
+}

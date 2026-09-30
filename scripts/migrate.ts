@@ -112,6 +112,8 @@ async function migrate() {
       annee varchar(20) NOT NULL DEFAULT '2025-2026',
       status varchar(100) NOT NULL,
       is_absent boolean NOT NULL,
+      parent_absence_reason varchar(500),
+      parent_absence_reason_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE UNIQUE INDEX IF NOT EXISTS "UQ_student_daily_attendance_user_student_date"
@@ -121,6 +123,8 @@ async function migrate() {
   `);
 
   await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS annee varchar(20) NOT NULL DEFAULT '2025-2026'`);
+  await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS parent_absence_reason varchar(500)`);
+  await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS parent_absence_reason_at timestamptz`);
 
   await db.execute(sql`DO $$ BEGIN CREATE TYPE payment_status AS ENUM ('pending','paid','failed','refunded'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
   await db.execute(sql`DO $$ BEGIN CREATE TYPE payment_provider AS ENUM ('chargily','activation_code'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);

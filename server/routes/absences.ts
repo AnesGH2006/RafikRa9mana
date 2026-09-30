@@ -36,6 +36,8 @@ router.get("/absences/daily-students", async (req, res): Promise<void> => {
     niveau: studentsTable.niveau,
     classe: studentsTable.classe,
     attendanceDate: studentDailyAttendanceTable.attendanceDate,
+    parentAbsenceReason: studentDailyAttendanceTable.parentAbsenceReason,
+    parentAbsenceReasonAt: studentDailyAttendanceTable.parentAbsenceReasonAt,
     status: studentDailyAttendanceTable.status,
     isAbsent: studentDailyAttendanceTable.isAbsent,
   })

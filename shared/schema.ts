@@ -117,6 +117,8 @@ export const studentDailyAttendanceTable = pgTable("student_daily_attendance", {
   annee: varchar("annee", { length: 20 }).notNull().default("2025-2026"),
   status: varchar("status", { length: 100 }).notNull(),
   isAbsent: boolean("is_absent").notNull(),
+  parentAbsenceReason: varchar("parent_absence_reason", { length: 500 }),
+  parentAbsenceReasonAt: timestamp("parent_absence_reason_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("UQ_student_daily_attendance_user_student_date").on(table.userId, table.studentId, table.attendanceDate),
