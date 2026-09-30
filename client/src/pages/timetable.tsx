@@ -47,6 +47,13 @@ const CEM_SUBJECTS = [
   "الفيزياء", "اللغة الإنجليزية",
 ];
 
+const DEFAULT_WEEKLY_PERIODS: Record<string, Record<string, number>> = {
+  "1AM": { "اللغة العربية": 5, "اللغة الفرنسية": 4, "اللغة الإنجليزية": 2, "الرياضيات": 4, "العلوم الطبيعية": 2, "التربية الإسلامية": 1, "التاريخ والجغرافيا": 2, "التربية البدنية": 2, "اللغة الأمازيغية": 1, "الفنون": 1, "الموسيقى": 1, "التربية المدنية": 1, "الفيزياء": 2 },
+  "2AM": { "اللغة العربية": 5, "اللغة الفرنسية": 4, "اللغة الإنجليزية": 2, "الرياضيات": 4, "العلوم الطبيعية": 2, "التربية الإسلامية": 1, "التاريخ والجغرافيا": 2, "التربية البدنية": 2, "اللغة الأمازيغية": 1, "الفنون": 1, "الموسيقى": 1, "التربية المدنية": 1, "الفيزياء": 2 },
+  "3AM": { "اللغة العربية": 5, "اللغة الفرنسية": 4, "اللغة الإنجليزية": 3, "الرياضيات": 4, "العلوم الطبيعية": 2, "التربية الإسلامية": 1, "التاريخ والجغرافيا": 2, "التربية البدنية": 2, "اللغة الأمازيغية": 1, "الفنون": 1, "الموسيقى": 1, "التربية المدنية": 1, "الفيزياء": 2 },
+  "4AM": { "اللغة العربية": 5, "اللغة الفرنسية": 3, "اللغة الإنجليزية": 3, "الرياضيات": 5, "العلوم الطبيعية": 3, "التربية الإسلامية": 2, "التاريخ والجغرافيا": 3, "التربية البدنية": 2, "اللغة الأمازيغية": 1, "التربية المدنية": 1, "الفيزياء": 2 },
+};
+
 const parseClassList = (raw: string): string[] => {
   const cleaned = raw
     .replace(/[\r\n]+/g, " ")
@@ -170,7 +177,8 @@ function TimetableGeneratorPanel({ classes, subjects, roomIds, teachers, annee, 
       const next = { ...current };
       for (const level of levels) {
         const existing = next[level] ?? {};
-        next[level] = Object.fromEntries(subjects.map(s => [s, existing[s] ?? 0]));
+        const curriculum = DEFAULT_WEEKLY_PERIODS[level] ?? {};
+        next[level] = Object.fromEntries(subjects.map(s => [s, existing[s] ?? curriculum[s] ?? 0]));
       }
       return next;
     });
@@ -515,6 +523,7 @@ export default function TimetablePage() {
   const [annee,       setAnnee]       = useState("2025-2026");
   const [activeClasse, setActiveClasse] = useState("");
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [quickGenerating, setQuickGenerating] = useState(false);
 
   // Loading
   const [loadingTeachers, setLoadingTeachers] = useState(false);
@@ -574,6 +583,68 @@ export default function TimetablePage() {
       }
     } finally { setLoadingSlots(false); }
   }, [annee, activeClasse]);
+
+  const generateAllTimetables = async () => {
+    if (!classes.length) return;
+    const unsupportedClasses = classes.filter(classe => !DEFAULT_WEEKLY_PERIODS[getLevel(classe)]);
+    if (unsupportedClasses.length > 0) {
+      toast({
+        title: "تحتاج هذه الأقسام إلى منهاج مخصص",
+        description: `التوليد السريع يدعم 1AM إلى 4AM فقط. استخدم تخصيص التوليد للأقسام: ${unsupportedClasses.join("، ")}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const existingResponse = await fetch(`${BASE}api/timetable/slots?annee=${encodeURIComponent(annee)}`, { credentials: "include" });
+      const existingSlots: Slot[] = existingResponse.ok ? await existingResponse.json() : [];
+      if (existingSlots.length > 0 && !window.confirm(`سيتم استبدال ${existingSlots.length} حصة موجودة في جداول سنة ${annee}. هل تريد المتابعة؟`)) return;
+
+      const classesPayload = classes.map(classe => {
+        const level = getLevel(classe);
+        const curriculum = DEFAULT_WEEKLY_PERIODS[level]!;
+        return {
+          classe,
+          subjects: Object.entries(curriculum).map(([subject, periods]) => ({
+            subject,
+            periods,
+            teacherId: teachers.find(teacher => teacher.subjects.includes(subject))?.id ?? null,
+          })),
+        };
+      });
+      const unassignedLessons = classesPayload.reduce((count, entry) =>
+        count + entry.subjects.filter(subject => !subject.teacherId).length,
+      0);
+
+      setQuickGenerating(true);
+      const response = await fetch(`${BASE}api/timetable/generate`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          annee,
+          classes: classesPayload,
+          roomIds: rooms.map(room => room.id),
+          replace: true,
+          rules: { workingDays: [0, 1, 2, 3, 4], periodsPerDay: 6, maxDailyPeriodsPerClass: 6, avoidConsecutiveSameSubject: true },
+        }),
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string; generated?: Slot[]; unscheduled?: unknown[] };
+      if (!response.ok && response.status !== 207) throw new Error(result.error ?? "تعذر توليد الجداول");
+      const unscheduledCount = result.unscheduled?.length ?? 0;
+      toast({
+        title: unscheduledCount ? "تم التوليد مع حصص غير مجدولة" : "تم توليد الجداول",
+        description: `تم إنشاء ${result.generated?.length ?? 0} حصة لـ ${classes.length} قسم${unscheduledCount ? `، وتعذر جدولة ${unscheduledCount} حصة بسبب القيود` : ""}${unassignedLessons ? `، وهناك ${unassignedLessons} نوع مادة بلا أستاذ مطابق` : ""}. راجع الجدول وأكمل التعديلات عند الحاجة.`,
+        variant: unscheduledCount ? "destructive" : "default",
+      });
+      await fetchClasses();
+      await fetchSlots();
+    } catch (error) {
+      toast({ title: "فشل توليد الجداول", description: error instanceof Error ? error.message : "تعذر الاتصال بالخادم", variant: "destructive" });
+    } finally {
+      setQuickGenerating(false);
+    }
+  };
 
   useEffect(() => { fetchTeachers(); fetchRooms(); fetchClasses(); }, []);
   useEffect(() => { fetchClasses(); }, [annee]);
@@ -675,9 +746,15 @@ export default function TimetablePage() {
                   {cls}
                 </motion.button>
               ))}
-              <Button size="sm" onClick={() => setGeneratorOpen(true)} className="ms-auto gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-0">
-                <Wand2 className="w-4 h-4" /> توليد حسب الشروط
-              </Button>
+              <div className="ms-auto flex flex-wrap gap-2">
+                <Button size="sm" onClick={generateAllTimetables} disabled={quickGenerating || loadingTeachers || loadingRooms} className="gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-0">
+                  {quickGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                  {quickGenerating ? "جارٍ توليد كل الأقسام…" : "توليد كل الجداول بضغطة"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setGeneratorOpen(true)} className="gap-2">
+                  <Calendar className="w-4 h-4" /> تخصيص التوليد
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 text-amber-700 dark:text-amber-400 text-sm flex items-center gap-2">
