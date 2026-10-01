@@ -4,10 +4,12 @@ export interface StudentCellPayload {
   student_id: string | number;
   name?: string;
   value: string | number | boolean | null;
+  values?: Record<string, string | number | boolean | null>;
 }
 
 export interface ExcelInjectionOptions {
-  targetColumn: string | number;
+  targetColumn?: string | number;
+  targetColumns?: Record<string, string | number>;
   worksheetName?: string;
   studentIdHeader?: string;
   headerRow?: number;
@@ -107,7 +109,7 @@ export async function injectStudentValuesIntoWorkbook(
     throw new Error(`Template exceeds the ${maxTemplateBytes}-byte processing limit`);
   }
   if (!Array.isArray(students)) throw new Error("Student payload must be an array");
-  if (typeof options.targetColumn !== "string" && (!Number.isInteger(options.targetColumn) || options.targetColumn < 1)) {
+  if (!options.targetColumns && typeof options.targetColumn !== "string" && (!Number.isInteger(options.targetColumn) || options.targetColumn < 1)) {
     throw new Error("targetColumn must be a header name or a 1-based column number");
   }
 
@@ -128,10 +130,12 @@ export async function injectStudentValuesIntoWorkbook(
   }
 
   const idColumn = findHeaderColumn(worksheet, headerRow, options.studentIdHeader ?? "Matricule");
-  const targetColumn = typeof options.targetColumn === "number"
-    ? options.targetColumn
-    : findHeaderColumn(worksheet, headerRow, options.targetColumn);
-  if (targetColumn === idColumn) throw new Error("The target column cannot be the Matricule column");
+  const requestedTargets = options.targetColumns ?? { value: options.targetColumn };
+  const resolvedTargets = Object.fromEntries(Object.entries(requestedTargets).map(([field, column]) => [
+    field,
+    typeof column === "number" ? column : findHeaderColumn(worksheet, headerRow, column),
+  ]));
+  if (Object.values(resolvedTargets).some(column => column === idColumn)) throw new Error("The target column cannot be the Matricule column");
 
   const rowsByStudentId = new Map<string, ExcelJS.Row[]>();
   for (let rowNumber = dataStartRow; rowNumber <= worksheet.rowCount; rowNumber += 1) {
@@ -158,9 +162,12 @@ export async function injectStudentValuesIntoWorkbook(
       skipped.push({ index, student_id: displayId, reason: "invalid_student_id", detail: "Student ID is empty" });
       continue;
     }
-    const validValue = student.value === null || typeof student.value === "string" || typeof student.value === "boolean" ||
-      (typeof student.value === "number" && Number.isFinite(student.value));
-    if (!validValue) {
+    const values = { value: student.value, ...(student.values ?? {}) };
+    const invalidValue = Object.entries(values).some(([, value]) =>
+      value !== null && typeof value !== "string" && typeof value !== "boolean" &&
+      !(typeof value === "number" && Number.isFinite(value)),
+    );
+    if (invalidValue) {
       skipped.push({ index, student_id: displayId, reason: "invalid_value", detail: "Value must be a finite number, string, boolean, or null" });
       continue;
     }
@@ -180,24 +187,61 @@ export async function injectStudentValuesIntoWorkbook(
       continue;
     }
 
-    const targetCell = matchingRows[0]!.getCell(targetColumn);
-    if (targetCell.isMerged) {
-      skipped.push({ index, student_id: displayId, reason: "merged_target_cell", detail: `Target cell ${targetCell.address} is part of a merged range` });
-      continue;
+    for (const [field, value] of Object.entries(values)) {
+      if (value === undefined || !(field in resolvedTargets)) continue;
+      const targetCell = matchingRows[0]!.getCell(resolvedTargets[field]!);
+      if (targetCell.isMerged) {
+        skipped.push({ index, student_id: displayId, reason: "merged_target_cell", detail: `${field}: ${targetCell.address} is part of a merged range` });
+        continue;
+      }
+      if (isFormulaCell(targetCell)) {
+        skipped.push({ index, student_id: displayId, reason: "formula_target_cell", detail: `${field}: ${targetCell.address} contains a formula` });
+        continue;
+      }
+      if (!options.overwriteExisting && hasExistingValue(targetCell)) {
+        skipped.push({ index, student_id: displayId, reason: "existing_target_value", detail: `${field}: ${targetCell.address} already contains a value` });
+        continue;
+      }
+      targetCell.value = value;
+      updated += 1;
     }
-    if (isFormulaCell(targetCell)) {
-      skipped.push({ index, student_id: displayId, reason: "formula_target_cell", detail: `Target cell ${targetCell.address} contains a formula` });
-      continue;
-    }
-    if (!options.overwriteExisting && hasExistingValue(targetCell)) {
-      skipped.push({ index, student_id: displayId, reason: "existing_target_value", detail: `Target cell ${targetCell.address} already contains a value` });
-      continue;
-    }
-
-    targetCell.value = student.value;
-    updated += 1;
   }
 
   const output = await workbook.xlsx.writeBuffer();
   return { buffer: Buffer.from(output), worksheetName: worksheet.name, updated, skipped };
+}
+
+export interface ExcelTemplateInspection {
+  worksheetNames: string[];
+  worksheetName: string;
+  headers: string[];
+  rows: Array<{ rowNumber: number; studentId: string; name: string }>;
+}
+
+export async function inspectExcelTemplate(template: Buffer | Uint8Array, options: {
+  worksheetName?: string;
+  headerRow?: number;
+  dataStartRow?: number;
+  studentIdHeader?: string;
+} = {}): Promise<ExcelTemplateInspection> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(Buffer.from(template));
+  const worksheet = options.worksheetName ? workbook.getWorksheet(options.worksheetName) : workbook.worksheets[0];
+  if (!worksheet) throw new Error("Worksheet was not found");
+  const headerRow = options.headerRow ?? 1;
+  const dataStartRow = options.dataStartRow ?? headerRow + 1;
+  const headerCells = worksheet.getRow(headerRow);
+  const headers = Array.from({ length: headerCells.cellCount }, (_, index) => cellDisplayText(headerCells.getCell(index + 1))).filter(Boolean);
+  let idColumn: number;
+  try { idColumn = findHeaderColumn(worksheet, headerRow, options.studentIdHeader ?? "Matricule"); } catch { idColumn = 0; }
+  const nameColumn = headers.findIndex(header => /name|nom|اسم/i.test(header)) + 1;
+  const rows: ExcelTemplateInspection["rows"] = [];
+  if (idColumn > 0) {
+    for (let rowNumber = dataStartRow; rowNumber <= Math.min(worksheet.rowCount, dataStartRow + 199); rowNumber += 1) {
+      const row = worksheet.getRow(rowNumber);
+      const studentId = normalizeStudentId(cellDisplayText(row.getCell(idColumn)));
+      if (studentId) rows.push({ rowNumber, studentId, name: nameColumn > 0 ? cellDisplayText(row.getCell(nameColumn)) : "" });
+    }
+  }
+  return { worksheetNames: workbook.worksheets.map(sheet => sheet.name), worksheetName: worksheet.name, headers, rows };
 }
