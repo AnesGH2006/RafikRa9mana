@@ -16,6 +16,9 @@ onlyBuiltDependencies:
   - msw
   - unrs-resolver
 
+ignoredOptionalDependencies:
+  - msgpackr-extract
+
 overrides:
   "esbuild>@esbuild/darwin-arm64": "-"
   "esbuild>@esbuild/darwin-x64": "-"
