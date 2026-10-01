@@ -27,6 +27,7 @@ import smsBroadcastRouter from "./smsBroadcast.js";
 import qrScannerRouter from "./qrScanner.js";
 import aiSettingsRouter from "./ai-settings.js";
 import paymentsRouter from "./payments.js";
+import excelInjectionRouter from "./excel-injection.js";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(smsBroadcastRouter);
 router.use(qrScannerRouter);
 router.use(aiSettingsRouter);
 router.use(paymentsRouter);
+router.use(excelInjectionRouter);
 
 export default router;

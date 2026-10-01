@@ -65,6 +65,7 @@ import PaymentDemoPage from "@/pages/payment-demo";
 import AuditLogPage from "@/pages/audit-log";
 import ClassBalancerPage from "@/pages/class-balancer";
 import TimetablePage from "@/pages/timetable";
+import ExcelInjectionPage from "@/pages/excel-injection";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface NavItemDef {
   href: string;
@@ -162,6 +163,7 @@ const SECTIONS: SectionDef[] = [
     color: "text-sky-400", gradient: "from-sky-500 to-cyan-700",
     items: [
       { href: "/import",            icon: FileSpreadsheet, labelKey: "nav.import"       },
+      { href: "/excel-injection",   icon: FileSpreadsheet, labelKey: "nav.excel_injection" },
       { href: "/upload-grades-ocr", icon: ScanLine,        labelKey: "nav.ocr_upload"  },
       { href: "/archive",           icon: Archive,          labelKey: "nav.archive"     },
       { href: "/sms",      icon: MessageSquare,    labelKey: "nav.sms"      },
@@ -824,6 +826,7 @@ function AppLayout() {
               <Route path="/orientation">{() => <ComingSoon title="التوجيه النهائي" />}</Route>
               <Route path="/assistant"           component={AssistantPage} />
               <Route path="/import"              component={ImportPage} />
+              <Route path="/excel-injection"     component={ExcelInjectionPage} />
               <Route path="/archive"            component={ArchivePage} />
               <Route path="/sms"                component={SmsPage} />
               <Route path="/scan-qr"            component={ScanQrPage} />

@@ -44,6 +44,7 @@ export const translations: TranslationMap = {
   "nav.transfer_results": { en: "Remedial Results",     ar: "نتائج المنتقلين بالاستدراك", fr: "Rés. redoublement" },
   "nav.councils":         { en: "Class Councils",       ar: "مجالس الأقسام",            fr: "Conseils de classe" },
   "nav.import":           { en: "Import Data",          ar: "استيراد البيانات",          fr: "Importer des données" },
+  "nav.excel_injection":  { en: "Excel Data Injection",  ar: "حقن البيانات في Excel",      fr: "Injection Excel" },
   "nav.archive":      { en: "Archive",         ar: "أرشفة البيانات",  fr: "Archivage" },
   "nav.settings":     { en: "School Info",     ar: "معلومات المؤسسة", fr: "Infos établissement" },
   "nav.account":      { en: "Account",         ar: "معلومات الحساب",  fr: "Compte" },
