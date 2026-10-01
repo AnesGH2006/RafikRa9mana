@@ -39,6 +39,7 @@ export interface ExcelInjectionResult {
   buffer: Buffer;
   worksheetName: string;
   updated: number;
+  updatedStudents: number;
   skipped: ExcelInjectionSkip[];
 }
 
@@ -109,12 +110,12 @@ export async function injectStudentValuesIntoWorkbook(
     throw new Error(`Template exceeds the ${maxTemplateBytes}-byte processing limit`);
   }
   if (!Array.isArray(students)) throw new Error("Student payload must be an array");
-  if (!options.targetColumns && typeof options.targetColumn !== "string" && (!Number.isInteger(options.targetColumn) || options.targetColumn < 1)) {
+  if (!options.targetColumns && (options.targetColumn === undefined || (typeof options.targetColumn !== "string" && (!Number.isInteger(options.targetColumn) || options.targetColumn < 1)))) {
     throw new Error("targetColumn must be a header name or a 1-based column number");
   }
 
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(Buffer.from(template));
+  await workbook.xlsx.load(Buffer.from(template) as unknown as Buffer);
 
   const worksheet = options.worksheetName
     ? workbook.getWorksheet(options.worksheetName)
@@ -130,7 +131,7 @@ export async function injectStudentValuesIntoWorkbook(
   }
 
   const idColumn = findHeaderColumn(worksheet, headerRow, options.studentIdHeader ?? "Matricule");
-  const requestedTargets = options.targetColumns ?? { value: options.targetColumn };
+  const requestedTargets = options.targetColumns ?? { value: options.targetColumn! };
   const resolvedTargets = Object.fromEntries(Object.entries(requestedTargets).map(([field, column]) => [
     field,
     typeof column === "number" ? column : findHeaderColumn(worksheet, headerRow, column),
@@ -150,6 +151,7 @@ export async function injectStudentValuesIntoWorkbook(
   const skipped: ExcelInjectionSkip[] = [];
   const seenPayloadIds = new Set<string>();
   let updated = 0;
+  let updatedStudents = 0;
 
   for (const [index, student] of students.entries()) {
     if (!student || typeof student !== "object") {
@@ -187,6 +189,7 @@ export async function injectStudentValuesIntoWorkbook(
       continue;
     }
 
+    let studentWasUpdated = false;
     for (const [field, value] of Object.entries(values)) {
       if (value === undefined || !(field in resolvedTargets)) continue;
       const targetCell = matchingRows[0]!.getCell(resolvedTargets[field]!);
@@ -204,17 +207,20 @@ export async function injectStudentValuesIntoWorkbook(
       }
       targetCell.value = value;
       updated += 1;
+      studentWasUpdated = true;
     }
+    if (studentWasUpdated) updatedStudents += 1;
   }
 
   const output = await workbook.xlsx.writeBuffer();
-  return { buffer: Buffer.from(output), worksheetName: worksheet.name, updated, skipped };
+  return { buffer: Buffer.from(output), worksheetName: worksheet.name, updated, updatedStudents, skipped };
 }
 
 export interface ExcelTemplateInspection {
   worksheetNames: string[];
   worksheetName: string;
   headers: string[];
+  studentIdHeader: string | null;
   rows: Array<{ rowNumber: number; studentId: string; name: string }>;
 }
 
@@ -225,15 +231,26 @@ export async function inspectExcelTemplate(template: Buffer | Uint8Array, option
   studentIdHeader?: string;
 } = {}): Promise<ExcelTemplateInspection> {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(Buffer.from(template));
+  await workbook.xlsx.load(Buffer.from(template) as unknown as Buffer);
   const worksheet = options.worksheetName ? workbook.getWorksheet(options.worksheetName) : workbook.worksheets[0];
   if (!worksheet) throw new Error("Worksheet was not found");
   const headerRow = options.headerRow ?? 1;
   const dataStartRow = options.dataStartRow ?? headerRow + 1;
   const headerCells = worksheet.getRow(headerRow);
   const headers = Array.from({ length: headerCells.cellCount }, (_, index) => cellDisplayText(headerCells.getCell(index + 1))).filter(Boolean);
-  let idColumn: number;
-  try { idColumn = findHeaderColumn(worksheet, headerRow, options.studentIdHeader ?? "Matricule"); } catch { idColumn = 0; }
+  let idColumn = 0;
+  if (options.studentIdHeader) {
+    try { idColumn = findHeaderColumn(worksheet, headerRow, options.studentIdHeader); } catch { idColumn = 0; }
+  }
+  if (!idColumn) {
+    const headerRowValues = worksheet.getRow(headerRow);
+    for (let column = 1; column <= headerRowValues.cellCount; column += 1) {
+      if (/matricule|student\s*id|رقم\s*(التسجيل|التلميذ|التعريف)|المعرف|الرقم\s*المدرسي/i.test(normalizeText(cellDisplayText(headerRowValues.getCell(column))))) {
+        idColumn = column;
+        break;
+      }
+    }
+  }
   const nameColumn = headers.findIndex(header => /name|nom|اسم/i.test(header)) + 1;
   const rows: ExcelTemplateInspection["rows"] = [];
   if (idColumn > 0) {
@@ -243,5 +260,5 @@ export async function inspectExcelTemplate(template: Buffer | Uint8Array, option
       if (studentId) rows.push({ rowNumber, studentId, name: nameColumn > 0 ? cellDisplayText(row.getCell(nameColumn)) : "" });
     }
   }
-  return { worksheetNames: workbook.worksheets.map(sheet => sheet.name), worksheetName: worksheet.name, headers, rows };
+  return { worksheetNames: workbook.worksheets.map(sheet => sheet.name), worksheetName: worksheet.name, headers, studentIdHeader: idColumn ? cellDisplayText(worksheet.getRow(headerRow).getCell(idColumn)) : null, rows };
 }

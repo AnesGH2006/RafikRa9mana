@@ -8,7 +8,7 @@ test("injects matched values while preserving template formatting, formulas, mer
   const worksheet = source.addWorksheet("Grades");
   worksheet.mergeCells("A1:D1");
   worksheet.getCell("A1").value = "Annual grades";
-  worksheet.getRow(2).values = ["Matricule", "Student name", "Exam score", "Double"];
+  worksheet.getRow(2).values = ["Matricule", "Student name", "Exam score", "Double", "Absences"];
   worksheet.getCell("A3").value = "2023001";
   worksheet.getCell("B3").value = "Aymen Benali";
   worksheet.getCell("C3").value = null;
@@ -20,29 +20,30 @@ test("injects matched values while preserving template formatting, formulas, mer
   worksheet.getCell("A5").value = "2023003";
   worksheet.mergeCells("C5:D5");
   worksheet.getColumn(3).width = 18;
-  worksheet.pageSetup.printArea = "A1:D5";
+  worksheet.pageSetup.printArea = "A1:E5";
 
   const originalBuffer = Buffer.from(await source.xlsx.writeBuffer());
   const baseline = new ExcelJS.Workbook();
-  await baseline.xlsx.load(originalBuffer);
+  await baseline.xlsx.load(originalBuffer as unknown as Buffer);
   const baselineSheet = baseline.getWorksheet("Grades")!;
   const originalStyle = structuredClone(baselineSheet.getCell("C3").style);
   const originalFormula = structuredClone(baselineSheet.getCell("D3").value);
   const originalMerges = [...baselineSheet.model.merges];
 
   const result = await injectStudentValuesIntoWorkbook(originalBuffer, [
-    { student_id: "2023001", name: "Aymen Benali", value: 15.5 },
+    { student_id: "2023001", name: "Aymen Benali", value: 15.5, values: { absences: 2 } },
     { student_id: "2023002", name: "Sarah Mansouri", value: 18 },
     { student_id: "2023003", name: "Merged target", value: 11 },
     { student_id: "2023001", name: "Duplicate payload", value: 12 },
     { student_id: "missing", name: "Unknown", value: 8 },
-  ], { worksheetName: "Grades", headerRow: 2, targetColumn: "Exam score" });
+  ], { worksheetName: "Grades", headerRow: 2, targetColumns: { value: "Exam score", absences: "Absences" } });
 
   const output = new ExcelJS.Workbook();
-  await output.xlsx.load(result.buffer);
+  await output.xlsx.load(result.buffer as unknown as Buffer);
   const outputSheet = output.getWorksheet("Grades")!;
 
-  assert.equal(result.updated, 1);
+  assert.equal(result.updated, 2);
+  assert.equal(result.updatedStudents, 1);
   assert.deepEqual(result.skipped.map(item => item.reason), [
     "formula_target_cell",
     "merged_target_cell",
@@ -50,13 +51,14 @@ test("injects matched values while preserving template formatting, formulas, mer
     "student_not_found",
   ]);
   assert.equal(outputSheet.getCell("C3").value, 15.5);
+  assert.equal(outputSheet.getCell("E3").value, 2);
   assert.deepEqual(outputSheet.getCell("C3").style, originalStyle);
   assert.deepEqual(outputSheet.getCell("D3").value, originalFormula);
   assert.deepEqual(outputSheet.model.merges, originalMerges);
   assert.equal(outputSheet.getColumn(3).width, 18);
-  assert.equal(outputSheet.pageSetup.printArea, "A1:D5");
+  assert.equal(outputSheet.pageSetup.printArea, "A1:E5");
 
   const untouchedSource = new ExcelJS.Workbook();
-  await untouchedSource.xlsx.load(originalBuffer);
+  await untouchedSource.xlsx.load(originalBuffer as unknown as Buffer);
   assert.equal(untouchedSource.getWorksheet("Grades")!.getCell("C3").value, null);
 });

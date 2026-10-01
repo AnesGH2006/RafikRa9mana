@@ -297,7 +297,7 @@ router.post("/my-child/absences/:id/reason", async (req: Request, res: Response)
   const [updatedAbsence] = await db.update(studentDailyAttendanceTable)
     .set({ parentAbsenceReason: reason, parentAbsenceReasonAt: new Date() })
     .where(and(
-      eq(studentDailyAttendanceTable.id, req.params.id!),
+      eq(studentDailyAttendanceTable.id, String(req.params.id)),
       eq(studentDailyAttendanceTable.userId, schoolUserId),
       eq(studentDailyAttendanceTable.studentId, linkedStudentId),
       eq(studentDailyAttendanceTable.isAbsent, true),
