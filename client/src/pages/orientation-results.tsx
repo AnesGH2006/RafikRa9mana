@@ -4,6 +4,7 @@ import { Compass, GraduationCap, Users, BarChart3, FlaskConical, BookOpen, Chevr
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import OrientationCaseCalculator from "@/components/orientation-case-calculator";
 import type { StudentResult } from "@shared/types";
 import {
   BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -326,6 +327,8 @@ export default function OrientationResultsPage() {
           تلاميذ السنة الرابعة الناجحون — مع نقاط مواد كل شعبة
         </p>
       </motion.div>
+
+      <OrientationCaseCalculator />
 
       <Card>
         <CardHeader className="pb-3">
