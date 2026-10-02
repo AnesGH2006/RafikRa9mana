@@ -6,19 +6,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { CircleArrowRight, Printer, Users, GraduationCap } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { allocateFourAMStreams, getFourAMCapacities } from "@/lib/4am-stream-allocation";
+import { useOrientationWishes } from "@/hooks/use-orientation-wishes";
 import type { StudentResult } from "@shared/types";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 
 const TRACKS = [
-  { label: "جذع مشترك علوم وتكنولوجيا", color: "from-blue-500 to-blue-700", badge: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300", pie: "#3b82f6", minAvg: 13 },
-  { label: "جذع مشترك آداب", color: "from-violet-500 to-purple-700", badge: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300", pie: "#8b5cf6", minAvg: 10 },
+  { key: "science", label: "جذع مشترك علوم وتكنولوجيا", color: "from-blue-500 to-blue-700", badge: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300", pie: "#3b82f6" },
+  { key: "arts", label: "جذع مشترك آداب", color: "from-violet-500 to-purple-700", badge: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300", pie: "#8b5cf6" },
 ];
 
-function getTrack(avg: number | null) {
-  if (avg === null) return null;
-  return TRACKS.find(t => avg >= t.minAvg) ?? TRACKS[TRACKS.length - 1];
+function getTrack(stream: "science" | "arts" | undefined) {
+  return TRACKS.find(track => track.key === stream) ?? null;
 }
 
 function MiniTooltip({ active, payload }: any) {
@@ -46,19 +47,21 @@ export default function PreOrientFirstPage() {
 
   useEffect(() => { fetchData(year); localStorage.setItem("cem-selected-year", year); }, [year, fetchData]);
 
+  const wishes = useOrientationWishes(year);
+  const assignedStreams = allocateFourAMStreams(results, getFourAMCapacities(year), wishes);
   const eligible = results
-    .filter(r => r.annualAvg !== null && r.annualAvg >= 10)
+    .filter(r => assignedStreams.has(r.student.id))
     .sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
 
   const byTrack = TRACKS.map(t => ({
     ...t,
-    students: eligible.filter(r => getTrack(r.annualAvg)?.label === t.label),
+    students: eligible.filter(r => assignedStreams.get(r.student.id) === t.key),
   })).filter(t => t.students.length > 0);
 
   const pieData = byTrack.map(t => ({ name: t.label, value: t.students.length, fill: t.pie }));
 
   const displayStudents = activeTrack
-    ? eligible.filter(r => getTrack(r.annualAvg)?.label === activeTrack)
+    ? eligible.filter(r => getTrack(assignedStreams.get(r.student.id))?.label === activeTrack)
     : eligible;
 
   return (
@@ -73,7 +76,7 @@ export default function PreOrientFirstPage() {
             </span>
             التوجيه المسبق الأول
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5 ms-11">توزيع تلاميذ 4AM على المسارات — الدورة الأولى</p>
+          <p className="text-xs text-muted-foreground mt-0.5 ms-11">توزيع تلاميذ 4AM الناجحين حسب المعدل العلمي الموزون وسعة المقاعد</p>
         </div>
         <div className="flex items-center gap-2 no-print">
           <Select value={year} onValueChange={setYear}>
@@ -176,7 +179,7 @@ export default function PreOrientFirstPage() {
                 </thead>
                 <tbody>
                   {displayStudents.map((r, i) => {
-                    const track = getTrack(r.annualAvg);
+                    const track = getTrack(assignedStreams.get(r.student.id));
                     return (
                       <motion.tr key={r.student.id}
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.01 }}

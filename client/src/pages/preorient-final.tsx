@@ -5,19 +5,20 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Trophy, Printer, CheckCircle2, Users, GraduationCap } from "lucide-react";
+import { allocateFourAMStreams, getFourAMCapacities } from "@/lib/4am-stream-allocation";
+import { useOrientationWishes } from "@/hooks/use-orientation-wishes";
 import type { StudentResult } from "@shared/types";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 
 const TRACKS = [
-  { label: "جذع مشترك علوم وتكنولوجيا", badge: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300", gradient: "from-blue-600 to-blue-800", minAvg: 13 },
-  { label: "جذع مشترك آداب", badge: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300", gradient: "from-violet-600 to-purple-800", minAvg: 10 },
+  { key: "science", label: "جذع مشترك علوم وتكنولوجيا", badge: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300", gradient: "from-blue-600 to-blue-800" },
+  { key: "arts", label: "جذع مشترك آداب", badge: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300", gradient: "from-violet-600 to-purple-800" },
 ];
 
-function getTrack(avg: number | null) {
-  if (avg === null) return null;
-  return TRACKS.find(t => avg >= t.minAvg) ?? TRACKS[TRACKS.length - 1];
+function getTrack(stream: "science" | "arts" | undefined) {
+  return TRACKS.find(track => track.key === stream) ?? null;
 }
 
 export default function PreOrientFinalPage() {
@@ -36,18 +37,20 @@ export default function PreOrientFinalPage() {
 
   useEffect(() => { fetchData(year); localStorage.setItem("cem-selected-year", year); }, [year, fetchData]);
 
+  const wishes = useOrientationWishes(year);
+  const assignedStreams = allocateFourAMStreams(results, getFourAMCapacities(year), wishes);
   const eligible = results
-    .filter(r => r.annualAvg !== null && r.annualAvg >= 10)
+    .filter(r => assignedStreams.has(r.student.id))
     .sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
 
   const byTrack = TRACKS.map(t => ({
     ...t,
-    students: eligible.filter(r => getTrack(r.annualAvg)?.label === t.label),
+    students: eligible.filter(r => assignedStreams.get(r.student.id) === t.key),
   }));
 
   const displayStudents = activeTab === "all"
     ? eligible
-    : eligible.filter(r => getTrack(r.annualAvg)?.label === activeTab);
+    : eligible.filter(r => getTrack(assignedStreams.get(r.student.id))?.label === activeTab);
 
   const today = new Date().toLocaleDateString("ar-DZ", { year: "numeric", month: "long", day: "numeric" });
 
@@ -64,7 +67,7 @@ export default function PreOrientFinalPage() {
             </span>
             التوجيه النهائي
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5 ms-11">القائمة النهائية المعتمدة للتوجيه — {year}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 ms-11">توزيع مقترح حسب المعدل الموزون وسعة المقاعد — {year}</p>
         </div>
         <div className="flex items-center gap-2 no-print">
           <Select value={year} onValueChange={setYear}>
@@ -155,7 +158,7 @@ export default function PreOrientFinalPage() {
                 </thead>
                 <tbody>
                   {displayStudents.map((r, i) => {
-                    const track = getTrack(r.annualAvg);
+                    const track = getTrack(assignedStreams.get(r.student.id));
                     return (
                       <motion.tr key={r.student.id}
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.01 }}

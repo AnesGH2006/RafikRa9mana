@@ -27,31 +27,27 @@ export interface OrientationAssessment {
   finalAverage: number | null;
   passedToSecondary: boolean | null;
   scienceAverage: number;
+  weightedScienceScore: number;
   artsAverage: number;
-  estimatedScienceEligible: boolean;
-  estimatedArtsEligible: boolean;
-  desiredStreamEligible: boolean;
+  desiredStreamScore: number;
+  desiredStreamEligible: boolean | null;
   desiredStreamLabel: string;
   remedialScores: OrientationCaseInput["remedial_scores"];
-  appealDistance: number;
+  appealDistance: number | null;
 }
 
 function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function scienceEligibilityDistance(annualAverage: number, scienceAverage: number): number {
-  const scienceSubjectGap = Math.max(0, 10 - scienceAverage);
-  const strongerGeneralAveragePath = Math.max(0, 14 - annualAverage);
-  const subjectStrengthPath = Math.max(0, 12 - annualAverage, 12 - scienceAverage);
-  return Math.max(scienceSubjectGap, Math.min(strongerGeneralAveragePath, subjectStrengthPath));
-}
-
-export function assessOrientationCase(input: OrientationCaseInput): OrientationAssessment {
+export function assessOrientationCase(input: OrientationCaseInput, seatCutoff: number | null = null): OrientationAssessment {
   const { annual_general_average: annualAverage, bem_exam_average: bemAverage } = input;
   const { annual_subject_averages: subjects } = input;
   const scienceAverage = mean([subjects.math, subjects.physics, subjects.natural_science]);
   const artsAverage = mean([subjects.arabic, subjects.french, subjects.english]);
+  const weightedScienceScore = (
+    subjects.math * 4 + subjects.physics * 3 + subjects.natural_science * 3 + annualAverage * 2
+  ) / 12;
 
   const finalAverage = bemAverage === null
     ? annualAverage
@@ -59,30 +55,23 @@ export function assessOrientationCase(input: OrientationCaseInput): OrientationA
       ? bemAverage
       : Math.round(((annualAverage + bemAverage) / 2) * 100) / 100;
 
-  const estimatedScienceEligible = scienceAverage >= 10 && (
-    annualAverage >= 14 || (annualAverage >= 12 && scienceAverage >= 12)
-  );
-  const estimatedArtsEligible = annualAverage >= 10 && artsAverage >= 10;
-  const desiredStreamEligible = input.student_info.desired_stream === "SCIENCE_TECH"
-    ? estimatedScienceEligible
-    : estimatedArtsEligible;
-  const appealDistance = input.student_info.desired_stream === "SCIENCE_TECH"
-    ? scienceEligibilityDistance(annualAverage, scienceAverage)
-    : Math.max(0, 10 - annualAverage, 10 - artsAverage);
+  const desiredStreamScore = input.student_info.desired_stream === "SCIENCE_TECH"
+    ? weightedScienceScore
+    : artsAverage;
 
   return {
     finalAverage,
     passedToSecondary: finalAverage === null ? null : finalAverage >= 10,
     scienceAverage,
+    weightedScienceScore,
     artsAverage,
-    estimatedScienceEligible,
-    estimatedArtsEligible,
-    desiredStreamEligible,
+    desiredStreamScore,
+    desiredStreamEligible: seatCutoff === null ? null : desiredStreamScore >= seatCutoff,
     desiredStreamLabel: input.student_info.desired_stream === "SCIENCE_TECH"
       ? "جذع مشترك علوم وتكنولوجيا"
       : "جذع مشترك آداب",
     remedialScores: input.remedial_scores,
-    appealDistance,
+    appealDistance: seatCutoff === null ? null : Math.max(0, seatCutoff - desiredStreamScore),
   };
 }
 
@@ -97,7 +86,7 @@ export function parseOrientationCase(value: unknown): OrientationCaseInput {
   const remedial = record.remedial_scores as Record<string, unknown> | null | undefined;
   const errors: string[] = [];
 
-  const isScore = (score: unknown) => typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 20;
+  const isScore = (score: unknown): score is number => typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 20;
   const requireText = (parent: Record<string, unknown> | undefined, key: string, label: string) => {
     const item = parent?.[key];
     if (typeof item !== "string" || item.trim() === "") errors.push(`${label}: قيمة نصية مطلوبة.`);

@@ -5,19 +5,20 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClipboardList, Search, Users, CheckCircle2, Clock, Filter } from "lucide-react";
+import { allocateFourAMStreams, getFourAMCapacities } from "@/lib/4am-stream-allocation";
+import { useOrientationWishes } from "@/hooks/use-orientation-wishes";
 import type { StudentResult } from "@shared/types";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 
 const TRACKS = [
-  { label: "جذع مشترك علوم وتكنولوجيا", color: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300", minAvg: 13 },
-  { label: "جذع مشترك آداب", color: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300", minAvg: 10 },
+  { key: "science", label: "جذع مشترك علوم وتكنولوجيا", color: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300" },
+  { key: "arts", label: "جذع مشترك آداب", color: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300" },
 ];
 
-function getTrack(avg: number | null) {
-  if (avg === null || avg < 10) return null;
-  return TRACKS.find(t => avg >= t.minAvg) ?? TRACKS[TRACKS.length - 1];
+function getTrack(stream: "science" | "arts" | undefined) {
+  return TRACKS.find(track => track.key === stream) ?? null;
 }
 
 export default function PreOrientTrackingPage() {
@@ -38,9 +39,11 @@ export default function PreOrientTrackingPage() {
 
   useEffect(() => { fetchData(year); localStorage.setItem("cem-selected-year", year); }, [year, fetchData]);
 
+  const wishes = useOrientationWishes(year);
+  const assignedStreams = allocateFourAMStreams(results, getFourAMCapacities(year), wishes);
   const filtered = results.filter(r => {
     const matchQ = !q || r.student.nomPrenom.toLowerCase().includes(q.toLowerCase()) || r.student.classe.toLowerCase().includes(q.toLowerCase());
-    const track = getTrack(r.annualAvg);
+    const track = getTrack(assignedStreams.get(r.student.id));
     const matchT = filterTrack === "all" || track?.label === filterTrack;
     return matchQ && matchT;
   }).sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
@@ -137,7 +140,7 @@ export default function PreOrientTrackingPage() {
               </thead>
               <tbody>
                 {filtered.map((r, i) => {
-                  const track = getTrack(r.annualAvg);
+                  const track = getTrack(assignedStreams.get(r.student.id));
                   const eligible = r.annualAvg !== null && r.annualAvg >= 10;
                   return (
                     <motion.tr key={r.student.id}

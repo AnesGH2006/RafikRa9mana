@@ -5,19 +5,20 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { CircleDot, Printer, Users, RefreshCw } from "lucide-react";
+import { allocateFourAMStreams, getFourAMCapacities } from "@/lib/4am-stream-allocation";
+import { useOrientationWishes } from "@/hooks/use-orientation-wishes";
 import type { StudentResult } from "@shared/types";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 
 const TRACKS = [
-  { label: "جذع مشترك علوم وتكنولوجيا", badge: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300", minAvg: 13, gradient: "from-blue-500 to-blue-700" },
-  { label: "جذع مشترك آداب", badge: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300", minAvg: 10, gradient: "from-violet-500 to-purple-700" },
+  { key: "science", label: "جذع مشترك علوم وتكنولوجيا", badge: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300", gradient: "from-blue-500 to-blue-700" },
+  { key: "arts", label: "جذع مشترك آداب", badge: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300", gradient: "from-violet-500 to-purple-700" },
 ];
 
-function getTrack(avg: number | null) {
-  if (avg === null) return null;
-  return TRACKS.find(t => avg >= t.minAvg) ?? TRACKS[TRACKS.length - 1];
+function getTrack(stream: "science" | "arts" | undefined) {
+  return TRACKS.find(track => track.key === stream) ?? null;
 }
 
 export default function PreOrientSecondPage() {
@@ -36,8 +37,10 @@ export default function PreOrientSecondPage() {
 
   useEffect(() => { fetchData(year); localStorage.setItem("cem-selected-year", year); }, [year, fetchData]);
 
+  const wishes = useOrientationWishes(year);
+  const assignedStreams = allocateFourAMStreams(results, getFourAMCapacities(year), wishes);
   const eligible = results
-    .filter(r => r.annualAvg !== null && r.annualAvg >= 10)
+    .filter(r => assignedStreams.has(r.student.id))
     .sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
 
   const changeCount = Object.keys(overrides).length;
@@ -127,7 +130,7 @@ export default function PreOrientSecondPage() {
               </thead>
               <tbody>
                 {eligible.map((r, i) => {
-                  const suggestedTrack = getTrack(r.annualAvg);
+                  const suggestedTrack = getTrack(assignedStreams.get(r.student.id));
                   const currentTrack = overrides[r.student.id] ?? suggestedTrack?.label ?? "";
                   const changed = overrides[r.student.id] && overrides[r.student.id] !== suggestedTrack?.label;
                   const trackObj = TRACKS.find(t => t.label === currentTrack);

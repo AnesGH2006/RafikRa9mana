@@ -11,21 +11,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Printer, Compass, GraduationCap, Users } from "lucide-react";
+import { allocateFourAMStreams, getFourAMCapacities } from "@/lib/4am-stream-allocation";
+import { useOrientationWishes } from "@/hooks/use-orientation-wishes";
+import type { StudentResult } from "@shared/types";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 const DEFAULT_YEAR = "2025-2026";
 
-interface StudentResult {
-  student: { id: string; nomPrenom: string; niveau: string; classe: string; sexe: "M" | "F"; };
-  annualAvg: number | null;
-  t1Avg: number | null; t2Avg: number | null; t3Avg: number | null;
-}
-
-/** Heuristic track assignment based on annual average */
-function trackFor(avg: number): { label: string; color: string } {
-  if (avg >= 13) return { label: "جذع مشترك علوم وتكنولوجيا", color: "text-blue-500" };
-  return { label: "جذع مشترك آداب", color: "text-violet-500" };
+function trackFor(stream: "science" | "arts" | undefined): { label: string; color: string } | null {
+  if (stream === "science") return { label: "جذع مشترك علوم وتكنولوجيا", color: "text-blue-500" };
+  if (stream === "arts") return { label: "جذع مشترك آداب", color: "text-violet-500" };
+  return null;
 }
 
 export default function YearEndGuides() {
@@ -44,17 +41,19 @@ export default function YearEndGuides() {
       .catch(() => setLoading(false));
   }, [annee]);
 
+  const wishes = useOrientationWishes(annee);
+  const assignedStreams = allocateFourAMStreams(results, getFourAMCapacities(annee), wishes);
   const oriented = results
-    .filter(r => r.annualAvg !== null && r.annualAvg >= 10)
+    .filter(r => assignedStreams.has(r.student.id))
     .filter(r => classe === "all" || r.student.classe === classe)
-    .filter(r => track === "all" || trackFor(r.annualAvg!).label === track)
+    .filter(r => track === "all" || trackFor(assignedStreams.get(r.student.id))?.label === track)
     .sort((a, b) => (b.annualAvg ?? 0) - (a.annualAvg ?? 0));
 
   const classes = [...new Set(results.map(r => r.student.classe))].sort();
 
   const trackCounts = {
-    "جذع مشترك علوم وتكنولوجيا": results.filter(r => (r.annualAvg ?? 0) >= 13).length,
-    "جذع مشترك آداب": results.filter(r => (r.annualAvg ?? 0) >= 10 && (r.annualAvg ?? 0) < 13).length,
+    "جذع مشترك علوم وتكنولوجيا": [...assignedStreams.values()].filter(stream => stream === "science").length,
+    "جذع مشترك آداب": [...assignedStreams.values()].filter(stream => stream === "arts").length,
   };
 
   return (
@@ -93,11 +92,11 @@ export default function YearEndGuides() {
 
       {/* Track info */}
       <div className="rounded-xl border bg-muted/30 p-4 mb-5 text-sm">
-        <p className="font-semibold mb-2 text-xs text-muted-foreground">معيار التوجيه (تلقائي بالمعدل)</p>
+        <p className="font-semibold mb-2 text-xs text-muted-foreground">معيار التوزيع حسب المقاعد المتاحة</p>
         <div className="flex flex-wrap gap-3">
           {[
-            { label: "جذع مشترك علوم وتكنولوجيا", range: "معدل ≥ 13", color: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
-            { label: "جذع مشترك آداب", range: "معدل 10 – 12.99", color: "bg-violet-500/10 text-violet-600 border-violet-500/20" },
+            { label: "جذع مشترك علوم وتكنولوجيا", range: "ترتيب بالمعدل العلمي الموزون ضمن السعة", color: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
+            { label: "جذع مشترك آداب", range: "بقية المؤهلين بعد توزيع مقاعد العلوم", color: "bg-violet-500/10 text-violet-600 border-violet-500/20" },
           ].map(t => (
             <span key={t.label} className={`px-3 py-1 rounded-full border text-xs font-semibold ${t.color}`}>
               {t.label} — {t.range}
@@ -144,7 +143,7 @@ export default function YearEndGuides() {
             ) : oriented.length === 0 ? (
               <tr><td colSpan={6} className="text-center py-16 text-muted-foreground">لا يوجد تلاميذ موجَّهون بعد</td></tr>
             ) : oriented.map((r, i) => {
-              const t = trackFor(r.annualAvg!);
+              const t = trackFor(assignedStreams.get(r.student.id));
               return (
                 <motion.tr key={r.student.id}
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -159,7 +158,7 @@ export default function YearEndGuides() {
                     {r.annualAvg?.toFixed(2)}
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className={`text-xs font-bold ${t.color}`}>{t.label}</span>
+                    {t ? <span className={`text-xs font-bold ${t.color}`}>{t.label}</span> : "—"}
                   </td>
                 </motion.tr>
               );

@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Compass, GraduationCap, Users, BarChart3, FlaskConical, BookOpen, ChevronDown, ChevronUp } from "lucide-react";
+import { Compass, GraduationCap, Users, BarChart3, FlaskConical, BookOpen, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import OrientationCaseCalculator from "@/components/orientation-case-calculator";
+import { getFourAMScienceWeightedScore, rankFourAMArtsApplicants, rankFourAMScienceApplicants } from "@/lib/4am-stream-allocation";
+import { useOrientationWishes } from "@/hooks/use-orientation-wishes";
 import type { StudentResult } from "@shared/types";
 import {
   BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -62,52 +64,6 @@ function trackSubjectAvg(r: StudentResult, keys: string[]): number | null {
   const avgs = keys.map(k => subjectAvg(r, k)).filter((v): v is number => v !== null);
   if (avgs.length === 0) return null;
   return avgs.reduce((a, b) => a + b, 0) / avgs.length;
-}
-
-function orientTrack(r: StudentResult) {
-  const avg = r.annualAvg ?? 0;
-  const sciAvg = trackSubjectAvg(r, SCIENCE_SUBJECTS.map(s => s.key));
-  const artAvg = trackSubjectAvg(r, ARTS_SUBJECTS.map(s => s.key));
-
-  // علوم: avg ≥ 14, OR (avg ≥ 12 and science subjects avg ≥ 12)
-  if (avg >= 14 || (avg >= 12 && sciAvg !== null && sciAvg >= 12)) {
-    return {
-      label: "جذع مشترك علوم وتكنولوجيا",
-      color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-      borderColor: "border-blue-200 dark:border-blue-800",
-      key: "science",
-      icon: FlaskConical,
-      iconColor: "text-blue-500",
-      trackSubjects: SCIENCE_SUBJECTS,
-      trackAvg: sciAvg,
-      qualifies: sciAvg !== null && sciAvg >= 10,
-    };
-  }
-  // آداب: avg ≥ 10 and arts avg ≥ 10
-  if (avg >= 10) {
-    return {
-      label: "جذع مشترك آداب",
-      color: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
-      borderColor: "border-violet-200 dark:border-violet-800",
-      key: "arts",
-      icon: BookOpen,
-      iconColor: "text-violet-500",
-      trackSubjects: ARTS_SUBJECTS,
-      trackAvg: artAvg,
-      qualifies: artAvg !== null && artAvg >= 10,
-    };
-  }
-  return {
-    label: "غير مستوفٍ لشروط الجذعين",
-    color: "bg-muted text-muted-foreground",
-    borderColor: "border-border",
-    key: "unassigned",
-    icon: AlertCircle,
-    iconColor: "text-muted-foreground",
-    trackSubjects: [],
-    trackAvg: null,
-    qualifies: true,
-  };
 }
 
 function MiniTooltip({ active, payload, label }: any) {
@@ -174,6 +130,7 @@ export default function OrientationResultsPage() {
   }, [annee]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  const wishes = useOrientationWishes(annee);
 
   // All eligible (passed) students sorted by avg descending
   const eligible = results
@@ -187,20 +144,49 @@ export default function OrientationResultsPage() {
       [annee]: { ...(current[annee] ?? DEFAULT_CAPACITIES), [track]: Math.max(0, Math.min(500, value)) },
     }));
   };
-  const rankForTrack = (trackKey: TrackCapacity) => eligible
-    .filter(result => {
-      const recommendation = orientTrack(result);
-      return recommendation.key === trackKey && recommendation.qualifies;
-    })
-    .sort((a, b) => {
-      const scoreA = orientTrack(a).trackAvg ?? a.annualAvg ?? 0;
-      const scoreB = orientTrack(b).trackAvg ?? b.annualAvg ?? 0;
-      return scoreB - scoreA || (b.annualAvg ?? 0) - (a.annualAvg ?? 0);
-    });
-  const scienceApplicants = rankForTrack("science");
-  const artsApplicants = rankForTrack("arts");
-  const scienceWithinCapacity = new Set(scienceApplicants.slice(0, capacities.science).map(r => r.student.id));
-  const artsWithinCapacity = new Set(artsApplicants.slice(0, capacities.arts).map(r => r.student.id));
+  const scienceApplicants = rankFourAMScienceApplicants(eligible, wishes);
+  const scienceWithinCapacity = new Set(scienceApplicants.slice(0, capacities.science).map(result => result.student.id));
+  const artsApplicants = rankFourAMArtsApplicants(eligible, scienceWithinCapacity, wishes);
+  const artsWithinCapacity = new Set(artsApplicants.slice(0, capacities.arts).map(result => result.student.id));
+  const orientTrack = (result: StudentResult) => {
+    if (scienceWithinCapacity.has(result.student.id)) {
+      return {
+        label: "جذع مشترك علوم وتكنولوجيا",
+        color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+        borderColor: "border-blue-200 dark:border-blue-800",
+        key: "science",
+        icon: FlaskConical,
+        iconColor: "text-blue-500",
+        trackSubjects: SCIENCE_SUBJECTS,
+        trackAvg: getFourAMScienceWeightedScore(result),
+        qualifies: true,
+      };
+    }
+    if (artsWithinCapacity.has(result.student.id)) {
+      return {
+        label: "جذع مشترك آداب",
+        color: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+        borderColor: "border-violet-200 dark:border-violet-800",
+        key: "arts",
+        icon: BookOpen,
+        iconColor: "text-violet-500",
+        trackSubjects: ARTS_SUBJECTS,
+        trackAvg: trackSubjectAvg(result, ARTS_SUBJECTS.map(subject => subject.key)),
+        qualifies: true,
+      };
+    }
+    return {
+      label: "غير مستوفٍ لسعة الجذعين أو شروط المواد",
+      color: "bg-muted text-muted-foreground",
+      borderColor: "border-border",
+      key: "unassigned",
+      icon: AlertCircle,
+      iconColor: "text-muted-foreground",
+      trackSubjects: [],
+      trackAvg: null,
+      qualifies: false,
+    };
+  };
   const estimatedCutoff = (applicants: StudentResult[], capacity: number) => {
     if (capacity <= 0 || applicants.length <= capacity) return null;
     const lastSeat = applicants[capacity - 1];
@@ -210,8 +196,6 @@ export default function OrientationResultsPage() {
   const artsCutoff = estimatedCutoff(artsApplicants, capacities.arts);
 
   const classes = [...new Set(eligible.map(r => r.student.classe))].sort();
-  const tracks  = [...new Set(eligible.map(r => orientTrack(r).key))];
-
   const filtered = eligible.filter(r =>
     (!filterClasse || r.student.classe === filterClasse) &&
     (!filterSexe   || r.student.sexe   === filterSexe) &&
@@ -343,7 +327,7 @@ export default function OrientationResultsPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">القدرات والمقاعد ومعدلات القبول التقديرية · {annee}</CardTitle>
-            <p className="text-xs text-muted-foreground">ترتيب أولي حسب متوسط مواد الجذع، ثم المعدل السنوي. عدّل السعة الافتراضية (30 مقعدًا) لتطابق مقاعد المؤسسة؛ العتبة تقدير محلي وليست معدلًا وطنيًا ثابتًا.</p>
+            <p className="text-xs text-muted-foreground">يُرتب مترشحو العلوم حسب المعدل الموزون: (رياضيات×4 + فيزياء×3 + علوم طبيعية×3 + المعدل السنوي×2) ÷ 12، ثم تُطبق سعة المقاعد. معدل آخر مقعد ناتج عن الترتيب والسعة، وليس حدًا ثابتًا للمعدل السنوي. تُرتب الآداب حسب متوسط موادها ضمن سعتها.</p>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             {([

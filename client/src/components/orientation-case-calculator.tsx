@@ -35,12 +35,17 @@ export default function OrientationCaseCalculator() {
   const [assessment, setAssessment] = useState<OrientationAssessment | null>(null);
   const [error, setError] = useState("");
   const [appealWindow, setAppealWindow] = useState(0.5);
+  const [seatCutoffInput, setSeatCutoffInput] = useState("");
 
   const calculate = () => {
     try {
       const parsed = parseOrientationCase(JSON.parse(json));
       setCaseData(parsed);
-      setAssessment(assessOrientationCase(parsed));
+      const cutoff = seatCutoffInput.trim() === "" ? null : Number(seatCutoffInput);
+      if (cutoff !== null && (!Number.isFinite(cutoff) || cutoff < 0 || cutoff > 20)) {
+        throw new Error("عتبة آخر مقعد يجب أن تكون بين 0 و20.");
+      }
+      setAssessment(assessOrientationCase(parsed, cutoff));
       setError("");
     } catch (cause) {
       setCaseData(null);
@@ -49,7 +54,7 @@ export default function OrientationCaseCalculator() {
     }
   };
 
-  const appealRecommended = assessment !== null && !assessment.desiredStreamEligible && assessment.appealDistance <= appealWindow;
+  const appealRecommended = assessment?.desiredStreamEligible === false && assessment.appealDistance !== null && assessment.appealDistance <= appealWindow;
   const remedialMarks = caseData?.remedial_scores;
 
   return (
@@ -79,6 +84,19 @@ export default function OrientationCaseCalculator() {
             <Calculator className="h-4 w-4" /> احسب التقدير
           </Button>
           <Button type="button" variant="outline" onClick={() => setJson(SAMPLE_JSON)}>تحميل مثال</Button>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            عتبة آخر مقعد للشعبة المطلوبة
+            <input
+              type="number"
+              min="0"
+              max="20"
+              step="0.01"
+              value={seatCutoffInput}
+              onChange={event => setSeatCutoffInput(event.target.value)}
+              className="h-9 w-28 rounded-md border bg-background px-2 text-foreground"
+              aria-label="عتبة آخر مقعد للشعبة المطلوبة"
+            />
+          </label>
         </div>
 
         {error && (
@@ -112,10 +130,13 @@ export default function OrientationCaseCalculator() {
                 <ClipboardCheck className="h-4 w-4 text-amber-600" />
                 <h3 className="text-sm font-semibold">تقدير الشعبة المطلوبة: {assessment.desiredStreamLabel}</h3>
               </div>
-              <p className={`mt-2 text-sm font-semibold ${assessment.desiredStreamEligible ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>
-                {assessment.desiredStreamEligible ? "مطابقة مبدئية لمعيار التطبيق" : "لا يطابق حاليًا معيار التطبيق"}
+              <p className={`mt-2 text-sm font-semibold ${assessment.desiredStreamEligible === true ? "text-emerald-700 dark:text-emerald-400" : assessment.desiredStreamEligible === false ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
+                {assessment.desiredStreamEligible === null
+                  ? "أدخل معدل آخر مقعد من ترتيب الدفعـة لتقدير فرصة القبول."
+                  : assessment.desiredStreamEligible ? "العلامة تساوي أو تتجاوز عتبة آخر مقعد المُدخلة." : "العلامة دون عتبة آخر مقعد المُدخلة."}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">معدل مواد العلوم: {assessment.scienceAverage.toFixed(2)} · معدل مواد الآداب: {assessment.artsAverage.toFixed(2)}. هذه مقارنة حسابية إرشادية فقط، ولا تمثل شروطًا وزارية معتمدة.</p>
+              <p className="mt-1 text-xs text-muted-foreground">المعدل العلمي الموزون: {assessment.weightedScienceScore.toFixed(2)} = (رياضيات×4 + فيزياء×3 + علوم طبيعية×3 + المعدل السنوي×2) ÷ 12 · معدل مواد الآداب: {assessment.artsAverage.toFixed(2)}.</p>
+              <p className="mt-1 text-xs text-muted-foreground">لا يمكن تحديد مقعد الطالب من علاماته وحدها؛ يعتمد ذلك على ترتيب دفعته والسعة الفعلية. أدخل عتبة آخر مقعد من صفحة النتائج للمقارنة.</p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
@@ -146,11 +167,13 @@ export default function OrientationCaseCalculator() {
             <div className={`rounded-md border px-3 py-2 text-sm ${appealRecommended ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300" : "bg-muted/40 text-muted-foreground"}`}>
               <p className="font-semibold">مراجعة مجلس الطعن</p>
               <p className="mt-1 text-xs">
-                {assessment.desiredStreamEligible
-                  ? "المعيار الإرشادي متحقق؛ لا تشير هذه الحاسبة إلى حاجة لمراجعة بسبب عتبة الشعبة."
-                  : appealRecommended
-                    ? `النتيجة قريبة من المعيار الإرشادي (فارق ${assessment.appealDistance.toFixed(2)} نقطة). يُنصح بمراجعة الملف والرغبات والنتائج مع المجلس؛ هذا ليس ضمانًا للقبول.`
-                    : `الفارق عن أقرب شرط إرشادي ${assessment.appealDistance.toFixed(2)} نقطة، خارج نافذة المراجعة المحددة. يمكن للمجلس مراجعة الملف وفق الإجراءات المحلية.`}
+                {assessment.desiredStreamEligible === null
+                  ? "لا يمكن تقييم الطعن دون عتبة آخر مقعد وترتيب التلميذ في دفعته."
+                  : assessment.desiredStreamEligible
+                    ? "العلامة تساوي أو تتجاوز العتبة المُدخلة؛ لا يظهر فارق سلبي عنها."
+                    : appealRecommended
+                      ? `النتيجة قريبة من عتبة آخر مقعد (فارق ${assessment.appealDistance?.toFixed(2)} نقطة). يُنصح بمراجعة الملف والرغبات والنتائج مع المجلس؛ هذا ليس ضمانًا للقبول.`
+                      : `الفارق عن عتبة آخر مقعد المُدخلة ${assessment.appealDistance?.toFixed(2)} نقطة، خارج نافذة المراجعة المحددة. يمكن للمجلس مراجعة الملف وفق الإجراءات المحلية.`}
               </p>
               <p className="mt-1 text-[11px]">نافذة المراجعة قيمة إرشادية قابلة للتعديل وليست مهلة أو عتبة رسمية للطعن.</p>
             </div>

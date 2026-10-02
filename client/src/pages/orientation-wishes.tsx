@@ -9,7 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ClipboardList, Upload, Search, CheckCircle2, XCircle, HelpCircle, Users, Printer,
 } from "lucide-react";
-import type { OrientationWish } from "@shared/types";
+import { allocateFourAMStreams, getFourAMCapacities, getFourAMPreferredStream } from "@/lib/4am-stream-allocation";
+import type { OrientationWish, StudentResult } from "@shared/types";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
@@ -17,6 +18,7 @@ const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 export default function OrientationWishesPage() {
   const [year, setYear] = useState(() => localStorage.getItem("cem-selected-year") || "2025-2026");
   const [wishes, setWishes] = useState<OrientationWish[]>([]);
+  const [results, setResults] = useState<StudentResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [q, setQ] = useState("");
@@ -26,9 +28,16 @@ export default function OrientationWishesPage() {
   const fetchData = useCallback(async (y: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`${BASE}api/orientation/wishes?annee=${y}`, { credentials: "include" });
-      if (res.ok) setWishes(await res.json());
-      else setWishes([]);
+      const [wishesResponse, resultsResponse] = await Promise.all([
+        fetch(`${BASE}api/orientation/wishes?annee=${y}`, { credentials: "include" }),
+        fetch(`${BASE}api/results?annee=${y}&niveau=4AM`, { credentials: "include" }),
+      ]);
+      const [wishesData, resultsData] = await Promise.all([
+        wishesResponse.ok ? wishesResponse.json() as Promise<OrientationWish[]> : [],
+        resultsResponse.ok ? resultsResponse.json() as Promise<StudentResult[]> : [],
+      ]);
+      setWishes(wishesData);
+      setResults(resultsData);
     } finally { setLoading(false); }
   }, []);
 
@@ -68,8 +77,21 @@ export default function OrientationWishesPage() {
     !q || `${w.lastName} ${w.firstName}`.toLowerCase().includes(q.toLowerCase())
   );
 
-  const matchedCount = wishes.filter(w => w.firstChoiceMatchesSuggestion === true).length;
-  const mismatchCount = wishes.filter(w => w.firstChoiceMatchesSuggestion === false).length;
+  const wishesByStudent = new Map(wishes.flatMap(wish => wish.studentId ? [[wish.studentId, wish.choices] as const] : []));
+  const assignedStreams = allocateFourAMStreams(results, getFourAMCapacities(year), wishesByStudent);
+  const getSuggestion = (wish: OrientationWish) => {
+    const stream = wish.studentId ? assignedStreams.get(wish.studentId) : undefined;
+    if (stream === "science") return "جذع مشترك علوم وتكنولوجيا";
+    if (stream === "arts") return "جذع مشترك آداب";
+    return null;
+  };
+  const firstChoiceMatches = (wish: OrientationWish) => {
+    const preferred = getFourAMPreferredStream(wish.choices);
+    const assigned = wish.studentId ? assignedStreams.get(wish.studentId) : undefined;
+    return preferred && assigned ? preferred === assigned : null;
+  };
+  const matchedCount = wishes.filter(wish => firstChoiceMatches(wish) === true).length;
+  const mismatchCount = wishes.filter(wish => firstChoiceMatches(wish) === false).length;
   const unmatchedStudentCount = wishes.filter(w => !w.studentId).length;
 
   return (
@@ -88,7 +110,7 @@ export default function OrientationWishesPage() {
             </motion.span>
             رغبات التوجيه المسبق
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5 ms-11">رغبات كل تلميذ مرتّبة، مقارنة بالمسار المقترح آلياً من المعدل</p>
+          <p className="text-xs text-muted-foreground mt-0.5 ms-11">مقارنة الرغبة الأولى بالتوزيع المقترح حسب المعدل الموزون وسعة المقاعد</p>
         </div>
         <div className="flex items-center gap-2 no-print flex-wrap">
           <Select value={year} onValueChange={setYear}>
@@ -214,22 +236,22 @@ export default function OrientationWishesPage() {
                           </div>
                         </td>
                         <td className="p-3 text-center">
-                          {w.suggestedTrack
-                            ? <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">{w.suggestedTrack}</span>
+                          {getSuggestion(w)
+                            ? <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">{getSuggestion(w)}</span>
                             : <span className="text-xs text-muted-foreground">—</span>}
                         </td>
                         <td className="p-3 text-center">
-                          {w.firstChoiceMatchesSuggestion === true && (
+                          {firstChoiceMatches(w) === true && (
                             <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 18 }} className="inline-flex">
                               <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500 mx-auto" />
                             </motion.span>
                           )}
-                          {w.firstChoiceMatchesSuggestion === false && (
+                          {firstChoiceMatches(w) === false && (
                             <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 18 }} className="inline-flex">
                               <XCircle className="w-4.5 h-4.5 text-orange-500 mx-auto" />
                             </motion.span>
                           )}
-                          {w.firstChoiceMatchesSuggestion === null && <HelpCircle className="w-4.5 h-4.5 text-muted-foreground/40 mx-auto" />}
+                          {firstChoiceMatches(w) === null && <HelpCircle className="w-4.5 h-4.5 text-muted-foreground/40 mx-auto" />}
                         </td>
                       </motion.tr>
                     ))}

@@ -10,18 +10,19 @@ import {
 } from "recharts";
 import type { StudentResult } from "@shared/types";
 import { CountUp } from "@/components/count-up";
+import { allocateFourAMStreams, getFourAMCapacities } from "@/lib/4am-stream-allocation";
+import { useOrientationWishes } from "@/hooks/use-orientation-wishes";
 
 const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 
 const TRACKS = [
-  { label: "جذع مشترك علوم وتكنولوجيا", pie: "#3b82f6", minAvg: 13, gradient: "from-blue-600 to-blue-800" },
-  { label: "جذع مشترك آداب", pie: "#8b5cf6", minAvg: 10, gradient: "from-violet-600 to-purple-800" },
+  { key: "science", label: "جذع مشترك علوم وتكنولوجيا", pie: "#3b82f6", gradient: "from-blue-600 to-blue-800" },
+  { key: "arts", label: "جذع مشترك آداب", pie: "#8b5cf6", gradient: "from-violet-600 to-purple-800" },
 ];
 
-function getTrack(avg: number | null) {
-  if (avg === null) return null;
-  return TRACKS.find(t => avg >= t.minAvg) ?? TRACKS[TRACKS.length - 1];
+function getTrack(stream: "science" | "arts" | undefined) {
+  return TRACKS.find(track => track.key === stream) ?? null;
 }
 
 function MiniTooltip({ active, payload }: any) {
@@ -48,15 +49,17 @@ export default function PreOrientReportsPage() {
 
   useEffect(() => { fetchData(year); localStorage.setItem("cem-selected-year", year); }, [year, fetchData]);
 
-  const eligible = results.filter(r => r.annualAvg !== null && r.annualAvg >= 10);
+  const wishes = useOrientationWishes(year);
+  const assignedStreams = allocateFourAMStreams(results, getFourAMCapacities(year), wishes);
+  const eligible = results.filter(r => assignedStreams.has(r.student.id));
   const notEligible = results.filter(r => r.annualAvg !== null && r.annualAvg < 10);
   const noResult = results.filter(r => r.annualAvg === null);
 
   const byTrack = TRACKS.map(t => ({
     ...t,
-    total:   eligible.filter(r => getTrack(r.annualAvg)?.label === t.label).length,
-    boys:    eligible.filter(r => getTrack(r.annualAvg)?.label === t.label && r.student.sexe === "M").length,
-    girls:   eligible.filter(r => getTrack(r.annualAvg)?.label === t.label && r.student.sexe === "F").length,
+    total:   eligible.filter(r => assignedStreams.get(r.student.id) === t.key).length,
+    boys:    eligible.filter(r => assignedStreams.get(r.student.id) === t.key && r.student.sexe === "M").length,
+    girls:   eligible.filter(r => assignedStreams.get(r.student.id) === t.key && r.student.sexe === "F").length,
   })).filter(t => t.total > 0);
 
   const pieData     = byTrack.map(t => ({ name: t.label, value: t.total, fill: t.pie }));
@@ -149,7 +152,7 @@ export default function PreOrientReportsPage() {
                 <p className="text-xs text-muted-foreground">أعلى معدل في 4AM</p>
                 <p className="font-black text-lg text-amber-700 dark:text-amber-300">{topStudent.student.nomPrenom}</p>
                 <p className="text-sm font-bold text-muted-foreground">
-                  {topStudent.annualAvg?.toFixed(2)}/20 — {getTrack(topStudent.annualAvg)?.label} — {topStudent.student.classe}
+                  {topStudent.annualAvg?.toFixed(2)}/20 — {getTrack(assignedStreams.get(topStudent.student.id))?.label} — {topStudent.student.classe}
                 </p>
               </div>
             </div>
