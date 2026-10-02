@@ -12,11 +12,8 @@ const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 
 const TRACKS = [
-  { label: "رياضيات",       color: "from-blue-500 to-blue-700",     badge: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300",     pie: "#3b82f6", minAvg: 15 },
-  { label: "علوم تجريبية",  color: "from-emerald-500 to-green-700", badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300", pie: "#10b981", minAvg: 13 },
-  { label: "آداب وفلسفة",   color: "from-violet-500 to-purple-700", badge: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300", pie: "#8b5cf6", minAvg: 11 },
-  { label: "لغات أجنبية",   color: "from-cyan-500 to-teal-600",     badge: "bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300",       pie: "#06b6d4", minAvg: 10 },
-  { label: "تسيير واقتصاد", color: "from-orange-500 to-amber-600",  badge: "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300", pie: "#f59e0b", minAvg: 0  },
+  { label: "جذع مشترك علوم وتكنولوجيا", color: "from-blue-500 to-blue-700", badge: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300", pie: "#3b82f6", minAvg: 13 },
+  { label: "جذع مشترك آداب", color: "from-violet-500 to-purple-700", badge: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300", pie: "#8b5cf6", minAvg: 10 },
 ];
 
 function getTrack(avg: number | null) {

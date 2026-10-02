@@ -72,7 +72,7 @@ function orientTrack(r: StudentResult) {
   // علوم: avg ≥ 14, OR (avg ≥ 12 and science subjects avg ≥ 12)
   if (avg >= 14 || (avg >= 12 && sciAvg !== null && sciAvg >= 12)) {
     return {
-      label: "جذع مشترك علوم",
+      label: "جذع مشترك علوم وتكنولوجيا",
       color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
       borderColor: "border-blue-200 dark:border-blue-800",
       key: "science",
@@ -86,7 +86,7 @@ function orientTrack(r: StudentResult) {
   // آداب: avg ≥ 10 and arts avg ≥ 10
   if (avg >= 10) {
     return {
-      label: "جذع مشترك آداب وفلسفة",
+      label: "جذع مشترك آداب",
       color: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
       borderColor: "border-violet-200 dark:border-violet-800",
       key: "arts",
@@ -97,26 +97,13 @@ function orientTrack(r: StudentResult) {
       qualifies: artAvg !== null && artAvg >= 10,
     };
   }
-  if (avg >= 8) {
-    return {
-      label: "تعليم مهني",
-      color: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
-      borderColor: "border-orange-200 dark:border-orange-800",
-      key: "technical",
-      icon: GraduationCap,
-      iconColor: "text-orange-500",
-      trackSubjects: [],
-      trackAvg: null,
-      qualifies: true,
-    };
-  }
   return {
-    label: "تكوين مهني",
-    color: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-    borderColor: "border-red-200 dark:border-red-800",
-    key: "vocational",
-    icon: GraduationCap,
-    iconColor: "text-red-400",
+    label: "غير مستوفٍ لشروط الجذعين",
+    color: "bg-muted text-muted-foreground",
+    borderColor: "border-border",
+    key: "unassigned",
+    icon: AlertCircle,
+    iconColor: "text-muted-foreground",
     trackSubjects: [],
     trackAvg: null,
     qualifies: true,
@@ -234,8 +221,7 @@ export default function OrientationResultsPage() {
   // KPI counts
   const scienceCount  = filtered.filter(r => orientTrack(r).key === "science").length;
   const artsCount     = filtered.filter(r => orientTrack(r).key === "arts").length;
-  const techCount     = filtered.filter(r => orientTrack(r).key === "technical").length;
-  const vocCount      = filtered.filter(r => orientTrack(r).key === "vocational").length;
+  const unassignedCount = filtered.filter(r => orientTrack(r).key === "unassigned").length;
 
   // Subject averages for science students
   const scienceStudents = eligible.filter(r => orientTrack(r).key === "science");
@@ -418,8 +404,6 @@ export default function OrientationResultsPage() {
             <SelectItem value="__all__">كل الشعب</SelectItem>
             <SelectItem value="science">جذع مشترك علوم</SelectItem>
             <SelectItem value="arts">جذع مشترك آداب</SelectItem>
-            <SelectItem value="technical">تعليم مهني</SelectItem>
-            <SelectItem value="vocational">تكوين مهني</SelectItem>
           </SelectContent>
         </Select>
       </motion.div>
@@ -620,7 +604,7 @@ export default function OrientationResultsPage() {
           <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full font-mono">{filtered.length}</span>
           {scienceCount > 0 && <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">{scienceCount} علوم</Badge>}
           {artsCount > 0    && <Badge variant="secondary" className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">{artsCount} آداب</Badge>}
-          {techCount > 0    && <Badge variant="secondary" className="text-[10px] bg-orange-100 text-orange-700">{techCount} مهني</Badge>}
+          {unassignedCount > 0 && <Badge variant="secondary" className="text-[10px]">{unassignedCount} غير مستوفٍ للشروط</Badge>}
         </div>
       )}
 

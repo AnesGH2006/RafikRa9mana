@@ -15,11 +15,8 @@ const BASE = import.meta.env.BASE_URL;
 const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
 
 const TRACKS = [
-  { label: "رياضيات",       pie: "#3b82f6", minAvg: 15, gradient: "from-blue-600 to-blue-800" },
-  { label: "علوم تجريبية",  pie: "#10b981", minAvg: 13, gradient: "from-emerald-600 to-green-800" },
-  { label: "آداب وفلسفة",   pie: "#8b5cf6", minAvg: 11, gradient: "from-violet-600 to-purple-800" },
-  { label: "لغات أجنبية",   pie: "#06b6d4", minAvg: 10, gradient: "from-cyan-600 to-teal-800" },
-  { label: "تسيير واقتصاد", pie: "#f59e0b", minAvg:  0, gradient: "from-orange-600 to-amber-800" },
+  { label: "جذع مشترك علوم وتكنولوجيا", pie: "#3b82f6", minAvg: 13, gradient: "from-blue-600 to-blue-800" },
+  { label: "جذع مشترك آداب", pie: "#8b5cf6", minAvg: 10, gradient: "from-violet-600 to-purple-800" },
 ];
 
 function getTrack(avg: number | null) {

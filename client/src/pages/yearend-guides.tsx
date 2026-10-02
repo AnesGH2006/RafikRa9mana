@@ -2,7 +2,7 @@
  * قوائم الموجهين
  * 4AM students who qualified for orientation to secondary school (lycée).
  * A student qualifies when annualAvg >= 10 AND niveau = 4AM.
- * The page groups them by proposed track (علمي / أدبي / تقني) and provides
+ * The page groups them by proposed stream (جذع علوم / جذع آداب) and provides
  * a printable oriented-students list with class breakdown.
  */
 import { useState, useEffect } from "react";
@@ -24,9 +24,8 @@ interface StudentResult {
 
 /** Heuristic track assignment based on annual average */
 function trackFor(avg: number): { label: string; color: string } {
-  if (avg >= 14) return { label: "علمي", color: "text-blue-500" };
-  if (avg >= 12) return { label: "أدبي وفلسفي", color: "text-emerald-500" };
-  return { label: "تقني رياضي", color: "text-amber-500" };
+  if (avg >= 13) return { label: "جذع مشترك علوم وتكنولوجيا", color: "text-blue-500" };
+  return { label: "جذع مشترك آداب", color: "text-violet-500" };
 }
 
 export default function YearEndGuides() {
@@ -54,9 +53,8 @@ export default function YearEndGuides() {
   const classes = [...new Set(results.map(r => r.student.classe))].sort();
 
   const trackCounts = {
-    "علمي": results.filter(r => (r.annualAvg ?? 0) >= 14).length,
-    "أدبي وفلسفي": results.filter(r => (r.annualAvg ?? 0) >= 12 && (r.annualAvg ?? 0) < 14).length,
-    "تقني رياضي": results.filter(r => (r.annualAvg ?? 0) >= 10 && (r.annualAvg ?? 0) < 12).length,
+    "جذع مشترك علوم وتكنولوجيا": results.filter(r => (r.annualAvg ?? 0) >= 13).length,
+    "جذع مشترك آداب": results.filter(r => (r.annualAvg ?? 0) >= 10 && (r.annualAvg ?? 0) < 13).length,
   };
 
   return (
@@ -77,14 +75,13 @@ export default function YearEndGuides() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
         {[
           { label: "إجمالي الموجَّهين", value: oriented.length, color: "from-purple-500 to-violet-600" },
           ...Object.entries(trackCounts).map(([label, value]) => ({
             label, value, color:
-              label === "علمي" ? "from-blue-500 to-blue-600" :
-              label === "أدبي وفلسفي" ? "from-emerald-500 to-green-600" :
-              "from-amber-500 to-orange-600",
+              label === "جذع مشترك علوم وتكنولوجيا" ? "from-blue-500 to-blue-600" :
+              "from-violet-500 to-violet-700",
           })),
         ].map(({ label, value, color }) => (
           <div key={label} className={`rounded-xl p-4 bg-gradient-to-br ${color} text-white shadow-lg`}>
@@ -99,9 +96,8 @@ export default function YearEndGuides() {
         <p className="font-semibold mb-2 text-xs text-muted-foreground">معيار التوجيه (تلقائي بالمعدل)</p>
         <div className="flex flex-wrap gap-3">
           {[
-            { label: "علمي", range: "معدل ≥ 14", color: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
-            { label: "أدبي وفلسفي", range: "معدل 12 – 13.99", color: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
-            { label: "تقني رياضي", range: "معدل 10 – 11.99", color: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
+            { label: "جذع مشترك علوم وتكنولوجيا", range: "معدل ≥ 13", color: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
+            { label: "جذع مشترك آداب", range: "معدل 10 – 12.99", color: "bg-violet-500/10 text-violet-600 border-violet-500/20" },
           ].map(t => (
             <span key={t.label} className={`px-3 py-1 rounded-full border text-xs font-semibold ${t.color}`}>
               {t.label} — {t.range}
@@ -127,9 +123,8 @@ export default function YearEndGuides() {
           <SelectTrigger className="w-36"><SelectValue placeholder="الشعبة" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">كل الشعب</SelectItem>
-            <SelectItem value="علمي">علمي</SelectItem>
-            <SelectItem value="أدبي وفلسفي">أدبي وفلسفي</SelectItem>
-            <SelectItem value="تقني رياضي">تقني رياضي</SelectItem>
+            <SelectItem value="جذع مشترك علوم وتكنولوجيا">جذع مشترك علوم وتكنولوجيا</SelectItem>
+            <SelectItem value="جذع مشترك آداب">جذع مشترك آداب</SelectItem>
           </SelectContent>
         </Select>
       </div>
