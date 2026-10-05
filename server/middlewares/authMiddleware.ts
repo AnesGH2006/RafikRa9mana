@@ -46,6 +46,7 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
         profileImageUrl: currentUser.profileImageUrl,
         role: currentUser.role,
         subscriptionStatus: currentUser.subscriptionStatus,
+        subscriptionPlan: currentUser.subscriptionPlan as AuthUser["subscriptionPlan"],
         subscriptionExpiresAt: currentUser.subscriptionExpiresAt?.toISOString() ?? null,
       }
     : session.user;
@@ -68,6 +69,13 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
         linkedStudentId: member.linkedStudentId ?? null,
         name: member.name,
       };
+      if (member.role === "teacher") {
+        const [schoolOwner] = await db.select({ subscriptionPlan: usersTable.subscriptionPlan })
+          .from(usersTable)
+          .where(eq(usersTable.id, member.schoolUserId))
+          .limit(1);
+        if (schoolOwner) req.memberContext.schoolSubscriptionPlan = schoolOwner.subscriptionPlan as AuthUser["subscriptionPlan"];
+      }
     }
   } catch {
     // Non-fatal — if DB is unavailable, proceed without member context

@@ -86,6 +86,7 @@ async function upsertUser(claims: Record<string, unknown>) {
       ...identityFields,
       role: isAdminEmail ? "admin" : "user",
       subscriptionStatus: isAdminEmail ? "active" : "pending",
+      subscriptionPlan: isAdminEmail ? "pro" : "free",
     })
     .onConflictDoUpdate({
       target: usersTable.id,
@@ -235,6 +236,7 @@ router.get("/callback", async (req: Request, res: Response) => {
       profileImageUrl: dbUser.profileImageUrl,
       role: dbUser.role as "user" | "admin",
       subscriptionStatus: dbUser.subscriptionStatus as "pending" | "active" | "suspended",
+      subscriptionPlan: dbUser.subscriptionPlan as "free" | "basic" | "pro",
       subscriptionExpiresAt: dbUser.subscriptionExpiresAt?.toISOString() ?? null,
     },
     access_token: tokens.access_token,
@@ -296,6 +298,7 @@ router.post("/mobile-auth/token-exchange", async (req: Request, res: Response) =
         profileImageUrl: dbUser.profileImageUrl,
         role: dbUser.role as "user" | "admin",
         subscriptionStatus: dbUser.subscriptionStatus as "pending" | "active" | "suspended",
+        subscriptionPlan: dbUser.subscriptionPlan as "free" | "basic" | "pro",
         subscriptionExpiresAt: dbUser.subscriptionExpiresAt?.toISOString() ?? null,
       },
       access_token: tokens.access_token,

@@ -2,11 +2,12 @@
 import { Router, type IRouter } from "express";
 import { logAudit } from "../lib/audit.js";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
-import { db, gradesTable, absencesTable, studentsTable } from "../../shared/db.js";
+import { db, gradesTable, absencesTable, studentsTable, usersTable } from "../../shared/db.js";
 import { bemSessionsTable } from "../../shared/schema.js";
 import { UpsertGradesBulkBody, UpsertAbsenceBody } from "../../shared/schemas.js";
 import { getSubjectsForLevel, calcWeightedAvg } from "../../shared/subjects.js";
 import type { Niveau } from "../../shared/types.js";
+import { FREE_STUDENT_LIMIT } from "../../shared/subscription.js";
 import { notifyParentOfAbsence } from "../services/absenceAlerts.js";
 import { enqueueAbsenceAlert } from "../services/notificationQueue.js";
 import { SCHOOL_LEVELS } from "../config/school-stage.js";
@@ -346,6 +347,19 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
   }
 
   // ── 3 & 4. Execute all writes atomically in a single transaction ────────────
+  if (autoCreated.length > 0) {
+    const [account] = await db.select({ subscriptionPlan: usersTable.subscriptionPlan }).from(usersTable)
+      .where(eq(usersTable.id, userId)).limit(1);
+    if (account?.subscriptionPlan === "free") {
+      const existingStudents = await db.select({ id: studentsTable.id }).from(studentsTable)
+        .where(eq(studentsTable.userId, userId));
+      if (existingStudents.length + autoCreated.length > FREE_STUDENT_LIMIT) {
+        res.status(403).json({ error: `الخطة المجانية محدودة بـ ${FREE_STUDENT_LIMIT} تلميذاً`, requiredPlan: "basic" });
+        return;
+      }
+    }
+  }
+
   await db.transaction(async (tx) => {
     // Insert auto-created students first
     if (autoCreated.length > 0) {

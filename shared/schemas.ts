@@ -9,6 +9,7 @@ const MemberContextSchema = zod.object({
   assignedClasses: zod.array(zod.string()),
   linkedStudentId: zod.string().nullable(),
   name: zod.string(),
+  schoolSubscriptionPlan: zod.enum(["free", "basic", "pro"]).optional(),
 });
 
 export const GetCurrentAuthUserResponse = zod.object({
@@ -21,6 +22,7 @@ export const GetCurrentAuthUserResponse = zod.object({
       profileImageUrl: zod.string().nullable(),
       role: zod.enum(["user", "admin"]),
       subscriptionStatus: zod.enum(["pending", "active", "suspended"]),
+      subscriptionPlan: zod.enum(["free", "basic", "pro"]).optional(),
       subscriptionExpiresAt: zod.string().nullable().optional(),
       memberContext: MemberContextSchema.nullable().optional(),
     }),

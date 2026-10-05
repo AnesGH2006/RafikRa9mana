@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { generateActivationBatch, redeemActivationCode } from "../services/activationCodeService.js";
-import { completeDemoPayment, createDemoCheckout, createChargilyCheckout, settleChargilyPayment, verifyChargilySignature } from "../services/paymentService.js";
+import { activateFreePlan, completeDemoPayment, createDemoCheckout, createChargilyCheckout, settleChargilyPayment, verifyChargilySignature } from "../services/paymentService.js";
 
 const router = Router();
 
@@ -33,6 +33,20 @@ router.post("/payments/redeem-code", async (req, res): Promise<void> => {
     res.json(await redeemActivationCode(String(req.body?.code ?? ""), req.user!.id));
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Unable to redeem code" });
+  }
+});
+
+router.post("/payments/free/activate", async (req, res): Promise<void> => {
+  if (!requireAuth(req, res)) return;
+  if (req.user!.role === "admin" || req.memberContext) {
+    res.status(403).json({ error: "This account cannot activate the free school plan" });
+    return;
+  }
+  try {
+    await activateFreePlan(req.user!.id);
+    res.json({ success: true, subscriptionPlan: "free", subscriptionStatus: "active" });
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : "Unable to activate free plan" });
   }
 });
 

@@ -1,9 +1,23 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db, paymentsTable, usersTable } from "../../shared/db.js";
+import { PAID_PLAN_PRICES_DZD } from "../../shared/subscription.js";
 
 const DEFAULT_AMOUNT_DZD = 1000;
-const ALLOWED_AMOUNTS_DZD = new Set([1000, 6000, 12000]);
+const ALLOWED_AMOUNTS_DZD = new Set([DEFAULT_AMOUNT_DZD, ...Object.values(PAID_PLAN_PRICES_DZD)]);
+
+function requireAllowedAmount(amountDzd: number): number {
+  if (!Number.isInteger(amountDzd) || !ALLOWED_AMOUNTS_DZD.has(amountDzd)) {
+    throw new Error("Unsupported payment amount");
+  }
+  return amountDzd;
+}
+
+function paidPlanForAmount(amountDzd: number): "basic" | "pro" | null {
+  if (amountDzd === PAID_PLAN_PRICES_DZD.basic || amountDzd === 6000) return "basic";
+  if (amountDzd === PAID_PLAN_PRICES_DZD.pro || amountDzd === 12000) return "pro";
+  return null;
+}
 
 export function verifyChargilySignature(rawBody: string, signature: string | undefined): boolean {
   const secret = process.env.CHARGILY_WEBHOOK_SECRET;
@@ -14,8 +28,28 @@ export function verifyChargilySignature(rawBody: string, signature: string | und
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+export async function activateFreePlan(userId: string): Promise<void> {
+  const [user] = await db.select({
+    subscriptionStatus: usersTable.subscriptionStatus,
+    subscriptionPlan: usersTable.subscriptionPlan,
+  }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+
+  if (!user) throw new Error("User not found");
+  if (user.subscriptionStatus === "active" && user.subscriptionPlan !== "free") {
+    throw new Error("An active paid plan cannot be downgraded to free");
+  }
+  if (user.subscriptionStatus === "active" && user.subscriptionPlan === "free") return;
+
+  await db.update(usersTable).set({
+    subscriptionStatus: "active",
+    subscriptionPlan: "free",
+    subscriptionExpiresAt: null,
+    updatedAt: new Date(),
+  }).where(eq(usersTable.id, userId));
+}
+
 export async function createChargilyCheckout(userId: string, returnUrl: string, requestedAmountDzd = DEFAULT_AMOUNT_DZD) {
-  const amountDzd = ALLOWED_AMOUNTS_DZD.has(requestedAmountDzd) ? requestedAmountDzd : DEFAULT_AMOUNT_DZD;
+  const amountDzd = requireAllowedAmount(requestedAmountDzd);
   const apiKey = process.env.CHARGILY_API_KEY;
   const endpoint = process.env.CHARGILY_API_URL
     ?? (process.env.CHARGILY_MODE === "test"
@@ -68,7 +102,7 @@ export async function createChargilyCheckout(userId: string, returnUrl: string, 
 }
 
 export async function createDemoCheckout(userId: string, returnUrl: string, requestedAmountDzd = DEFAULT_AMOUNT_DZD) {
-  const amountDzd = ALLOWED_AMOUNTS_DZD.has(requestedAmountDzd) ? requestedAmountDzd : DEFAULT_AMOUNT_DZD;
+  const amountDzd = requireAllowedAmount(requestedAmountDzd);
   const [payment] = await db.insert(paymentsTable).values({
     userId,
     provider: "chargily",
@@ -102,7 +136,12 @@ export async function completeDemoPayment(paymentId: string, userId: string) {
       .set({ status: "paid", paidAt: now, updatedAt: now })
       .where(eq(paymentsTable.id, payment.id));
     await tx.update(usersTable)
-      .set({ subscriptionStatus: "active", subscriptionExpiresAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000), updatedAt: now })
+      .set({
+        subscriptionStatus: "active",
+        ...(paidPlanForAmount(payment.amountDzd) ? { subscriptionPlan: paidPlanForAmount(payment.amountDzd)! } : {}),
+        subscriptionExpiresAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
+        updatedAt: now,
+      })
       .where(eq(usersTable.id, userId));
   });
   return { ...payment, status: "paid" as const, paidAt: now };
@@ -117,7 +156,13 @@ export async function settleChargilyPayment(input: { reference: string; userId?:
   const now = new Date();
   await db.transaction(async (tx) => {
     await tx.update(paymentsTable).set({ status: "paid", paidAt: now, updatedAt: now }).where(eq(paymentsTable.id, payment.id));
-    await tx.update(usersTable).set({ subscriptionStatus: "active", subscriptionExpiresAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000), updatedAt: now }).where(eq(usersTable.id, payment.userId));
+    const plan = paidPlanForAmount(payment.amountDzd);
+    await tx.update(usersTable).set({
+      subscriptionStatus: "active",
+      ...(plan ? { subscriptionPlan: plan } : {}),
+      subscriptionExpiresAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
+      updatedAt: now,
+    }).where(eq(usersTable.id, payment.userId));
   });
   return { settled: true, idempotent: false };
 }

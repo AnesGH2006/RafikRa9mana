@@ -1,17 +1,31 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Lock, Phone, Mail, CheckCircle2, Clock, Shield, Zap, Crown, Star, Sparkles } from "lucide-react";
+import { BookOpen, Lock, Phone, Mail, CheckCircle2, Clock, Shield, Zap, Crown, Star, Sparkles, Leaf } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { SCHOOL_STAGE } from "@/lib/deployment";
+import { FREE_STUDENT_LIMIT, PAID_PLAN_PRICES_DZD } from "@shared/subscription";
 
 const plans = [
   {
+    key: "free",
+    name: "مجاني",
+    price: "0",
+    period: "",
+    perMonth: "ابدأ بدون دفع",
+    features: [`حتى ${FREE_STUDENT_LIMIT} تلميذاً`, "إدارة التلاميذ", "إدخال النقاط والنتائج", "لوحة التحكم الأساسية"],
+    gradient: "from-slate-500 to-slate-700",
+    glow: "shadow-slate-500/20",
+    icon: Leaf,
+    popular: false,
+  },
+  {
+    key: "basic",
     name: "أساسي",
     nameEn: "Basic",
-    price: "6 000",
+    price: "3 000",
     period: "سنة",
-    perMonth: "500 دج/شهر",
+    perMonth: "اشتراك سنوي",
     features: [
       "300 تلميذ",
       "استيراد Excel",
@@ -26,11 +40,12 @@ const plans = [
     popular: false,
   },
   {
+    key: "pro",
     name: "Pro",
     nameEn: "Pro",
-    price: "12 000",
+    price: "7 000",
     period: "سنة",
-    perMonth: "1 000 دج/شهر",
+    perMonth: "اشتراك سنوي",
     features: [
       "1 000 تلميذ",
       "كل ميزات الأساسي",
@@ -46,6 +61,7 @@ const plans = [
     popular: true,
   },
   {
+    key: "institution",
     name: "مؤسسي",
     nameEn: "Institution",
     price: "تواصل",
@@ -77,6 +93,24 @@ export default function PaywallScreen() {
   const isParent = user?.memberContext?.role === "parent";
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+  const [freeBusy, setFreeBusy] = useState(false);
+  async function activateFreePlan() {
+    setFreeBusy(true);
+    setCheckoutError("");
+    try {
+      const response = await fetch(`${import.meta.env.BASE_URL}api/payments/free/activate`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "تعذر تفعيل الخطة المجانية");
+      window.location.assign("/");
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "تعذر تفعيل الخطة المجانية");
+      setFreeBusy(false);
+    }
+  }
+
   async function startCheckout(amountDzd = 1000) {
     setCheckoutBusy(true);
     setCheckoutError("");
@@ -137,7 +171,7 @@ export default function PaywallScreen() {
             animate={{ scale: [1, 1.04, 1] }} transition={{ duration: 2.5, repeat: Infinity }}
           >
             <Lock className="w-4 h-4" />
-            الوصول مقيّد — يتطلب اشتراكًا
+            اختر الخطة المناسبة لمؤسستك
           </motion.div>
           <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
             {isParent ? "فعّل خدمة متابعة طفلك" : "اختر باقتك وابدأ الآن"}
@@ -145,7 +179,7 @@ export default function PaywallScreen() {
           <p className="text-muted-foreground text-base max-w-lg mx-auto">
             {isParent
               ? "ادفع اشتراك خدمة ولي الأمر للوصول إلى نتائج طفلك وغياباته وإشعارات المدرسة."
-              : "حسابك مسجّل بنجاح. فعّل اشتراكك للوصول إلى جميع ميزات رفيق الرقمنة."}
+              : "ابدأ مجاناً أو اختر خطة سنوية للاستفادة من جميع ميزات رفيق الرقمنة."}
           </p>
         </motion.div>
 
@@ -179,7 +213,7 @@ export default function PaywallScreen() {
         </motion.div>
 
         {/* Plans */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
           {plans.map((plan, i) => {
             const Icon = plan.icon;
             return (
@@ -215,12 +249,16 @@ export default function PaywallScreen() {
                       </li>
                     ))}
                   </ul>
-                  {plan.name === "مؤسسي" ? (
+                  {plan.key === "free" ? (
+                    <Button onClick={activateFreePlan} disabled={freeBusy} className="mt-6 w-full">
+                      {freeBusy ? "جارٍ تفعيل الخطة…" : "ابدأ مجاناً"}
+                    </Button>
+                  ) : plan.key === "institution" ? (
                     <a href="mailto:contact@rafik-raqamna.dz" className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2.5 text-sm font-bold text-amber-300 transition hover:bg-amber-500/20">
                       <Mail className="h-4 w-4" /> تواصل معنا
                     </a>
                   ) : (
-                    <Button onClick={() => startCheckout(plan.name === "Pro" ? 12000 : 6000)} disabled={checkoutBusy} className="mt-6 w-full bg-emerald-600 text-white hover:bg-emerald-700">
+                    <Button onClick={() => startCheckout(plan.key === "pro" ? PAID_PLAN_PRICES_DZD.pro : PAID_PLAN_PRICES_DZD.basic)} disabled={checkoutBusy} className="mt-6 w-full bg-emerald-600 text-white hover:bg-emerald-700">
                       {checkoutBusy ? "جارٍ فتح صفحة الدفع…" : "ادفع عبر Chargily"}
                     </Button>
                   )}

@@ -73,6 +73,7 @@ export async function redeemActivationCode(code: string, userId: string) {
 
     await tx.update(usersTable).set({
       subscriptionStatus: "active",
+      subscriptionPlan: "pro",
       subscriptionExpiresAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
       updatedAt: now,
     }).where(eq(usersTable.id, userId));

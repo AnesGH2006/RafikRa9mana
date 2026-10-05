@@ -31,6 +31,10 @@ async function migrate() {
   `);
   await db.execute(sql`DO $$ BEGIN CREATE TYPE subscription_status AS ENUM ('pending','active','suspended'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status subscription_status NOT NULL DEFAULT 'pending';`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_plan varchar(20);`);
+  await db.execute(sql`UPDATE users SET subscription_plan = CASE WHEN subscription_status = 'active' THEN 'pro' ELSE 'free' END WHERE subscription_plan IS NULL;`);
+  await db.execute(sql`ALTER TABLE users ALTER COLUMN subscription_plan SET DEFAULT 'free';`);
+  await db.execute(sql`ALTER TABLE users ALTER COLUMN subscription_plan SET NOT NULL;`);
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at timestamptz;`);
 
   await db.execute(sql`

@@ -50,7 +50,7 @@ export default function Settings() {
   useEffect(() => { fetchSchool(); }, [fetchSchool]);
 
   useEffect(() => {
-    if (user?.memberContext || (user?.role !== "admin" && user?.subscriptionStatus !== "active")) return;
+    if (user?.memberContext || user?.subscriptionPlan === "free" || (user?.role !== "admin" && user?.subscriptionStatus !== "active")) return;
     fetch(`${BASE}api/assistant/settings`, { credentials: "include" })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
@@ -116,7 +116,8 @@ export default function Settings() {
     finally { setSavingGeminiKey(false); }
   };
 
-  const canManageKeys = !user?.memberContext && (user?.role === "admin" || user?.subscriptionStatus === "active");
+  const canManageKeys = !user?.memberContext
+    && (user?.role === "admin" || (user?.subscriptionPlan !== "free" && user?.subscriptionStatus === "active"));
 
   return (
     <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit"

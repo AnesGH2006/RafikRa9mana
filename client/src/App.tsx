@@ -222,8 +222,24 @@ const PARENT_SECTIONS: SectionDef[] = [
 /** Choose the nav sections to display based on the logged-in user's role. */
 function getNavSections(user: import("@/hooks/use-auth").AuthUser | null): SectionDef[] {
   const role = user?.memberContext?.role;
-  if (role === "teacher") return TEACHER_SECTIONS;
+  if (role === "teacher") {
+    if (user?.memberContext?.schoolSubscriptionPlan === "free") {
+      const freePaths = new Set(["/", "/results", "/subjects"]);
+      return TEACHER_SECTIONS.map(section => ({
+        ...section,
+        items: section.items.filter(item => freePaths.has(item.href)),
+      })).filter(section => section.items.length > 0);
+    }
+    return TEACHER_SECTIONS;
+  }
   if (role === "parent")  return PARENT_SECTIONS;
+  if (user?.subscriptionPlan === "free" && user.subscriptionStatus === "active" && user.role !== "admin") {
+    const freePaths = new Set(["/", "/students", "/results", "/subjects", "/import", "/settings", "/account", "/subscription"]);
+    return SECTIONS.map(section => ({
+      ...section,
+      items: section.items.filter(item => freePaths.has(item.href)),
+    })).filter(section => section.items.length > 0);
+  }
   return SECTIONS;
 }
 
@@ -755,11 +771,13 @@ function TopNav() {
       </AnimatePresence>
 
       {/* AI Chat Widget */}
-      <AiChatWidget
-        open={aiOpen}
-        onClose={() => setAiOpen(false)}
-        role={user?.memberContext?.role ?? "admin"}
-      />
+      {user?.subscriptionPlan !== "free" && user?.memberContext?.schoolSubscriptionPlan !== "free" && (
+        <AiChatWidget
+          open={aiOpen}
+          onClose={() => setAiOpen(false)}
+          role={user?.memberContext?.role ?? "admin"}
+        />
+      )}
     </>
   );
 }
@@ -781,9 +799,19 @@ function ComingSoon({ title }: { title: string }) {
 
 // ── App layout ────────────────────────────────────────────────────────────────
 function AppLayout() {
-  const [loc] = useLocation();
+  const [loc, navigate] = useLocation();
   const { user } = useAuth();
   const isParent = user?.memberContext?.role === "parent";
+  const isFreeAccount = user?.role !== "admin" && (
+    (user?.subscriptionPlan === "free" && user.subscriptionStatus === "active" && !user.memberContext)
+    || (user?.memberContext?.role === "teacher" && user.memberContext.schoolSubscriptionPlan === "free")
+  );
+  useEffect(() => {
+    const freePaths = ["/", "/students", "/results", "/subjects", "/import", "/settings", "/account", "/subscription", "/payment-demo"];
+    if (isFreeAccount && !freePaths.some(path => path === "/" ? loc === "/" : loc === path || loc.startsWith(`${path}/`))) {
+      navigate("/subscription", { replace: true });
+    }
+  }, [isFreeAccount, loc, navigate]);
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
       <TopNav />
@@ -1012,7 +1040,8 @@ function AuthGate() {
   // Teachers are covered by the school's subscription. Parent access is a
   // separate service paid by the parent account.
   const isTeacherMember = user?.memberContext?.role === "teacher";
-  const isSubscribed = user?.subscriptionStatus === "active" || isTeacherMember;
+  const isFreePlan = user?.subscriptionPlan === "free" && user.subscriptionStatus === "active";
+  const isSubscribed = user?.subscriptionStatus === "active" || isTeacherMember || isFreePlan;
 
   return (
     <AnimatePresence mode="wait">

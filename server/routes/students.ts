@@ -4,16 +4,25 @@ import { logAudit } from "../lib/audit.js";
 import { eq, and, ilike, inArray } from "drizzle-orm";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import { db, studentsTable } from "../../shared/db.js";
+import { db, studentsTable, usersTable } from "../../shared/db.js";
 import {
   ListStudentsResponse, ImportStudentsResponse, DashboardStatsResponse,
   NiveauEnum, SexeEnum, StatutEnum,
 } from "../../shared/schemas.js";
 import type { SchoolLevel } from "../../shared/school-stage.js";
+import { FREE_STUDENT_LIMIT } from "../../shared/subscription.js";
 import { SCHOOL_LEVELS, SCHOOL_STAGE } from "../config/school-stage.js";
 
 const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+async function ensureFreeStudentLimit(userId: string, newStudents: number): Promise<boolean> {
+  const [user] = await db.select({ subscriptionPlan: usersTable.subscriptionPlan }).from(usersTable)
+    .where(eq(usersTable.id, userId)).limit(1);
+  if (user?.subscriptionPlan !== "free") return true;
+  const existingStudents = await db.select({ id: studentsTable.id }).from(studentsTable)
+    .where(eq(studentsTable.userId, userId));
+  return existingStudents.length + newStudents <= FREE_STUDENT_LIMIT;
+}
 
 // ─── Normalisation ─────────────────────────────────────────────────────────────
 function norm(s: string): string {
@@ -525,6 +534,11 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
   }
 
   const { toInsert, skipped, errors } = processRows(raw, userId, annee, titleNiveau, titleClasse, req.log);
+
+  if (!(await ensureFreeStudentLimit(userId, toInsert.length))) {
+    res.status(403).json({ error: `الخطة المجانية محدودة بـ ${FREE_STUDENT_LIMIT} تلميذاً`, requiredPlan: "basic" });
+    return;
+  }
 
   if (toInsert.length > 0) {
     for (let b = 0; b < toInsert.length; b += 200) {

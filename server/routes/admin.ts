@@ -67,7 +67,10 @@ router.patch("/admin/users/:id", async (req: Request, res: Response): Promise<vo
   };
 
   const updates: Partial<typeof usersTable.$inferInsert> = { updatedAt: new Date() };
-  if (subscriptionStatus) updates.subscriptionStatus = subscriptionStatus;
+  if (subscriptionStatus) {
+    updates.subscriptionStatus = subscriptionStatus;
+    if (subscriptionStatus === "active") updates.subscriptionPlan = "pro";
+  }
   if (role) updates.role = role;
   if (subscriptionExpiresAt !== undefined)
     updates.subscriptionExpiresAt = subscriptionExpiresAt ? new Date(subscriptionExpiresAt) : null;
@@ -91,7 +94,7 @@ router.post("/admin/activate", async (req: Request, res: Response): Promise<void
     : null;
 
   const [updated] = await db.update(usersTable)
-    .set({ subscriptionStatus: "active", subscriptionExpiresAt: expiresAt, updatedAt: new Date() })
+    .set({ subscriptionStatus: "active", subscriptionPlan: "pro", subscriptionExpiresAt: expiresAt, updatedAt: new Date() })
     .where(eq(usersTable.email, email))
     .returning();
 

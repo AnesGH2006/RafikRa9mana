@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, Zap, Star, Crown, Calendar, Leaf, Building2 } from "lucide-react";
+import { FREE_STUDENT_LIMIT, PAID_PLAN_PRICES_DZD } from "@shared/subscription";
 
 const pageVariants = {
   initial: { opacity: 0, y: 16 },
@@ -61,20 +62,20 @@ export default function SubscriptionPage() {
       shadow: "shadow-slate-400/20",
       glow: "hover:shadow-slate-400/30",
       features: [
-        "50 تلميذ كحد أقصى",
-        "استيراد Excel",
+        `حتى ${FREE_STUDENT_LIMIT} تلميذاً`,
+        "إدارة التلاميذ والنتائج الأساسية",
         "لوحة التحكم الأساسية",
         "إحصائيات محدودة",
       ],
       cta: "الخطة الحالية",
       ctaVariant: "outline" as const,
-      current: true,
+      current: (user?.subscriptionPlan ?? (user?.subscriptionStatus === "active" ? "pro" : "free")) === "free",
       popular: false,
     },
     {
       key: "basic",
       name: "أساسي",
-      price: "6 000",
+      price: "3 000",
       priceNote: null,
       period: "سنة",
       icon: Star,
@@ -91,13 +92,13 @@ export default function SubscriptionPage() {
       ],
       cta: "ترقية إلى أساسي",
       ctaVariant: "default" as const,
-      current: false,
+      current: (user?.subscriptionPlan ?? (user?.subscriptionStatus === "active" ? "pro" : "free")) === "basic",
       popular: false,
     },
     {
       key: "pro",
       name: "Pro",
-      price: "12 000",
+      price: "7 000",
       priceNote: null,
       period: "سنة",
       icon: Zap,
@@ -115,7 +116,7 @@ export default function SubscriptionPage() {
       ],
       cta: "ترقية إلى Pro",
       ctaVariant: "default" as const,
-      current: false,
+      current: (user?.subscriptionPlan ?? (user?.subscriptionStatus === "active" ? "pro" : "free")) === "pro",
       popular: true,
     },
     {
@@ -259,8 +260,8 @@ export default function SubscriptionPage() {
                     disabled={plan.current || checkoutBusy === plan.key}
                     onClick={() => {
                       if (plan.current) return;
-                      if (plan.key === "basic") return startCheckout(plan.key, 6000);
-                      if (plan.key === "pro") return startCheckout(plan.key, 12000);
+                      if (plan.key === "basic") return startCheckout(plan.key, PAID_PLAN_PRICES_DZD.basic);
+                      if (plan.key === "pro") return startCheckout(plan.key, PAID_PLAN_PRICES_DZD.pro);
                       if (plan.key === "institution") return startCheckout(plan.key, 0);
                     }}
                     className={`w-full py-4 font-bold text-xs rounded-xl shadow-md transition-all ${
@@ -338,7 +339,7 @@ export default function SubscriptionPage() {
             <Star className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">أساسي — 6 000 دج / سنة</p>
+            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">أساسي — 3 000 دج / سنة</p>
             <p className="text-xs text-muted-foreground">500 دج / شهر</p>
           </div>
         </div>
@@ -347,7 +348,7 @@ export default function SubscriptionPage() {
             <Zap className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold text-violet-700 dark:text-violet-300">Pro — 12 000 دج / سنة</p>
+            <p className="text-sm font-bold text-violet-700 dark:text-violet-300">Pro — 7 000 دج / سنة</p>
             <p className="text-xs text-muted-foreground">1 000 دج / شهر — الأنسب للمتوسطات</p>
           </div>
         </div>

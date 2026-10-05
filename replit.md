@@ -49,6 +49,15 @@ Register the matching OAuth callback URL for each deployment. To prepare a
 lycée database, run the database migration (`pnpm tsx scripts/migrate.ts`) before
 starting the app so the `1AS`–`3AS` levels are available.
 
+## Subscription plans
+
+- Free: up to 50 students with core student, grade, result, and dashboard features.
+- Basic: 3,000 DZD/year.
+- Pro: 7,000 DZD/year.
+
+Run the database migration before deploying so existing subscriptions are preserved
+and the selected plan is stored for each account.
+
 ## Environment variables / secrets
 
 | Key | Required | Notes |

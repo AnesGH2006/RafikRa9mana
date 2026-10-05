@@ -2,6 +2,7 @@ import type { SchoolLevel } from "./school-stage.js";
 export type { SchoolLevel, SchoolStage } from "./school-stage.js";
 
 export type SubscriptionStatus = "pending" | "active" | "suspended";
+export type SubscriptionPlan = "free" | "basic" | "pro";
 export type UserRole = "user" | "admin";
 export type MemberRole = "teacher" | "parent" | "supervisor" | "counselor";
 
@@ -14,6 +15,7 @@ export interface MemberContext {
   /** Parents: the student they can view. Teachers: null. */
   linkedStudentId: string | null;
   name: string;
+  schoolSubscriptionPlan?: SubscriptionPlan;
 }
 
 export interface AuthUser {
@@ -24,6 +26,7 @@ export interface AuthUser {
   profileImageUrl: string | null;
   role: UserRole;
   subscriptionStatus: SubscriptionStatus;
+  subscriptionPlan?: SubscriptionPlan;
   subscriptionExpiresAt?: string | null;
   /** Present when this user is a teacher or parent sub-account */
   memberContext?: MemberContext | null;

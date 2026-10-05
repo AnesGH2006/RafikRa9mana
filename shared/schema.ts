@@ -22,6 +22,7 @@ export const usersTable = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   role: roleEnum("role").notNull().default("user"),
   subscriptionStatus: subscriptionStatusEnum("subscription_status").notNull().default("pending"),
+  subscriptionPlan: varchar("subscription_plan", { length: 20 }).notNull().default("free"),
   subscriptionExpiresAt: timestamp("subscription_expires_at", { withTimezone: true }),
     groqApiKey: varchar("groq_api_key", { length: 500 }),
   geminiApiKey: varchar("gemini_api_key", { length: 500 }),
