@@ -217,7 +217,7 @@ router.put("/v1/attendance/sync", async (req, res): Promise<void> => {
   }
 
   const schoolUserId = req.memberContext?.schoolUserId ?? req.user.id;
-  const attendanceDate = timestamp.slice(0, 10);
+  const timestampAttendanceDate = timestamp.slice(0, 10);
   const year = academicYear(new Date(timestamp));
   const roster = await db.select({ id: studentsTable.id })
     .from(studentsTable)
@@ -232,7 +232,7 @@ router.put("/v1/attendance/sync", async (req, res): Promise<void> => {
       .from(studentDailyAttendanceTable)
       .where(and(
         eq(studentDailyAttendanceTable.userId, schoolUserId),
-        eq(studentDailyAttendanceTable.attendanceDate, attendanceDate),
+        eq(studentDailyAttendanceTable.attendanceDate, timestampAttendanceDate),
         eq(studentDailyAttendanceTable.isAbsent, true),
         inArray(studentDailyAttendanceTable.studentId, absentees),
       ))
@@ -245,7 +245,7 @@ router.put("/v1/attendance/sync", async (req, res): Promise<void> => {
       id: crypto.randomBytes(16).toString("hex"),
       userId: schoolUserId,
       studentId,
-      attendanceDate,
+      attendanceDate: timestampAttendanceDate,
       annee: year,
       status: "ABSENT",
       isAbsent: true,
@@ -259,17 +259,17 @@ router.put("/v1/attendance/sync", async (req, res): Promise<void> => {
     schoolUserId,
     studentId,
     annee: year,
-    date: attendanceDate,
-  }).catch(error => logger.error({ error, studentId, attendanceDate }, "Synced attendance alert failed"))));
+    date: timestampAttendanceDate,
+  }).catch(error => logger.error({ error, studentId, attendanceDate: timestampAttendanceDate }, "Synced attendance alert failed"))));
 
   try {
     getIO().to(`school:${schoolUserId}`).emit("attendance:updated", {
-      classId: classId.trim(), attendanceDate, absentees,
+      classId: classId.trim(), attendanceDate: timestampAttendanceDate, absentees,
     });
   } catch (error) {
     logger.warn({ error, schoolUserId }, "Attendance websocket event could not be emitted");
   }
-  res.json({ success: true, attendanceDate, synced: absentees.length, notified: newAbsentees.length });
+  res.json({ success: true, attendanceDate: timestampAttendanceDate, synced: absentees.length, notified: newAbsentees.length });
 });
 
 router.post("/v1/notifications/disciplinary", async (req, res): Promise<void> => {
