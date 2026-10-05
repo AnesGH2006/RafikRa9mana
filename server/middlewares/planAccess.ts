@@ -6,8 +6,6 @@ const FREE_TIER_PATHS = [
   /^\/stats$/,
   /^\/results(?:\/|$)/,
   /^\/grades(?:\/|$)/,
-  /^\/payments(?:\/|$)/,
-  /^\/auth(?:\/|$)/,
   /^\/health$/,
 ];
 
@@ -20,11 +18,14 @@ export function requirePaidPlan(req: Request, res: Response, next: NextFunction)
   const plan = req.memberContext?.role === "teacher"
     ? req.memberContext.schoolSubscriptionPlan
     : user.subscriptionPlan;
+  const status = req.memberContext?.role === "teacher"
+    ? req.memberContext.schoolSubscriptionStatus
+    : user.subscriptionStatus;
   if (plan === "basic" || plan === "pro") {
     next();
     return;
   }
-  if (FREE_TIER_PATHS.some(path => path.test(req.path))) {
+  if (plan === "free" && status === "active" && FREE_TIER_PATHS.some(path => path.test(req.path))) {
     next();
     return;
   }

@@ -10,6 +10,7 @@ const MemberContextSchema = zod.object({
   linkedStudentId: zod.string().nullable(),
   name: zod.string(),
   schoolSubscriptionPlan: zod.enum(["free", "basic", "pro"]).optional(),
+  schoolSubscriptionStatus: zod.enum(["pending", "active", "suspended"]).optional(),
 });
 
 export const GetCurrentAuthUserResponse = zod.object({

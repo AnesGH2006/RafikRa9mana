@@ -39,6 +39,9 @@ export async function activateFreePlan(userId: string): Promise<void> {
     throw new Error("An active paid plan cannot be downgraded to free");
   }
   if (user.subscriptionStatus === "active" && user.subscriptionPlan === "free") return;
+  if (user.subscriptionStatus !== "pending") {
+    throw new Error("This account cannot activate the free plan");
+  }
 
   await db.update(usersTable).set({
     subscriptionStatus: "active",
@@ -131,6 +134,7 @@ export async function completeDemoPayment(paymentId: string, userId: string) {
   if (payment.status === "paid") return payment;
 
   const now = new Date();
+  const plan = paidPlanForAmount(payment.amountDzd);
   await db.transaction(async (tx) => {
     await tx.update(paymentsTable)
       .set({ status: "paid", paidAt: now, updatedAt: now })
@@ -138,7 +142,7 @@ export async function completeDemoPayment(paymentId: string, userId: string) {
     await tx.update(usersTable)
       .set({
         subscriptionStatus: "active",
-        ...(paidPlanForAmount(payment.amountDzd) ? { subscriptionPlan: paidPlanForAmount(payment.amountDzd)! } : {}),
+        ...(plan ? { subscriptionPlan: plan } : {}),
         subscriptionExpiresAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
         updatedAt: now,
       })

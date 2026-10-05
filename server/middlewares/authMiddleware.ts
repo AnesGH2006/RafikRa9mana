@@ -70,11 +70,17 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
         name: member.name,
       };
       if (member.role === "teacher") {
-        const [schoolOwner] = await db.select({ subscriptionPlan: usersTable.subscriptionPlan })
+        const [schoolOwner] = await db.select({
+          subscriptionPlan: usersTable.subscriptionPlan,
+          subscriptionStatus: usersTable.subscriptionStatus,
+        })
           .from(usersTable)
           .where(eq(usersTable.id, member.schoolUserId))
           .limit(1);
-        if (schoolOwner) req.memberContext.schoolSubscriptionPlan = schoolOwner.subscriptionPlan as AuthUser["subscriptionPlan"];
+        if (schoolOwner) {
+          req.memberContext.schoolSubscriptionPlan = schoolOwner.subscriptionPlan as AuthUser["subscriptionPlan"];
+          req.memberContext.schoolSubscriptionStatus = schoolOwner.subscriptionStatus;
+        }
       }
     }
   } catch {

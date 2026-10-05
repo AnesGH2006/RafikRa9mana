@@ -16,6 +16,7 @@ export interface MemberContext {
   linkedStudentId: string | null;
   name: string;
   schoolSubscriptionPlan?: SubscriptionPlan;
+  schoolSubscriptionStatus?: SubscriptionStatus;
 }
 
 export interface AuthUser {
