@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, uniqueIndex, jsonb, pgTable, timestamp, varchar, pgEnum, boolean, integer, numeric } from "drizzle-orm/pg-core";
+import { index, uniqueIndex, jsonb, pgTable, timestamp, varchar, pgEnum, boolean, integer, numeric, doublePrecision, text } from "drizzle-orm/pg-core";
 
 export const sessionsTable = pgTable(
   "sessions",
@@ -53,6 +53,39 @@ export const schoolInfoTable = pgTable("school_info", {
 
 export type SchoolInfo = typeof schoolInfoTable.$inferSelect;
 export type InsertSchoolInfo = typeof schoolInfoTable.$inferInsert;
+
+export const planTypeEnum = pgEnum("plan_type", ["TRIMESTER", "ANNUAL"]);
+export const licenseStatusEnum = pgEnum("license_status", ["ACTIVE", "EXPIRED", "REVOKED"]);
+
+export const schoolLicensesTable = pgTable("school_licenses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  schoolId: varchar("school_id").notNull().unique(),
+  licenseKey: text("license_key").notNull(),
+  planType: planTypeEnum("plan_type").notNull(),
+  maxStudents: integer("max_students").notNull().default(500),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  status: licenseStatusEnum("status").notNull().default("ACTIVE"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type SchoolLicense = typeof schoolLicensesTable.$inferSelect;
+export type InsertSchoolLicense = typeof schoolLicensesTable.$inferInsert;
+
+export const paymentTransactionsTable = pgTable("payment_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  schoolId: varchar("school_id").notNull(),
+  chargilyId: varchar("chargily_id").notNull().unique(),
+  amount: doublePrecision("amount").notNull(),
+  currency: varchar("currency").notNull().default("dzd"),
+  paymentMethod: varchar("payment_method").notNull(),
+  status: varchar("status").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PaymentTransaction = typeof paymentTransactionsTable.$inferSelect;
+export type InsertPaymentTransaction = typeof paymentTransactionsTable.$inferInsert;
 
 export const niveauEnum = pgEnum("niveau", ["1AM", "2AM", "3AM", "4AM", "1AS", "2AS", "3AS"]);
 export const sexeEnum = pgEnum("sexe", ["M", "F"]);
