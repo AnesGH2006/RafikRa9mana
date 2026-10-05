@@ -5,12 +5,14 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   db,
   gradesTable,
+  schoolMembersTable,
   studentsTable,
   studentDailyAttendanceTable,
 } from "../../shared/db.js";
 import { getUserGroqKey } from "../lib/groq-key.js";
 import { notifyParentOfAbsence } from "../services/absenceAlerts.js";
 import { sendSmsAlertTool } from "../lib/tools/send-sms-alert.js";
+import { notifyParentAccount } from "../services/parentNotifications.js";
 import { getIO } from "../socket/index.js";
 import { logger } from "../lib/logger.js";
 
@@ -286,15 +288,47 @@ router.post("/v1/notifications/disciplinary", async (req, res): Promise<void> =>
     .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, schoolUserId)))
     .limit(1);
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
-  const result = await sendSmsAlertTool({ student_id: student.id, message: message.trim() }, schoolUserId) as { success?: boolean };
+
   const timestamp = new Date().toISOString();
-  res.status(result.success ? 200 : 502).json({
+  const linkedParents = await db.select({ memberUserId: schoolMembersTable.memberUserId })
+    .from(schoolMembersTable)
+    .where(and(
+      eq(schoolMembersTable.schoolUserId, schoolUserId),
+      eq(schoolMembersTable.linkedStudentId, student.id),
+      eq(schoolMembersTable.role, "parent"),
+    ));
+  const parentUserIds = [...new Set(linkedParents.flatMap(parent => parent.memberUserId ? [parent.memberUserId] : []))];
+  const portalResults = await Promise.allSettled(parentUserIds.map(parentUserId => notifyParentAccount({
+    userId: parentUserId,
+    title: "إشعار متابعة تربوية",
+    body: message.trim(),
+    type: "warning",
+    url: "/my-child#parent-notifications",
+    metadata: { studentId: student.id, eventType: "DISCIPLINE_ALERT", timestamp },
+  })));
+  const portalDeliveries = portalResults.flatMap(result => result.status === "fulfilled" ? [result.value] : []);
+  for (const result of portalResults) {
+    if (result.status === "rejected") req.log.error({ error: result.reason, studentId: student.id }, "Parent portal disciplinary alert failed");
+  }
+
+  let smsResult: { success?: boolean; message?: string } = { success: false, message: "تعذر إرسال SMS" };
+  try {
+    smsResult = await sendSmsAlertTool({ student_id: student.id, message: message.trim() }, schoolUserId) as typeof smsResult;
+  } catch (error) {
+    req.log.error({ error, studentId: student.id }, "Disciplinary SMS alert failed");
+  }
+  const smsSent = smsResult.success === true;
+  res.json({
     parent_phone: student.parentPhone,
     student_name: student.name,
     event_type: "DISCIPLINE_ALERT",
     timestamp,
     template_ar: message.trim(),
-    sent: result.success === true,
+    sent: smsSent || portalDeliveries.length > 0,
+    smsSent,
+    portalRecipients: portalDeliveries.length,
+    pushSent: portalDeliveries.reduce((total, delivery) => total + delivery.pushSent, 0),
+    smsMessage: smsResult.message,
   });
 });
 

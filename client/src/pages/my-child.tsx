@@ -41,6 +41,15 @@ interface StudentData {
   annualAvg: number | null;
 }
 
+interface ParentNotification {
+  id: string;
+  title: string;
+  body: string | null;
+  type: string;
+  read: boolean;
+  createdAt: string;
+}
+
 const TRIMESTRE_LABELS: Record<number, string> = {
   1: "الفصل الأول",
   2: "الفصل الثاني",
@@ -79,6 +88,45 @@ export default function MyChildPage() {
   const [absenceReasonDrafts, setAbsenceReasonDrafts] = useState<Record<string, string>>({});
   const [reasonSavingId, setReasonSavingId] = useState<string | null>(null);
   const [reasonError, setReasonError] = useState("");
+  const [parentNotifications, setParentNotifications] = useState<ParentNotification[]>([]);
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
+  const [notificationsError, setNotificationsError] = useState("");
+
+  async function loadParentNotifications() {
+    setNotificationsBusy(true);
+    setNotificationsError("");
+    try {
+      const response = await fetch(`${BASE}api/notifications/inbox`, { credentials: "include" });
+      const payload = await response.json().catch(() => ({})) as { notifications?: ParentNotification[]; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "تعذر تحميل الإشعارات");
+      setParentNotifications(payload.notifications ?? []);
+    } catch (loadError) {
+      setNotificationsError(loadError instanceof Error ? loadError.message : "تعذر تحميل الإشعارات");
+    } finally {
+      setNotificationsBusy(false);
+    }
+  }
+
+  async function markParentNotificationRead(notificationId: string) {
+    setNotificationsError("");
+    try {
+      const response = await fetch(`${BASE}api/notifications/inbox/${encodeURIComponent(notificationId)}/read`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "تعذر تحديث الإشعار");
+      setParentNotifications(current => current.map(notification =>
+        notification.id === notificationId ? { ...notification, read: true } : notification,
+      ));
+    } catch (readError) {
+      setNotificationsError(readError instanceof Error ? readError.message : "تعذر تحديث الإشعار");
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === "notifications") void loadParentNotifications();
+  }, [activeTab]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
@@ -405,7 +453,47 @@ export default function MyChildPage() {
             ].map(metric => <div key={metric.label} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-[#111a2c]/70 p-4"><div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ${metric.color}`}><metric.icon className="h-5 w-5" /></div><div><p className="text-[11px] text-slate-500">{metric.label}</p><p className="text-lg font-bold text-white">{metric.value}</p><p className="text-[10px] text-slate-500">{metric.note}</p></div></div>)}
           </section>
 
-          <div id="parent-notifications" className="mt-6 scroll-mt-6 flex items-center justify-between rounded-2xl border border-white/10 bg-[#111a2c]/50 px-4 py-3 text-xs text-slate-500"><span className="flex items-center gap-2"><Bell className="h-3.5 w-3.5 text-cyan-300" /> الإشعارات الفورية {pushEnabled ? "مفعّلة" : "غير مفعّلة"}</span><button onClick={togglePush} disabled={pushBusy} className="font-bold text-cyan-300 hover:text-white">{pushEnabled ? "إيقاف التنبيهات" : "تفعيل التنبيهات"}</button></div>
+          <section id="parent-notifications" className="mt-6 scroll-mt-6 rounded-2xl border border-white/10 bg-[#111a2c]/80 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-base font-bold text-white">
+                  <Bell className="h-4 w-4 text-cyan-300" /> إشعارات المؤسسة
+                  {parentNotifications.some(notification => !notification.read) && <span className="rounded-full bg-cyan-400/15 px-2 py-0.5 text-[10px] text-cyan-200">جديد</span>}
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">تنبيهات الغياب والمتابعة التربوية المرسلة من المؤسسة</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => void loadParentNotifications()} disabled={notificationsBusy} className="text-xs font-bold text-cyan-300 hover:text-white disabled:opacity-50">
+                  {notificationsBusy ? "جارٍ التحديث…" : "تحديث"}
+                </button>
+                <button onClick={togglePush} disabled={pushBusy} className="text-xs font-bold text-cyan-300 hover:text-white disabled:opacity-50">
+                  {pushBusy ? "جارٍ التحديث…" : pushEnabled ? "إيقاف التنبيهات الفورية" : "تفعيل التنبيهات الفورية"}
+                </button>
+              </div>
+            </div>
+            {pushError && <p role="alert" className="mt-3 text-xs text-red-300">{pushError}</p>}
+            {notificationsError && <p role="alert" className="mt-3 text-xs text-red-300">{notificationsError}</p>}
+            <div className="mt-4 space-y-3">
+              {notificationsBusy && parentNotifications.length === 0
+                ? <p className="rounded-xl border border-white/10 p-4 text-center text-sm text-slate-400">جارٍ تحميل الإشعارات…</p>
+                : parentNotifications.length === 0
+                  ? <p className="rounded-xl border border-dashed border-white/10 p-4 text-center text-sm text-slate-500">لا توجد إشعارات من المؤسسة حالياً.</p>
+                  : parentNotifications.map(notification => (
+                    <article key={notification.id} className={`rounded-xl border p-4 ${notification.read ? "border-white/10 bg-white/[0.02]" : "border-cyan-300/20 bg-cyan-400/[0.06]"}`}>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-bold text-white">{notification.title}</h3>
+                          {notification.body && <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-300">{notification.body}</p>}
+                          <time className="mt-2 block text-[11px] text-slate-500" dateTime={notification.createdAt}>
+                            {new Date(notification.createdAt).toLocaleString("ar-DZ")}
+                          </time>
+                        </div>
+                        {!notification.read && <button onClick={() => void markParentNotificationRead(notification.id)} className="shrink-0 text-xs font-bold text-cyan-300 hover:text-white">تمت القراءة</button>}
+                      </div>
+                    </article>
+                  ))}
+            </div>
+          </section>
         </main>
       </div>
     </div>

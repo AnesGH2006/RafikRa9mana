@@ -7,8 +7,8 @@
  * through Twilio or the school's configured gateway.
  */
 import { Router } from "express";
-import { and, eq } from "drizzle-orm";
-import { db, pushSubscriptionsTable, schoolMembersTable } from "../../shared/db.js";
+import { and, desc, eq } from "drizzle-orm";
+import { db, notificationsTable, pushSubscriptionsTable, schoolMembersTable } from "../../shared/db.js";
 import { sendBulkSms, countSegments, ARABIC_SEGMENT_BYTES } from "../services/smsService.js";
 import { getVapidPublicKey, sendPushToUser } from "../services/pushNotificationService.js";
 
@@ -17,6 +17,35 @@ const router = Router();
 function isParent(req: any): boolean {
   return req.isAuthenticated() && req.memberContext?.role === "parent";
 }
+
+router.get("/notifications/inbox", async (req, res): Promise<void> => {
+  if (!isParent(req) || !req.user) { res.status(403).json({ error: "Parents only" }); return; }
+  const notifications = await db.select({
+    id: notificationsTable.id,
+    title: notificationsTable.title,
+    body: notificationsTable.body,
+    type: notificationsTable.type,
+    read: notificationsTable.read,
+    createdAt: notificationsTable.createdAt,
+  }).from(notificationsTable)
+    .where(eq(notificationsTable.userId, req.user.id))
+    .orderBy(desc(notificationsTable.createdAt))
+    .limit(100);
+  res.set("Cache-Control", "private, no-store").json({ notifications });
+});
+
+router.post("/notifications/inbox/:id/read", async (req, res): Promise<void> => {
+  if (!isParent(req) || !req.user) { res.status(403).json({ error: "Parents only" }); return; }
+  const [notification] = await db.update(notificationsTable)
+    .set({ read: true })
+    .where(and(
+      eq(notificationsTable.id, req.params.id),
+      eq(notificationsTable.userId, req.user.id),
+    ))
+    .returning({ id: notificationsTable.id });
+  if (!notification) { res.status(404).json({ error: "Notification not found" }); return; }
+  res.json({ success: true });
+});
 
 router.get("/notifications/vapid-public-key", (_req, res): void => {
   const publicKey = getVapidPublicKey();

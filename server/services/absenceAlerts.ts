@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db, schoolMembersTable, studentsTable } from "../../shared/db.js";
-import { sendPushToUser } from "./pushNotificationService.js";
+import { notifyParentAccount } from "./parentNotifications.js";
 import { sendSmsAlertTool } from "../lib/tools/send-sms-alert.js";
 import { logger } from "../lib/logger.js";
 
@@ -23,22 +23,29 @@ export async function notifyParentOfAbsence(input: {
 
   const absenceDate = input.date ?? new Date().toISOString().slice(0, 10);
   const message = `السيد/السيدة ولي أمر ${student.nomPrenom}: نُبلّغكم بغياب ابنكم/ابنتكم بتاريخ ${absenceDate}. يرجى التواصل مع إدارة المؤسسة.`;
-  const [parent] = await db.select({ memberUserId: schoolMembersTable.memberUserId })
+  const parents = await db.select({ memberUserId: schoolMembersTable.memberUserId })
     .from(schoolMembersTable)
     .where(and(
       eq(schoolMembersTable.schoolUserId, input.schoolUserId),
       eq(schoolMembersTable.linkedStudentId, input.studentId),
       eq(schoolMembersTable.role, "parent"),
-    )).limit(1);
+    ));
 
   let pushSent = 0;
-  if (parent?.memberUserId) {
-    pushSent = await sendPushToUser(parent.memberUserId, {
-      title: "تنبيه غياب",
-      body: `${student.nomPrenom} غائب اليوم (${absenceDate})`,
-      url: "/my-child",
-      type: "absence",
-    });
+  for (const parentUserId of new Set(parents.flatMap(parent => parent.memberUserId ? [parent.memberUserId] : []))) {
+    try {
+      const notification = await notifyParentAccount({
+        userId: parentUserId,
+        title: "تنبيه غياب",
+        body: message,
+        url: "/my-child#parent-notifications",
+        type: "absence",
+        metadata: { studentId: student.id, eventType: "ABSENCE_ALERT", date: absenceDate },
+      });
+      pushSent += notification.pushSent;
+    } catch (error) {
+      logger.error({ error, studentId: student.id, parentUserId }, "Parent portal absence alert failed");
+    }
   }
 
   let smsSent = false;

@@ -160,11 +160,19 @@ export default function PedagogyCenterPage() {
     if (!selectedWarning || !message.trim()) return;
     setSending(true);
     try {
-      await readJson(await fetch(`${BASE}api/v1/notifications/disciplinary`, {
+      const delivery = await readJson(await fetch(`${BASE}api/v1/notifications/disciplinary`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ student_id: selectedWarning.studentId, template_ar: message.trim() }),
-      }));
-      toast({ title: "تم إرسال الإشعار" });
+      })) as { smsSent?: boolean; portalRecipients?: number };
+      const channels = [
+        delivery.portalRecipients ? "بوابة الأولياء" : "",
+        delivery.smsSent ? "SMS" : "",
+      ].filter(Boolean);
+      if (channels.length > 0) {
+        toast({ title: `تم إرسال التنبيه عبر ${channels.join(" و ")}` });
+      } else {
+        toast({ variant: "destructive", title: "لم يصل التنبيه إلى ولي الأمر", description: "لا يوجد حساب وليّ مربوط بالتلميذ ولم يتم إرسال SMS." });
+      }
       setSelectedWarning(null);
       setMessage("");
     } catch (error) {
