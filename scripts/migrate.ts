@@ -50,6 +50,9 @@ async function migrate() {
   await db.execute(sql`ALTER TABLE school_info ADD COLUMN IF NOT EXISTS phone varchar(30) DEFAULT '';`);
 
   await db.execute(sql`DO $$ BEGIN CREATE TYPE niveau AS ENUM ('1AM','2AM','3AM','4AM'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
+  await db.execute(sql`ALTER TYPE niveau ADD VALUE IF NOT EXISTS '1AS';`);
+  await db.execute(sql`ALTER TYPE niveau ADD VALUE IF NOT EXISTS '2AS';`);
+  await db.execute(sql`ALTER TYPE niveau ADD VALUE IF NOT EXISTS '3AS';`);
   await db.execute(sql`DO $$ BEGIN CREATE TYPE sexe AS ENUM ('M','F'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
   await db.execute(sql`DO $$ BEGIN CREATE TYPE statut_eleve AS ENUM ('nouveau','redoublant'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
   await db.execute(sql`DO $$ BEGIN CREATE TYPE resultat_eleve AS ENUM ('admis','non_admis'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);

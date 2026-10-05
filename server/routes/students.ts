@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { Router, type IRouter } from "express";
 import { logAudit } from "../lib/audit.js";
-import { eq, and, ilike } from "drizzle-orm";
+import { eq, and, ilike, inArray } from "drizzle-orm";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { db, studentsTable } from "../../shared/db.js";
@@ -9,6 +9,8 @@ import {
   ListStudentsResponse, ImportStudentsResponse, DashboardStatsResponse,
   NiveauEnum, SexeEnum, StatutEnum,
 } from "../../shared/schemas.js";
+import type { SchoolLevel } from "../../shared/school-stage.js";
+import { SCHOOL_LEVELS, SCHOOL_STAGE } from "../config/school-stage.js";
 
 const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -188,7 +190,7 @@ function normalizeGender(val: string): "M" | "F" | null {
 }
 
 // ✅ FIX 3: "أولى" after norm() = "اولي", "ثانية" = "ثانيه" — regex updated
-function normalizeLevel(val: string): "1AM" | "2AM" | "3AM" | "4AM" | null {
+function normalizeLevel(val: string): SchoolLevel | null {
   if (!val) return null;
   const v = String(val)
     .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
@@ -198,17 +200,25 @@ function normalizeLevel(val: string): "1AM" | "2AM" | "3AM" | "4AM" | null {
     .toLowerCase()
     .trim();
 
-  if (/^(اول|اولي|اولى|سنه اول|premiere|1ere|1ère|first)/.test(v)) return "1AM";
-  if (/^(ثان|ثاني|ثانيه|deuxieme|2eme|2ème|second)/.test(v)) return "2AM";
-  if (/^(ثالث|ثالثه|troisieme|3eme|3ème|third)/.test(v)) return "3AM";
-  if (/^(رابع|رابعه|quatrieme|4eme|4ème|fourth)/.test(v)) return "4AM";
+  const explicitLevel = v.match(/(?:^|\D)([1-4])\s*a\s*([ms])(?:\D|$)/);
+  if (explicitLevel) return `${explicitLevel[1]}A${explicitLevel[2]!.toUpperCase()}` as SchoolLevel;
+
+  const levelNumber = /(اول|اولي|اولى|سنه اول|premiere|1ere|1ère|first)/.test(v) ? "1"
+    : /(ثان|ثاني|ثانيه|deuxieme|2eme|2ème|second)/.test(v) ? "2"
+    : /(ثالث|ثالثه|troisieme|3eme|3ème|third)/.test(v) ? "3"
+    : /(رابع|رابعه|quatrieme|4eme|4ème|fourth)/.test(v) ? "4"
+    : null;
+  if (levelNumber) return `${levelNumber}A${SCHOOL_STAGE === "lycee" ? "S" : "M"}` as SchoolLevel;
 
   const digits = v
     .replace(/١/g,"1").replace(/٢/g,"2").replace(/٣/g,"3").replace(/٤/g,"4")
     .replace(/[^\d]/g," ").trim();
   const first = digits.split(/\s+/).find(d => d.length > 0);
   if (!first) return null;
-  return ({ "1":"1AM","2":"2AM","3":"3AM","4":"4AM" } as Record<string, "1AM"|"2AM"|"3AM"|"4AM">)[first[0]!] ?? null;
+  const digitLevel = first[0];
+  if (!digitLevel || !["1", "2", "3", "4"].includes(digitLevel)) return null;
+  const stageSuffix = SCHOOL_STAGE === "lycee" ? "S" : "M";
+  return `${digitLevel}A${stageSuffix}` as SchoolLevel;
 }
 
 function normalizeStatut(val: string): "nouveau" | "redoublant" {
@@ -236,7 +246,7 @@ function processRows(
   raw: unknown[][],
   userId: string,
   annee: string,
-  niveau: "1AM"|"2AM"|"3AM"|"4AM"|null,
+  niveau: SchoolLevel|null,
   classe: string|null,
   logger: { info: (...a: any[]) => void }
 ): { toInsert: typeof studentsTable.$inferInsert[]; skipped: number; errors: string[] } {
@@ -329,6 +339,10 @@ function processRows(
       if (errors.length < 30) errors.push(`صف ${i + headerRowIdx + 2}: مستوى غير محدد ← "${nomPrenom}"`);
       skipped++; continue;
     }
+    if (!SCHOOL_LEVELS.some(level => level === niveauFinal)) {
+      if (errors.length < 30) errors.push(`صف ${i + headerRowIdx + 2}: المستوى ${niveauFinal} لا يطابق نوع المؤسسة`);
+      skipped++; continue;
+    }
 
     // ── القسم ─────────────────────────────────────────────────────────────────
     let classeRaw = classe ?? cellStr(row, colClass);
@@ -372,7 +386,7 @@ router.get("/students/:id", async (req, res): Promise<void> => {
   const userId = req.user!.id;
   try {
     const rows = await db.select().from(studentsTable)
-      .where(and(eq(studentsTable.id, req.params.id), eq(studentsTable.userId, userId)))
+      .where(and(eq(studentsTable.id, req.params.id), eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)))
       .limit(1);
     if (!rows.length) {
       res.status(404).json({ error: "التلميذ غير موجود" });
@@ -388,7 +402,7 @@ router.get("/students", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
   const { annee, niveau, classe, sexe, statut, q } = req.query as Record<string, string>;
-  const conds = [eq(studentsTable.userId, userId)];
+  const conds = [eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)];
   if (annee) conds.push(eq(studentsTable.annee, annee));
   if (niveau && NiveauEnum.safeParse(niveau).success) conds.push(eq(studentsTable.niveau, niveau as any));
   if (classe) conds.push(eq(studentsTable.classe, classe));
@@ -406,7 +420,7 @@ router.get("/stats", async (req, res): Promise<void> => {
   try {
     const userId = req.user!.id;
     const { annee } = req.query as Record<string, string>;
-    const conds = [eq(studentsTable.userId, userId)];
+    const conds = [eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)];
     if (annee) conds.push(eq(studentsTable.annee, annee));
     const all = await db.select().from(studentsTable).where(and(...conds));
     const currentYear = new Date().getFullYear();
@@ -422,8 +436,7 @@ router.get("/stats", async (req, res): Promise<void> => {
       return currentYear - year;
     };
 
-    const LEVELS = ["1AM","2AM","3AM","4AM","1AS","2AS","3AS"] as const;
-    const byLevel = LEVELS.map(niveau => {
+    const byLevel = SCHOOL_LEVELS.map(niveau => {
       const g = all.filter(s => s.niveau === niveau);
       const ages = g.map(s => calcAge(s.dateNaissance)).filter((a): a is number => a !== null);
       const avgAge = ages.length ? Math.round((ages.reduce((s, a) => s + a, 0) / ages.length) * 10) / 10 : null;
@@ -498,12 +511,14 @@ router.post("/students/import", upload.single("file"), async (req, res): Promise
 
   // Extract class/level from title rows
   let titleClasse: string|null = null;
-  let titleNiveau: "1AM"|"2AM"|"3AM"|"4AM"|null = null;
+  let titleNiveau: SchoolLevel|null = null;
   for (let i = 0; i < Math.min(8, raw.length); i++) {
     const text = (raw[i] as unknown[]).join(" ");
-    if (text.includes("متوسط")) {
+    if (/متوسط|ثانوي|lycee|secondaire/i.test(text)) {
       const classMatch = text.match(/متوسط\s*(\d+)/);
       if (classMatch) titleClasse = classMatch[1]!.replace(/^0+/, "") || "1";
+      const secondaryClassMatch = text.match(/(?:ثانوي|lycee|secondaire)\s*(\d+)/i);
+      if (!titleClasse && secondaryClassMatch) titleClasse = secondaryClassMatch[1]!.replace(/^0+/, "") || "1";
       titleNiveau = normalizeLevel(text);
       break;
     }
@@ -568,7 +583,7 @@ router.delete("/students/:id", async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const { id } = req.params;
   const [deleted] = await db.delete(studentsTable)
-    .where(and(eq(studentsTable.id, id), eq(studentsTable.userId, userId)))
+    .where(and(eq(studentsTable.id, id), eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)))
     .returning({ id: studentsTable.id });
 
   if (!deleted) { res.status(404).json({ error: "Student not found" }); return; }
@@ -579,7 +594,7 @@ router.delete("/students", async (req, res): Promise<void> => {
   if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const userId = req.user!.id;
   const { annee } = req.query as Record<string, string>;
-  const conds = [eq(studentsTable.userId, userId)];
+  const conds = [eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)];
   if (annee) conds.push(eq(studentsTable.annee, annee));
   await db.delete(studentsTable).where(and(...conds));
   res.json({ success: true });
@@ -621,8 +636,8 @@ router.post("/students/auto-detect-repeaters", async (req, res): Promise<void> =
 
   try {
     const [currentStudents, prevStudents] = await Promise.all([
-      db.select().from(studentsTable).where(and(eq(studentsTable.userId, userId), eq(studentsTable.annee, annee))),
-      db.select().from(studentsTable).where(and(eq(studentsTable.userId, userId), eq(studentsTable.annee, prevAnnee))),
+      db.select().from(studentsTable).where(and(eq(studentsTable.userId, userId), eq(studentsTable.annee, annee), inArray(studentsTable.niveau, SCHOOL_LEVELS))),
+      db.select().from(studentsTable).where(and(eq(studentsTable.userId, userId), eq(studentsTable.annee, prevAnnee), inArray(studentsTable.niveau, SCHOOL_LEVELS))),
     ]);
 
     if (prevStudents.length === 0) {

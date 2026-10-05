@@ -1,3 +1,6 @@
+import type { SchoolLevel } from "./school-stage.js";
+export type { SchoolLevel, SchoolStage } from "./school-stage.js";
+
 export type SubscriptionStatus = "pending" | "active" | "suspended";
 export type UserRole = "user" | "admin";
 export type MemberRole = "teacher" | "parent" | "supervisor" | "counselor";
@@ -39,8 +42,7 @@ export interface SchoolInfo {
   smsGatewayApiKey?: string | null;
 }
 
-export type Niveau = "1AM" | "2AM" | "3AM" | "4AM" | "1AS" | "2AS" | "3AS";
-export type SchoolStage = "moyen" | "lycee";
+export type Niveau = SchoolLevel;
 export type Sexe = "M" | "F";
 export type Statut = "nouveau" | "redoublant";
 export type Resultat = "admis" | "non_admis" | null;

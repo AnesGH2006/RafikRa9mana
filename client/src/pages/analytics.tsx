@@ -15,6 +15,7 @@ import { CountUp } from "@/components/count-up";
 import type { DashboardStats } from "@shared/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { SCHOOL_STAGE } from "@/lib/deployment";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -35,8 +36,6 @@ const SCHOOL_STAGE_LABELS = {
   moyen: "المتوسطة",
   lycee: "الثانوي / lycée",
 } as const;
-
-type SchoolStage = keyof typeof SCHOOL_STAGE_LABELS;
 
 const GENDER_COLORS = ["#3b82f6", "#ec4899"];
 const LEVEL_COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef"];
@@ -98,14 +97,14 @@ function useStats(year: string) {
 }
 
 // ── Comparison section ────────────────────────────────────────────────────────
-function ComparisonSection({ yearA, yearB, schoolStage }: { yearA: string; yearB: string; schoolStage: SchoolStage }) {
+function ComparisonSection({ yearA, yearB }: { yearA: string; yearB: string }) {
   const { stats: sA, loading: lA } = useStats(yearA);
   const { stats: sB, loading: lB } = useStats(yearB);
   const loading = lA || lB;
 
   const hasData = !loading && (sA?.total || sB?.total);
 
-  const levels = schoolStage === "lycee" ? ["1AS", "2AS", "3AS"] : ["1AM", "2AM", "3AM", "4AM"];
+  const levels = SCHOOL_STAGE === "lycee" ? ["1AS", "2AS", "3AS"] : ["1AM", "2AM", "3AM", "4AM"];
   const levelCompare = levels.map(lvl => {
     const la = sA?.byLevel.find(l => l.niveau === lvl);
     const lb = sB?.byLevel.find(l => l.niveau === lvl);
@@ -314,10 +313,6 @@ export default function AnalyticsPage() {
   const years = getAcademicYears();
 
   const [year, setYear] = useState(() => localStorage.getItem("cem-selected-year") || "2025-2026");
-  const [schoolStage, setSchoolStage] = useState<SchoolStage>(() => {
-    const stored = localStorage.getItem("selected-school-stage") || localStorage.getItem("cem-school-stage");
-    return (stored as SchoolStage) === "lycee" ? "lycee" : "moyen";
-  });
   const [compareMode, setCompareMode] = useState(false);
   const [compareYear, setCompareYear] = useState(() => {
     const stored = localStorage.getItem("cem-selected-year") || "2025-2026";
@@ -328,12 +323,7 @@ export default function AnalyticsPage() {
   const { stats, loading } = useStats(year);
 
   useEffect(() => { localStorage.setItem("cem-selected-year", year); }, [year]);
-  useEffect(() => {
-    localStorage.setItem("cem-school-stage", schoolStage);
-    localStorage.setItem("selected-school-stage", schoolStage);
-  }, [schoolStage]);
-
-  const visibleLevels = schoolStage === "lycee" ? ["1AS", "2AS", "3AS"] : ["1AM", "2AM", "3AM", "4AM"];
+  const visibleLevels = SCHOOL_STAGE === "lycee" ? ["1AS", "2AS", "3AS"] : ["1AM", "2AM", "3AM", "4AM"];
   const stageStats = stats?.byLevel.filter(l => visibleLevels.includes(l.niveau)) ?? [];
 
   const genderData = stats ? [
@@ -380,24 +370,13 @@ export default function AnalyticsPage() {
             </span>
             {t("analytics.title")}
           </h1>
-          <p className="text-xs text-muted-foreground mt-1 ms-11">{SCHOOL_STAGE_LABELS[schoolStage]} · {t("analytics.overview")}</p>
+          <p className="text-xs text-muted-foreground mt-1 ms-11">{SCHOOL_STAGE_LABELS[SCHOOL_STAGE]} · {t("analytics.overview")}</p>
         </motion.div>
 
         <motion.div
           className="flex flex-wrap items-center gap-2"
           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.1 }}
         >
-          <Select value={schoolStage} onValueChange={(value) => setSchoolStage(value as SchoolStage)}>
-            <SelectTrigger className="w-36 bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-0 shadow-lg shadow-cyan-500/25 font-semibold text-xs h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(SCHOOL_STAGE_LABELS).map(([value, label]) => (
-                <SelectItem key={value} value={value}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           <Select value={year} onValueChange={setYear}>
             <SelectTrigger className="w-40 bg-gradient-to-r from-violet-500 to-purple-600 text-white border-0 shadow-lg shadow-violet-500/25 font-semibold text-xs h-9">
               <SelectValue />
@@ -479,7 +458,7 @@ export default function AnalyticsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ComparisonSection yearA={year} yearB={compareYear} schoolStage={schoolStage} />
+                <ComparisonSection yearA={year} yearB={compareYear} />
               </CardContent>
             </Card>
           </motion.div>
@@ -597,7 +576,7 @@ export default function AnalyticsPage() {
                       </span>
                     </div>
                     <div className="mt-3 rounded-xl bg-muted/60 px-3 py-2 text-center text-[11px] text-muted-foreground">
-                      متوسط العمر في {SCHOOL_STAGE_LABELS[schoolStage]}: <span className="font-bold text-foreground">{schoolAverage} سنة</span>
+                      متوسط العمر في {SCHOOL_STAGE_LABELS[SCHOOL_STAGE]}: <span className="font-bold text-foreground">{schoolAverage} سنة</span>
                     </div>
                   </CardContent>
                 </Card>

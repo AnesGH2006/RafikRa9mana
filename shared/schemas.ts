@@ -64,7 +64,7 @@ export const UpsertSchoolInfoBody = zod.object({
   supportPhone: zod.string().optional(),
 });
 
-export const NiveauEnum = zod.enum(["1AM", "2AM", "3AM", "4AM"]);
+export const NiveauEnum = zod.enum(["1AM", "2AM", "3AM", "4AM", "1AS", "2AS", "3AS"]);
 export const SexeEnum = zod.enum(["M", "F"]);
 export const StatutEnum = zod.enum(["nouveau", "redoublant"]);
 export const ResultatEnum = zod.enum(["admis", "non_admis", "mustarrak"]);

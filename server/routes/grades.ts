@@ -9,6 +9,7 @@ import { getSubjectsForLevel, calcWeightedAvg } from "../../shared/subjects.js";
 import type { Niveau } from "../../shared/types.js";
 import { notifyParentOfAbsence } from "../services/absenceAlerts.js";
 import { enqueueAbsenceAlert } from "../services/notificationQueue.js";
+import { SCHOOL_LEVELS } from "../config/school-stage.js";
 
 const router: IRouter = Router();
 
@@ -64,7 +65,7 @@ router.post("/grades", async (req, res): Promise<void> => {
   }
 
   const [student] = await db.select().from(studentsTable)
-    .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId)));
+    .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)));
   if (!student) {
     res.status(404).json({ error: "الطالب غير موجود" });
     return;
@@ -135,19 +136,19 @@ router.post("/grades/bulk", async (req, res): Promise<void> => {
   if (studentId) {
     // Manual entry: look up by ID (original behaviour)
     const rows = await db.select().from(studentsTable)
-      .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId)));
+      .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)));
     student = rows[0];
   } else {
     // Excel import: look up by name (normalize whitespace for safety)
     const name = (studentName ?? "").trim();
     const rows = await db.select().from(studentsTable)
-      .where(and(eq(studentsTable.userId, userId), eq(studentsTable.nomPrenom, name)));
+      .where(and(eq(studentsTable.userId, userId), eq(studentsTable.nomPrenom, name), inArray(studentsTable.niveau, SCHOOL_LEVELS)));
     student = rows[0];
 
     // Fallback: try removing double spaces / different spacing
     if (!student) {
       const allStudents = await db.select().from(studentsTable)
-        .where(eq(studentsTable.userId, userId));
+        .where(and(eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)));
       student = allStudents.find(s =>
         s.nomPrenom.replace(/\s+/g, " ").trim() === name.replace(/\s+/g, " ").trim()
       );
@@ -248,7 +249,7 @@ router.post("/grades/batch-import", async (req, res): Promise<void> => {
 
   // ── 1. Load all students for this user at once ────────────────────────────
   const allStudents = await db.select().from(studentsTable)
-    .where(eq(studentsTable.userId, userId));
+    .where(and(eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)));
 
   const normalize = (n: string) => n.replace(/\s+/g, " ").trim();
   const studentLookup = new Map<string, typeof allStudents[number]>();
@@ -388,7 +389,7 @@ router.get("/results", async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const { annee, niveau, classe, sexe } = req.query as Record<string, string>;
 
-  const studentConds = [eq(studentsTable.userId, userId)];
+  const studentConds = [eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)];
   if (annee) studentConds.push(eq(studentsTable.annee, annee));
   if (niveau) studentConds.push(eq(studentsTable.niveau, niveau as Niveau));
   if (classe) studentConds.push(eq(studentsTable.classe, classe));
@@ -496,7 +497,7 @@ router.get("/results/subjects", async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const { annee, niveau, classe, trimestre, sexe } = req.query as Record<string, string>;
 
-  const studentConds = [eq(studentsTable.userId, userId)];
+  const studentConds = [eq(studentsTable.userId, userId), inArray(studentsTable.niveau, SCHOOL_LEVELS)];
   if (annee) studentConds.push(eq(studentsTable.annee, annee));
   if (niveau) studentConds.push(eq(studentsTable.niveau, niveau as Niveau));
   if (classe) studentConds.push(eq(studentsTable.classe, classe));

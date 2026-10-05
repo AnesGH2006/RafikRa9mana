@@ -18,6 +18,7 @@ import { SmsNoticeModal, type SmsRecipient } from "@/components/sms-notice-modal
 import { getSubjectsForLevel, calcWeightedAvg } from "@shared/subjects";
 import type { StudentResult } from "@shared/types";
 import type { Niveau } from "@shared/types";
+import { SCHOOL_STAGE } from "@/lib/deployment";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, ReferenceLine, Legend,
@@ -28,12 +29,7 @@ import { CountUp } from "@/components/count-up";
 
 const BASE = import.meta.env.BASE_URL;
 const LEVELS: Niveau[] = ["1AM", "2AM", "3AM", "4AM", "1AS", "2AS", "3AS"];
-const SCHOOL_STAGE_LABELS = {
-  moyen: "المتوسطة",
-  lycee: "الثانوي",
-} as const;
-type SchoolStage = keyof typeof SCHOOL_STAGE_LABELS;
-const STAGE_LEVELS: Record<SchoolStage, Niveau[]> = {
+const STAGE_LEVELS: Record<typeof SCHOOL_STAGE, Niveau[]> = {
   moyen: ["1AM", "2AM", "3AM", "4AM"],
   lycee: ["1AS", "2AS", "3AS"],
 };
@@ -2851,26 +2847,9 @@ export default function Results() {
   const [showImport, setShowImport]   = useState(false);
   const [smsOpen,    setSmsOpen]      = useState(false);
   const [annee, setAnnee]             = useState(DEFAULT_YEAR);
-  const [schoolStage, setSchoolStage] = useState<SchoolStage>(() => {
-    if (typeof window === "undefined") return "moyen";
-    const stored = localStorage.getItem("selected-school-stage") || localStorage.getItem("cem-school-stage");
-    return stored === "lycee" ? "lycee" : "moyen";
-  });
   const [filters, setFilters]         = useState({ niveau: "", classe: "", sexe: "", q: "", tri: "" as TriFilter });
   const [listKey, setListKey]         = useState(0);
   const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTabId>("general");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("selected-school-stage", schoolStage);
-      localStorage.setItem("cem-school-stage", schoolStage);
-    }
-    setFilters(prev => ({
-      ...prev,
-      niveau: prev.niveau && STAGE_LEVELS[schoolStage].includes(prev.niveau as Niveau) ? prev.niveau : "",
-      classe: "",
-    }));
-  }, [schoolStage]);
 
   const fetchResults = useCallback(async () => {
     setLoading(true);
@@ -2891,7 +2870,7 @@ export default function Results() {
 
   useEffect(() => { fetchResults(); }, [fetchResults]);
 
-  const stageResults = results.filter(r => STAGE_LEVELS[schoolStage].includes(r.student.niveau as Niveau));
+  const stageResults = results.filter(r => STAGE_LEVELS[SCHOOL_STAGE].includes(r.student.niveau));
   const classes  = [...new Set(stageResults.map(r => r.student.classe))].sort();
   // ✅ FIX: apply classe filter client-side; also sort by selected trimestre avg.
   const displayed = stageResults
@@ -2999,22 +2978,12 @@ export default function Results() {
               {ACADEMIC_YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={schoolStage} onValueChange={v => setSchoolStage(v as SchoolStage)}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(SCHOOL_STAGE_LABELS) as SchoolStage[]).map(stage => (
-                <SelectItem key={stage} value={stage}>{SCHOOL_STAGE_LABELS[stage]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Select value={filters.niveau || "__all__"}
             onValueChange={v => setFilters(p => ({ ...p, niveau: v === "__all__" ? "" : v }))}>
             <SelectTrigger className="w-36"><SelectValue placeholder={t("students.filterLevel")} /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">{t("students.allLevels")}</SelectItem>
-              {STAGE_LEVELS[schoolStage].map(l => <SelectItem key={l} value={l}>{LEVEL_LABELS[l]}</SelectItem>)}
+              {STAGE_LEVELS[SCHOOL_STAGE].map(l => <SelectItem key={l} value={l}>{LEVEL_LABELS[l]}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filters.classe || "__all__"}

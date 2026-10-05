@@ -1,6 +1,6 @@
 # School Manager — رفيق الرقمنة
 
-Algerian school management SaaS for middle schools. Full-stack Arabic-language web app.
+Algerian school management SaaS with separately deployed CEM and lycée instances. Full-stack Arabic-language web app.
 
 ## Stack
 
@@ -34,11 +34,27 @@ pnpm run db:studio
 
 Set `DATABASE_URL` to the PostgreSQL connection string for the environment.
 
+## Separate CEM and lycée deployments
+
+CEM and lycée must run as separate deployments against separate PostgreSQL databases.
+Never configure the two deployments with the same `DATABASE_URL`.
+
+Set `SCHOOL_STAGE` to `moyen` for the CEM deployment or `lycee` for the lycée
+deployment. Set the same value for both the build and server runtime; the frontend
+uses it to fix the available levels, and the server uses it to validate and scope
+student data. The default is `moyen` for existing CEM deployments.
+
+Each deployment must also use its own `SESSION_SECRET` and public `APP_BASE_URL`.
+Register the matching OAuth callback URL for each deployment. To prepare a
+lycée database, run the database migration (`pnpm tsx scripts/migrate.ts`) before
+starting the app so the `1AS`–`3AS` levels are available.
+
 ## Environment variables / secrets
 
 | Key | Required | Notes |
 |-----|----------|-------|
 | `DATABASE_URL` | ✅ | PostgreSQL connection string |
+| `SCHOOL_STAGE` | Optional | `moyen` for CEM or `lycee` for lycée; keep the same setting for build and runtime |
 | `SESSION_SECRET` | ✅ | Long random string for session cookies |
 | `GOOGLE_CLIENT_ID` | ✅ | Google OAuth web client ID |
 | `GOOGLE_CLIENT_SECRET` | ✅ | Google OAuth web client secret |

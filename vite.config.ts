@@ -5,8 +5,16 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const schoolStage = process.env.SCHOOL_STAGE ?? "moyen";
+
+if (schoolStage !== "moyen" && schoolStage !== "lycee") {
+  throw new Error(`Invalid SCHOOL_STAGE "${schoolStage}". Expected "moyen" or "lycee".`);
+}
 
 export default defineConfig({
+  define: {
+    __SCHOOL_STAGE__: JSON.stringify(schoolStage),
+  },
   root: "client",
   plugins: [
     react(),
