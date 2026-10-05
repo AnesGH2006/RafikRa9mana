@@ -51,6 +51,7 @@ import ReportsPage from "@/pages/reports";
 import SubscriptionPage from "@/pages/subscription";
 import AdminPage from "@/pages/admin";
 import AssistantPage from "@/pages/assistant";
+import PedagogyCenterPage from "@/pages/pedagogy-center";
 import ParentAssistantPage from "@/pages/parent-assistant";
 import AgentSetupPage from "@/pages/agent-setup";
 import PaywallScreen from "@/pages/paywall";
@@ -156,6 +157,7 @@ const SECTIONS: SectionDef[] = [
     color: "text-fuchsia-400", gradient: "from-fuchsia-500 to-pink-700",
     items: [
       { href: "/assistant", icon: Bot, labelKey: "nav.assistant" },
+      { href: "/pedagogy", icon: ClipboardList, labelKey: "nav.pedagogy" },
     ],
   },
   {
@@ -193,6 +195,7 @@ const TEACHER_SECTIONS: SectionDef[] = [
       { href: "/",        icon: LayoutDashboard, labelKey: "nav.dashboard"      },
       { href: "/results", icon: ClipboardList,   labelKey: "nav.results"        },
       { href: "/subjects",icon: BarChart3,        labelKey: "nav.subjects"       },
+      { href: "/pedagogy", icon: ClipboardList, labelKey: "nav.pedagogy" },
     ],
   },
   {
@@ -825,6 +828,7 @@ function AppLayout() {
               <Route path="/preorient/reports"  component={PreOrientReportsPage} />
               <Route path="/orientation">{() => <ComingSoon title="التوجيه النهائي" />}</Route>
               <Route path="/assistant"           component={AssistantPage} />
+              <Route path="/pedagogy"            component={PedagogyCenterPage} />
               <Route path="/import"              component={ImportPage} />
               <Route path="/excel-injection"     component={ExcelInjectionPage} />
               <Route path="/archive"            component={ArchivePage} />
