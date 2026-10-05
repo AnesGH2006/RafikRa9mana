@@ -28,6 +28,7 @@ import qrScannerRouter from "./qrScanner.js";
 import aiSettingsRouter from "./ai-settings.js";
 import paymentsRouter from "./payments.js";
 import excelInjectionRouter from "./excel-injection.js";
+import pedagogyRouter from "./pedagogy.js";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(qrScannerRouter);
 router.use(aiSettingsRouter);
 router.use(paymentsRouter);
 router.use(excelInjectionRouter);
+router.use(pedagogyRouter);
 
 export default router;

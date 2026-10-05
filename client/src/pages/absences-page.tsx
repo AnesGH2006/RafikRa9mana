@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { connectAttendanceUpdates } from "@/lib/attendance-socket";
 import {
   CalendarOff, AlertTriangle, CheckCircle, Printer, Upload, FileSpreadsheet,
   Users, BookOpen, Briefcase, Hammer, UtensilsCrossed, Trash2, TrendingUp, ChevronDown, ChevronUp,
@@ -272,6 +273,19 @@ export default function AbsencesPage() {
   }, [annee]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  useEffect(() => {
+    let active = true;
+    let disconnect = () => undefined;
+    void connectAttendanceUpdates(() => { void fetchAll(); }).then(cleanup => {
+      if (active) disconnect = cleanup;
+      else cleanup();
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+      disconnect();
+    };
+  }, [fetchAll]);
 
   const studentMap = Object.fromEntries(students.map(s => [s.id, s]));
   const dailyAbsenceReplies = dailyStudentAttendance

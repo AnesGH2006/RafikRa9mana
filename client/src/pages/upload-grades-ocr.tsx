@@ -1,5 +1,5 @@
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { flushDailyAttendance, queueDailyAttendance } from "@/lib/attendance-outbox";
 import {
   ScanLine, Upload, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
   Pencil, Save, RotateCcw, FileImage, Clock, BookOpen, ClipboardCheck,
@@ -138,6 +139,17 @@ export default function UploadGradesOcrPage() {
   const [saveState, setSaveState] = useState<SaveState>({ phase: "idle", saved: 0, failed: 0, errors: [] });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const syncPending = () => {
+      void flushDailyAttendance(BASE).then(synced => {
+        if (synced > 0) toast({ title: `تمت مزامنة ${synced} سجلات حضور محفوظة محلياً` });
+      }).catch(() => undefined);
+    };
+    window.addEventListener("online", syncPending);
+    syncPending();
+    return () => window.removeEventListener("online", syncPending);
+  }, [toast]);
 
   const canUpload = mode !== "grades" || Boolean(niveau && classe);
 
@@ -342,6 +354,7 @@ export default function UploadGradesOcrPage() {
       const matchedRows: number[] = [];
       const seenStudentIds = new Set<string>();
       const errors: string[] = [];
+      const attendancePayload = { attendanceDate: reportDate, annee, entries };
 
       rows.forEach((row, index) => {
         const matches = findStudents(effectiveName(row));
@@ -373,6 +386,14 @@ export default function UploadGradesOcrPage() {
       }
 
       try {
+        if (!navigator.onLine) {
+          await queueDailyAttendance(attendancePayload);
+          for (const index of matchedRows) updatedRows[index] = { ...updatedRows[index]!, saved: true, saveError: undefined };
+          setRows(updatedRows);
+          setSaveState({ phase: "done", saved: entries.length, failed: errors.length, errors });
+          toast({ title: `تم حفظ ${entries.length} سجل محلياً`, description: "ستتم المزامنة تلقائياً عند عودة الاتصال" });
+          return;
+        }
         const response = await fetch(`${BASE}api/absences/daily-students`, {
           method: "POST",
           credentials: "include",
@@ -392,6 +413,18 @@ export default function UploadGradesOcrPage() {
           description: errors.length > 0 ? `تعذر مطابقة ${errors.length} صف` : undefined,
         });
       } catch (error: any) {
+        if (error instanceof TypeError || !navigator.onLine) {
+          try {
+            await queueDailyAttendance(attendancePayload);
+            for (const index of matchedRows) updatedRows[index] = { ...updatedRows[index]!, saved: true, saveError: undefined };
+            setRows(updatedRows);
+            setSaveState({ phase: "done", saved: entries.length, failed: errors.length, errors });
+            toast({ title: `تم حفظ ${entries.length} سجل محلياً`, description: "ستتم المزامنة تلقائياً عند عودة الاتصال" });
+            return;
+          } catch (queueError: any) {
+            error = queueError;
+          }
+        }
         setRows(rows.map(row => ({ ...row, saveError: error?.message ?? "فشل الحفظ" })));
         setSaveState({ phase: "done", saved: 0, failed: rows.length, errors: [error?.message ?? "فشل الحفظ"] });
         toast({ variant: "destructive", title: "فشل الحفظ", description: error?.message ?? "فشل حفظ السجل اليومي" });
