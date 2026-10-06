@@ -11,7 +11,6 @@ import {
 } from "../../shared/db.js";
 import { getUserGroqKey } from "../lib/groq-key.js";
 import { notifyParentOfAbsence } from "../services/absenceAlerts.js";
-import { sendSmsAlertTool } from "../lib/tools/send-sms-alert.js";
 import { notifyParentAccount } from "../services/parentNotifications.js";
 import { getIO } from "../socket/index.js";
 import { logger } from "../lib/logger.js";
@@ -283,7 +282,7 @@ router.post("/v1/notifications/disciplinary", async (req, res): Promise<void> =>
     return;
   }
   const schoolUserId = req.memberContext?.schoolUserId ?? req.user.id;
-  const [student] = await db.select({ id: studentsTable.id, name: studentsTable.nomPrenom, parentPhone: studentsTable.parentPhone })
+  const [student] = await db.select({ id: studentsTable.id, name: studentsTable.nomPrenom })
     .from(studentsTable)
     .where(and(eq(studentsTable.id, studentId), eq(studentsTable.userId, schoolUserId)))
     .limit(1);
@@ -311,24 +310,14 @@ router.post("/v1/notifications/disciplinary", async (req, res): Promise<void> =>
     if (result.status === "rejected") req.log.error({ error: result.reason, studentId: student.id }, "Parent portal disciplinary alert failed");
   }
 
-  let smsResult: { success?: boolean; message?: string } = { success: false, message: "تعذر إرسال SMS" };
-  try {
-    smsResult = await sendSmsAlertTool({ student_id: student.id, message: message.trim() }, schoolUserId) as typeof smsResult;
-  } catch (error) {
-    req.log.error({ error, studentId: student.id }, "Disciplinary SMS alert failed");
-  }
-  const smsSent = smsResult.success === true;
   res.json({
-    parent_phone: student.parentPhone,
     student_name: student.name,
     event_type: "DISCIPLINE_ALERT",
     timestamp,
     template_ar: message.trim(),
-    sent: smsSent || portalDeliveries.length > 0,
-    smsSent,
+    sent: portalDeliveries.length > 0,
     portalRecipients: portalDeliveries.length,
     pushSent: portalDeliveries.reduce((total, delivery) => total + delivery.pushSent, 0),
-    smsMessage: smsResult.message,
   });
 });
 

@@ -9,9 +9,7 @@ import { connectAttendanceUpdates } from "@/lib/attendance-socket";
 import {
   CalendarOff, AlertTriangle, CheckCircle, Printer, Upload, FileSpreadsheet,
   Users, BookOpen, Briefcase, Hammer, UtensilsCrossed, Trash2, TrendingUp, ChevronDown, ChevronUp,
-  MessageSquare,
 } from "lucide-react";
-import { SmsNoticeModal, type SmsRecipient } from "@/components/sms-notice-modal";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, Legend, CartesianGrid, LineChart, Line,
@@ -254,7 +252,6 @@ export default function AbsencesPage() {
   const [annee, setAnnee]         = useState(DEFAULT_YEAR);
   const [trimestre, setTrimestre] = useState<string>("");
   const [loading, setLoading]     = useState(true);
-  const [smsOpen, setSmsOpen]     = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -351,17 +348,6 @@ export default function AbsencesPage() {
           <p className="text-sm text-muted-foreground mt-0.5 ms-11">التقارير اليومية الرسمية وسجل غيابات التلاميذ</p>
         </motion.div>
         <div className="flex items-center gap-2">
-          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-            <Button
-              variant="outline" size="sm"
-              className="gap-2 h-9 text-xs font-semibold no-print text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-              onClick={() => setSmsOpen(true)}
-              disabled={atRisk === 0}
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              إشعار SMS ({atRisk})
-            </Button>
-          </motion.div>
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
             <Button variant="outline" size="sm" className="gap-2 h-9 text-xs font-semibold no-print" onClick={() => window.print()} data-testid="button-print-absences">
               <Printer className="w-3.5 h-3.5" /> طباعة PDF
@@ -614,20 +600,6 @@ export default function AbsencesPage() {
         </AnimatePresence>
       </div>
     </motion.div>
-    {/* SMS Notice Modal — pre-filled with at-risk students */}
-    <SmsNoticeModal
-      open={smsOpen}
-      onOpenChange={setSmsOpen}
-      title="إشعار SMS — تلاميذ في خطر"
-      defaultMessage={`إشعار: تجاوز ابنكم/ابنتكم حد الغيابات غير المبررة (${RISK_THRESHOLD} ساعات). يرجى التواصل مع إدارة المؤسسة.`}
-      recipients={rows
-        .filter(r => r.unjustified >= RISK_THRESHOLD)
-        .map(r => ({
-          id:    r.id,
-          name:  `${r.student?.firstName ?? ''} ${r.student?.lastName ?? ''}`.trim(),
-          phone: (r.student as any)?.parentPhone ?? null,
-        } as SmsRecipient))}
-    />
     </>
   );
 }

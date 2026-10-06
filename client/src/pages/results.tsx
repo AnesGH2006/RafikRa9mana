@@ -12,9 +12,8 @@ import {
   Pencil, ClipboardList, Search, Upload, CheckCircle2, AlertCircle,
   X, FileSpreadsheet, Loader2, Printer, Trophy, TrendingUp, TrendingDown,
   BarChart3, Users, Target, GraduationCap, XCircle, ArrowUpDown, Star,
-  MessageSquare, Trash2,
+  Trash2,
 } from "lucide-react";
-import { SmsNoticeModal, type SmsRecipient } from "@/components/sms-notice-modal";
 import { getSubjectsForLevel, calcWeightedAvg } from "@shared/subjects";
 import type { StudentResult } from "@shared/types";
 import type { Niveau } from "@shared/types";
@@ -2845,7 +2844,6 @@ export default function Results() {
   const [selected, setSelected]       = useState<StudentResult | null>(null);
   const [subjectDetail, setSubjectDetail] = useState<StudentResult | null>(null);
   const [showImport, setShowImport]   = useState(false);
-  const [smsOpen,    setSmsOpen]      = useState(false);
   const [annee, setAnnee]             = useState(DEFAULT_YEAR);
   const [filters, setFilters]         = useState({ niveau: "", classe: "", sexe: "", q: "", tri: "" as TriFilter });
   const [listKey, setListKey]         = useState(0);
@@ -2939,15 +2937,6 @@ export default function Results() {
               className="gap-2 rounded-xl border-emerald-400/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-200"
               onClick={() => setShowImport(true)}>
               <FileSpreadsheet className="w-4 h-4" /> استيراد Excel
-            </Button>
-            <Button
-              variant="outline"
-              className="gap-2 rounded-xl border-orange-400/40 bg-orange-500/10 text-orange-300 hover:bg-orange-500/15 hover:text-orange-200"
-              onClick={() => setSmsOpen(true)}
-              disabled={results.filter(r => (r.annualAvg ?? 0) < 10).length === 0}
-            >
-              <MessageSquare className="w-4 h-4" />
-              إشعار SMS الراسبين ({results.filter(r => (r.annualAvg ?? 0) < 10).length})
             </Button>
           </motion.div>
         </div>
@@ -3160,20 +3149,6 @@ export default function Results() {
       {subjectDetail && <SubjectBreakdownModal result={subjectDetail} onClose={() => setSubjectDetail(null)} />}
       {showImport    && <ImportModal annee={annee} onClose={() => setShowImport(false)} onDone={fetchResults} />}
 
-      {/* SMS Notice Modal — failing students */}
-      <SmsNoticeModal
-        open={smsOpen}
-        onOpenChange={setSmsOpen}
-        title="إشعار SMS — التلاميذ الراسبون"
-        defaultMessage="إشعار: لم يتمكن ابنكم/ابنتكم من الحصول على المعدل السنوي (أقل من 10). يرجى التواصل مع الأستاذ المربي لمناقشة الوضعية."
-        recipients={results
-          .filter(r => (r.annualAvg ?? 0) < 10)
-          .map(r => ({
-            id:    r.student.id,
-            name:  r.student.nomPrenom,
-            phone: (r.student as any).parentPhone ?? null,
-          } as SmsRecipient))}
-      />
     </motion.div>
   );
 }

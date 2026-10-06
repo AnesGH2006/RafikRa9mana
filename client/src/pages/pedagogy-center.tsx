@@ -163,15 +163,14 @@ export default function PedagogyCenterPage() {
       const delivery = await readJson(await fetch(`${BASE}api/v1/notifications/disciplinary`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ student_id: selectedWarning.studentId, template_ar: message.trim() }),
-      })) as { smsSent?: boolean; portalRecipients?: number };
+      })) as { portalRecipients?: number };
       const channels = [
         delivery.portalRecipients ? "بوابة الأولياء" : "",
-        delivery.smsSent ? "SMS" : "",
       ].filter(Boolean);
       if (channels.length > 0) {
         toast({ title: `تم إرسال التنبيه عبر ${channels.join(" و ")}` });
       } else {
-        toast({ variant: "destructive", title: "لم يصل التنبيه إلى ولي الأمر", description: "لا يوجد حساب وليّ مربوط بالتلميذ ولم يتم إرسال SMS." });
+        toast({ variant: "destructive", title: "لم يصل التنبيه إلى ولي الأمر", description: "لا يوجد حساب وليّ مربوط بالتلميذ." });
       }
       setSelectedWarning(null);
       setMessage("");
@@ -325,7 +324,7 @@ export default function PedagogyCenterPage() {
           {selectedWarning && (
             <form onSubmit={sendDisciplineAlert} className="grid gap-3 border-y py-4 md:grid-cols-[minmax(0,1fr)_auto]">
               <div className="space-y-2"><div className="flex items-center justify-between gap-2"><p className="text-sm font-bold">إشعار ولي أمر {selectedWarning.studentName}</p><button type="button" className="text-xs text-muted-foreground underline" onClick={() => setSelectedWarning(null)}>إلغاء</button></div><Textarea required maxLength={1200} rows={3} value={message} onChange={event => setMessage(event.target.value)} /></div>
-              <div className="flex items-end"><Button type="submit" disabled={sending || !message.trim()} className="bg-emerald-700 hover:bg-emerald-800">{sending ? <LoaderCircle className="animate-spin" /> : <Send />}إرسال SMS</Button></div>
+              <div className="flex items-end"><Button type="submit" disabled={sending || !message.trim()} className="bg-emerald-700 hover:bg-emerald-800">{sending ? <LoaderCircle className="animate-spin" /> : <Send />}إرسال التنبيه</Button></div>
             </form>
           )}
 

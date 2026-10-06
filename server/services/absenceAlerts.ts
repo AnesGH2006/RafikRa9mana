@@ -1,7 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db, schoolMembersTable, studentsTable } from "../../shared/db.js";
 import { notifyParentAccount } from "./parentNotifications.js";
-import { sendSmsAlertTool } from "../lib/tools/send-sms-alert.js";
 import { logger } from "../lib/logger.js";
 
 export async function notifyParentOfAbsence(input: {
@@ -9,17 +8,16 @@ export async function notifyParentOfAbsence(input: {
   studentId: string;
   annee: string;
   date?: string;
-}): Promise<{ pushSent: number; smsSent: boolean }> {
+}): Promise<{ pushSent: number }> {
   const [student] = await db.select({
     id: studentsTable.id,
     nomPrenom: studentsTable.nomPrenom,
-    parentPhone: studentsTable.parentPhone,
   }).from(studentsTable).where(and(
     eq(studentsTable.id, input.studentId),
     eq(studentsTable.userId, input.schoolUserId),
   )).limit(1);
 
-  if (!student) return { pushSent: 0, smsSent: false };
+  if (!student) return { pushSent: 0 };
 
   const absenceDate = input.date ?? new Date().toISOString().slice(0, 10);
   const message = `السيد/السيدة ولي أمر ${student.nomPrenom}: نُبلّغكم بغياب ابنكم/ابنتكم بتاريخ ${absenceDate}. يرجى التواصل مع إدارة المؤسسة.`;
@@ -48,16 +46,6 @@ export async function notifyParentOfAbsence(input: {
     }
   }
 
-  let smsSent = false;
-  if (student.parentPhone) {
-    try {
-      const result = await sendSmsAlertTool({ student_id: student.id, message }, input.schoolUserId) as { success?: boolean };
-      smsSent = result.success === true;
-    } catch (error) {
-      logger.error({ error, studentId: student.id }, "Absence SMS alert failed");
-    }
-  }
-
-  logger.info({ studentId: student.id, pushSent, smsSent }, "Absence parent alert dispatched");
-  return { pushSent, smsSent };
+  logger.info({ studentId: student.id, pushSent }, "Absence parent portal alert dispatched");
+  return { pushSent };
 }

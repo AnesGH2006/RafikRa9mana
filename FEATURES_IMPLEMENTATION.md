@@ -1,6 +1,8 @@
 # 📱 School Manager - Advanced Features Implementation Guide
 
-Complete implementation of OCR Grade Scanner, SMS Notifications, and QR Code System for the Arabic School Management Application.
+Historical implementation notes for OCR, SMS notifications, and student QR codes.
+
+> SMS notifications and student QR features have been removed from the active application. Their routes and UI are disabled; legacy database fields and implementation notes are retained for compatibility/reference.
 
 ## 🎯 Features Implemented
 

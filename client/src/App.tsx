@@ -9,9 +9,9 @@ import {
   ClipboardList, GraduationCap, Compass, Database, Settings,
   ChevronDown, FileSpreadsheet, BarChart3, UserX, List, CheckSquare,
   User, BarChart2, CalendarOff, UserCheck, RefreshCw, AlertCircle,
-  TrendingUp, Star, CreditCard, Upload, FileText, Archive, MessageSquare,
+  TrendingUp, Star, CreditCard, Upload, FileText, Archive,
   CircleArrowRight, CircleDot, Trophy, FileBarChart, Bot, Download,
-  QrCode, ScanLine, Shield, Calendar, Shuffle,
+  ScanLine, Shield, Calendar, Shuffle,
 } from "lucide-react";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 import { QuickImportDialog } from "@/components/quick-import";
@@ -31,7 +31,6 @@ import YearEndGuides from "@/pages/yearend-guides";
 import YearEndFinal from "@/pages/yearend-final";
 import ImportPage from "@/pages/import";
 import ArchivePage from "@/pages/archive";
-import SmsPage from "@/pages/sms";
 import SettingsPage from "@/pages/settings";
 import BEMPage from "@/pages/bem";
 import ExamResultsPage from "@/pages/exam-results";
@@ -56,11 +55,9 @@ import ParentAssistantPage from "@/pages/parent-assistant";
 import AgentSetupPage from "@/pages/agent-setup";
 import PaywallScreen from "@/pages/paywall";
 import NotFound from "@/pages/not-found";
-import ScanQrPage from "@/pages/scan-qr";
 import UploadGradesOcrPage from "@/pages/upload-grades-ocr";
 import MembersPage from "@/pages/members";
 import MyChildPage from "@/pages/my-child";
-import StudentQrViewPage from "@/pages/student-qr-view";
 import ParentRegisterPage from "@/pages/parent-register";
 import PaymentDemoPage from "@/pages/payment-demo";
 import AuditLogPage from "@/pages/audit-log";
@@ -92,7 +89,6 @@ const SECTIONS: SectionDef[] = [
     items: [
       { href: "/",         icon: LayoutDashboard, labelKey: "nav.dashboard" },
       { href: "/students", icon: List,            labelKey: "nav.students"  },
-      { href: "/scan-qr",  icon: QrCode,          labelKey: "nav.scan_qr"  },
     ],
   },
   {
@@ -168,7 +164,6 @@ const SECTIONS: SectionDef[] = [
       { href: "/excel-injection",   icon: FileSpreadsheet, labelKey: "nav.excel_injection" },
       { href: "/upload-grades-ocr", icon: ScanLine,        labelKey: "nav.ocr_upload"  },
       { href: "/archive",           icon: Archive,          labelKey: "nav.archive"     },
-      { href: "/sms",      icon: MessageSquare,    labelKey: "nav.sms"      },
       { href: "/agent",    icon: Bot,              labelKey: "nav.agent"    },
     ],
   },
@@ -861,8 +856,6 @@ function AppLayout() {
               <Route path="/import"              component={ImportPage} />
               <Route path="/excel-injection"     component={ExcelInjectionPage} />
               <Route path="/archive"            component={ArchivePage} />
-              <Route path="/sms"                component={SmsPage} />
-              <Route path="/scan-qr"            component={ScanQrPage} />
               <Route path="/upload-grades-ocr"  component={UploadGradesOcrPage} />
               <Route path="/agent"               component={AgentSetupPage} />
               <Route path="/settings"            component={SettingsPage} />
@@ -1063,7 +1056,6 @@ export default function App() {
       <LanguageProvider defaultLang="ar">
         {/* Public routes — no auth required */}
         <Switch>
-          <Route path="/schools/:schoolId/students/:studentId/qr" component={StudentQrViewPage} />
           <Route path="/parent-register" component={ParentRegisterPage} />
           <Route>
             <AuthGate />

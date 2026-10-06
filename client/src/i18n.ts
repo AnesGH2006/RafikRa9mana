@@ -25,8 +25,6 @@ export const translations: TranslationMap = {
   "nav.yearend":      { en: "Annual Results",  ar: "النتائج السنوية",   fr: "Résultats annuels" },
   "nav.passed_list":      { en: "Passed List",          ar: "قوائم التلاميذ الناجحين",    fr: "Liste des admis" },
   "nav.failed_list":      { en: "Failed List",          ar: "قوائم التلاميذ الراسبين",    fr: "Liste des non admis" },
-  "nav.sms":              { en: "Send SMS",              ar: "إرسال رسائل SMS",            fr: "Envoyer SMS" },
-  "nav.scan_qr":          { en: "Scan QR Code",          ar: "مسح رمز QR",                fr: "Scanner QR" },
   "nav.ocr_upload":       { en: "OCR Grade Upload",      ar: "رفع درجات OCR",             fr: "Import OCR" },
   "nav.mustarrak_list":   { en: "Remediation List",     ar: "قوائم التلاميذ المستدركين",  fr: "Liste des rattrapages" },
   "nav.recovery_results": { en: "Recovery Results",     ar: "نتائج الاستدراك",            fr: "Résultats de rattrapage" },
@@ -309,18 +307,6 @@ export const translations: TranslationMap = {
   "parent_register.error_generic":    { en: "An error occurred. Please try again.", ar: "حدث خطأ. يرجى المحاولة مرة أخرى.", fr: "Une erreur est survenue. Veuillez réessayer." },
   "parent_register.try_again":        { en: "Try Again",               ar: "حاول مرة أخرى",                        fr: "Réessayer" },
 
-  // QR public view
-  "qr.title":            { en: "Student Profile",    ar: "ملف التلميذ",            fr: "Profil de l'élève" },
-  "qr.grades":           { en: "Grades",             ar: "الدرجات",                fr: "Notes" },
-  "qr.averages":         { en: "Averages",           ar: "المعدلات",               fr: "Moyennes" },
-  "qr.absences":         { en: "Absences",           ar: "الغيابات",               fr: "Absences" },
-  "qr.invalid":          { en: "Invalid QR code",    ar: "رمز QR غير صالح",        fr: "QR code invalide" },
-  "qr.trimester":        { en: "Trimester",          ar: "الفصل",                  fr: "Trimestre" },
-  "qr.annual":           { en: "Annual Average",     ar: "المعدل السنوي",          fr: "Moyenne annuelle" },
-  "qr.hours":            { en: "hrs",                ar: "ساعة",                   fr: "h" },
-  "qr.justified":        { en: "Justified",          ar: "مبررة",                  fr: "Justifiées" },
-  "qr.unjustified":      { en: "Unjustified",        ar: "غير مبررة",               fr: "Non justifiées" },
-
   // Reports
   "nav.reports":         { en: "Reports",           ar: "التقارير",              fr: "Rapports" },
   "nav.reports_section": { en: "Reports & Print",   ar: "التقارير والطباعة",     fr: "Rapports & Impression" },
@@ -328,4 +314,3 @@ export const translations: TranslationMap = {
   "reports.print":       { en: "Print PDF",          ar: "طباعة PDF",            fr: "Imprimer PDF" },
   "reports.noData":      { en: "No data for this year.", ar: "لا توجد بيانات لهذه السنة.", fr: "Aucune donnée pour cette année." },
 };
-

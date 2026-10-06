@@ -31,8 +31,6 @@ const plans = [
       "استيراد Excel",
       "لوحة التحكم والإحصائيات",
       "طباعة القوائم PDF",
-      "رموز QR للتلاميذ",
-      "إرسال رسائل SMS (محدود)",
     ],
     gradient: "from-emerald-500 to-teal-600",
     glow: "shadow-emerald-500/30",

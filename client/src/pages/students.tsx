@@ -8,8 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, Trash2, Search, Users, FileSpreadsheet, X, CheckCircle2, AlertCircle, BarChart2, Printer, QrCode } from "lucide-react";
-import { StudentQrDialog } from "@/components/student-qr-dialog";
+import { Upload, Trash2, Search, Users, FileSpreadsheet, X, CheckCircle2, AlertCircle, BarChart2, Printer } from "lucide-react";
 import { CountUp } from "@/components/count-up";
 import type { Student, Niveau, Sexe, Statut } from "@shared/types";
 import {
@@ -359,8 +358,6 @@ export default function Students() {
   const [importResultOpen, setImportResultOpen] = useState(false);
   const [listKey, setListKey] = useState(0);
   const [showAnalytics, setShowAnalytics] = useState(true);
-  const [qrStudent, setQrStudent]   = useState<Student | null>(null);
-  const [qrOpen,    setQrOpen]      = useState(false);
 
   const [filters, setFilters] = useState({ q: "", niveau: "", classe: "", sexe: "", statut: "", annee: DEFAULT_YEAR });
 
@@ -658,16 +655,6 @@ export default function Students() {
                           <span className="text-xs font-semibold text-red-500">{t("val.non_admis")}</span>
                         ) : <span className="text-muted-foreground">—</span>}
                       </td>
-                      <td className="px-3 py-2">
-                        <motion.button
-                          whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.92 }}
-                          className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-muted-foreground hover:text-blue-500 transition-colors"
-                          title="عرض رمز QR"
-                          onClick={() => { setQrStudent(s); setQrOpen(true); }}
-                        >
-                          <QrCode className="w-4 h-4" />
-                        </motion.button>
-                      </td>
                     </motion.tr>
                   ))}
                 </tbody>
@@ -739,19 +726,6 @@ export default function Students() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* QR Dialog */}
-      <StudentQrDialog
-        open={qrOpen}
-        onOpenChange={setQrOpen}
-        student={qrStudent ? {
-          id:        qrStudent.id,
-          nomPrenom: qrStudent.nomPrenom,
-          niveau:    qrStudent.niveau,
-          classe:    qrStudent.classe,
-          annee:     qrStudent.annee,
-        } : null}
-      />
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
