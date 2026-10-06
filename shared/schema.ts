@@ -374,6 +374,8 @@ export const schoolMembersTable = pgTable("school_members", {
   phone: varchar("phone", { length: 30 }),
   /** For teachers: list of class names they can enter grades for */
   assignedClasses: jsonb("assigned_classes").$type<string[]>().default([]),
+  /** Per-member access grants; null legacy rows fall back to role defaults. */
+  permissions: jsonb("permissions").$type<string[]>(),
   /** For parents: the student they are the guardian of */
   linkedStudentId: varchar("linked_student_id", { length: 64 }).references(() => studentsTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

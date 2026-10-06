@@ -26,9 +26,11 @@ import paymentsRouter from "./payments.js";
 import excelInjectionRouter from "./excel-injection.js";
 import pedagogyRouter from "./pedagogy.js";
 import { requirePaidPlan } from "../middlewares/planAccess.js";
+import { memberPermissionMiddleware } from "../middlewares/memberPermissions.js";
 
 const router: IRouter = Router();
 
+router.use(memberPermissionMiddleware);
 router.use(healthRouter);
 router.use(authRouter);
 router.use(paymentsRouter);

@@ -1,4 +1,5 @@
 import type { SchoolLevel } from "./school-stage.js";
+import type { StaffPermission } from "./member-permissions.js";
 export type { SchoolLevel, SchoolStage } from "./school-stage.js";
 
 export type SubscriptionStatus = "pending" | "active" | "suspended";
@@ -10,6 +11,7 @@ export interface MemberContext {
   memberId: string;
   schoolUserId: string;
   role: MemberRole;
+  permissions: StaffPermission[];
   /** Teachers: classes they may enter grades for. Parents: empty. */
   assignedClasses: string[];
   /** Parents: the student they can view. Teachers: null. */

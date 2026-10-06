@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { getSession, getSessionId } from "../lib/auth.js";
 import { db, schoolMembersTable, usersTable } from "../../shared/db.js";
 import type { AuthUser, MemberContext } from "../../shared/types.js";
+import { DEFAULT_STAFF_PERMISSIONS, normalizeStaffPermissions } from "../../shared/member-permissions.js";
 
 declare global {
   namespace Express {
@@ -14,7 +15,7 @@ declare global {
   }
 }
 
-export async function authMiddleware(req: Request, _res: Response, next: NextFunction): Promise<void> {
+export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   const sid = getSessionId(req);
 
   if (!sid) {
@@ -64,12 +65,17 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
       req.memberContext = {
         memberId: member.id,
         schoolUserId: member.schoolUserId,
-        role: member.role as "teacher" | "parent",
+        role: member.role,
+        permissions: member.role === "parent"
+          ? []
+          : member.permissions == null
+            ? [...DEFAULT_STAFF_PERMISSIONS[member.role]]
+            : normalizeStaffPermissions(member.permissions, member.role),
         assignedClasses: (member.assignedClasses as string[]) ?? [],
         linkedStudentId: member.linkedStudentId ?? null,
         name: member.name,
       };
-      if (member.role === "teacher") {
+      if (member.role !== "parent") {
         const [schoolOwner] = await db.select({
           subscriptionPlan: usersTable.subscriptionPlan,
           subscriptionStatus: usersTable.subscriptionStatus,
@@ -83,8 +89,10 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
         }
       }
     }
-  } catch {
-    // Non-fatal — if DB is unavailable, proceed without member context
+  } catch (error) {
+    req.log?.error({ error, userId: session.user.id }, "Unable to load school-member permissions");
+    res.status(503).json({ error: "Unable to verify account permissions" });
+    return;
   }
 
   next();

@@ -15,10 +15,11 @@ export function requirePaidPlan(req: Request, res: Response, next: NextFunction)
     next();
     return;
   }
-  const plan = req.memberContext?.role === "teacher"
+  const isSchoolStaff = !!req.memberContext && req.memberContext.role !== "parent";
+  const plan = isSchoolStaff
     ? req.memberContext.schoolSubscriptionPlan
     : user.subscriptionPlan;
-  const status = req.memberContext?.role === "teacher"
+  const status = isSchoolStaff
     ? req.memberContext.schoolSubscriptionStatus
     : user.subscriptionStatus;
   if (plan === "basic" || plan === "pro") {

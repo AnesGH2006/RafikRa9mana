@@ -64,6 +64,10 @@ import AuditLogPage from "@/pages/audit-log";
 import ClassBalancerPage from "@/pages/class-balancer";
 import TimetablePage from "@/pages/timetable";
 import ExcelInjectionPage from "@/pages/excel-injection";
+import {
+  appPathForPermission,
+  permissionForAppPath,
+} from "@shared/member-permissions";
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface NavItemDef {
   href: string;
@@ -181,27 +185,6 @@ const SECTIONS: SectionDef[] = [
   },
 ];
 
-// Nav sections shown to TEACHER sub-accounts (minimal view)
-const TEACHER_SECTIONS: SectionDef[] = [
-  {
-    id: "grades", icon: BookOpen, labelKey: "nav.results_section",
-    color: "text-violet-400", gradient: "from-violet-500 to-purple-700",
-    items: [
-      { href: "/",        icon: LayoutDashboard, labelKey: "nav.dashboard"      },
-      { href: "/results", icon: ClipboardList,   labelKey: "nav.results"        },
-      { href: "/subjects",icon: BarChart3,        labelKey: "nav.subjects"       },
-      { href: "/pedagogy-center", icon: ClipboardList, labelKey: "nav.pedagogy" },
-    ],
-  },
-  {
-    id: "more_t", icon: Settings, labelKey: "nav.more_section",
-    color: "text-slate-400", gradient: "from-slate-500 to-slate-700",
-    items: [
-      { href: "/settings", icon: Settings, labelKey: "nav.settings" },
-    ],
-  },
-];
-
 // Nav sections shown to PARENT sub-accounts (read-only child view)
 const PARENT_SECTIONS: SectionDef[] = [
   {
@@ -217,17 +200,29 @@ const PARENT_SECTIONS: SectionDef[] = [
 /** Choose the nav sections to display based on the logged-in user's role. */
 function getNavSections(user: import("@/hooks/use-auth").AuthUser | null): SectionDef[] {
   const role = user?.memberContext?.role;
-  if (role === "teacher") {
-    if (user?.memberContext?.schoolSubscriptionPlan === "free") {
+  if (role === "parent")  return PARENT_SECTIONS;
+  if (role === "teacher" || role === "supervisor" || role === "counselor") {
+    const permissions = user?.memberContext?.permissions ?? [];
+    const allowedNonPermissionPaths = new Set(["/settings", "/account", "/subscription"]);
+    let sections = SECTIONS.map(section => ({
+      ...section,
+      items: section.items.filter(item => {
+        const permission = permissionForAppPath(item.href);
+        return permission
+          ? permissions.includes(permission)
+          : allowedNonPermissionPaths.has(item.href);
+      }),
+    })).filter(section => section.items.length > 0);
+
+    if (role !== "parent" && user?.memberContext?.schoolSubscriptionPlan === "free") {
       const freePaths = new Set(["/", "/results", "/subjects"]);
-      return TEACHER_SECTIONS.map(section => ({
+      sections = sections.map(section => ({
         ...section,
         items: section.items.filter(item => freePaths.has(item.href)),
       })).filter(section => section.items.length > 0);
     }
-    return TEACHER_SECTIONS;
+    return sections;
   }
-  if (role === "parent")  return PARENT_SECTIONS;
   if (user?.subscriptionPlan === "free" && user.subscriptionStatus === "active" && user.role !== "admin") {
     const freePaths = new Set(["/", "/students", "/results", "/subjects", "/import", "/settings", "/account", "/subscription"]);
     return SECTIONS.map(section => ({
@@ -799,7 +794,7 @@ function AppLayout() {
   const isParent = user?.memberContext?.role === "parent";
   const isFreeAccount = user?.role !== "admin" && (
     (user?.subscriptionPlan === "free" && user.subscriptionStatus === "active" && !user.memberContext)
-    || (user?.memberContext?.role === "teacher" && user.memberContext.schoolSubscriptionPlan === "free")
+    ||     (user?.memberContext && user.memberContext.role !== "parent" && user.memberContext.schoolSubscriptionPlan === "free")
   );
   useEffect(() => {
     const freePaths = ["/", "/students", "/results", "/subjects", "/import", "/settings", "/account", "/subscription", "/payment-demo"];
@@ -807,6 +802,18 @@ function AppLayout() {
       navigate("/subscription", { replace: true });
     }
   }, [isFreeAccount, loc, navigate]);
+  useEffect(() => {
+    const member = user?.memberContext;
+    if (!member || member.role === "parent") return;
+    const requiredPermission = permissionForAppPath(loc);
+    const allowed = requiredPermission
+      ? member.permissions.includes(requiredPermission)
+      : ["/settings", "/account", "/subscription"].includes(loc);
+    if (!allowed) {
+      const firstAllowed = member.permissions[0];
+      navigate(firstAllowed ? appPathForPermission(firstAllowed) : "/subscription", { replace: true });
+    }
+  }, [loc, navigate, user?.memberContext]);
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
       <TopNav />

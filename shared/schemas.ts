@@ -1,4 +1,5 @@
 import * as zod from "zod";
+import { STAFF_PERMISSIONS } from "./member-permissions.js";
 
 export const HealthCheckResponse = zod.object({ status: zod.string() });
 
@@ -6,6 +7,7 @@ const MemberContextSchema = zod.object({
   memberId: zod.string(),
   schoolUserId: zod.string(),
   role: zod.enum(["teacher", "parent", "supervisor", "counselor"]),
+  permissions: zod.array(zod.enum(STAFF_PERMISSIONS)).default([]),
   assignedClasses: zod.array(zod.string()),
   linkedStudentId: zod.string().nullable(),
   name: zod.string(),

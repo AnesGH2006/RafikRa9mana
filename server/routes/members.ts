@@ -16,12 +16,24 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, schoolMembersTable, studentsTable, gradesTable, absencesTable, studentDailyAttendanceTable, schoolInfoTable } from "../../shared/db.js";
 import { deleteCachedJson, getCachedJson, setCachedJson } from "../services/redisCache.js";
 import { calcAnnualAvg, calcWeightedAvg, getSubjectsForLevel } from "../../shared/subjects.js";
+import {
+  DEFAULT_STAFF_PERMISSIONS,
+  normalizeStaffPermissions,
+  STAFF_PERMISSIONS,
+  type StaffPermission,
+  type StaffRole,
+} from "../../shared/member-permissions.js";
 
 const router = Router();
 
 /** Only a head-admin (subscribed, non-member user) may manage members. */
 function isHeadAdmin(req: Request): boolean {
   return req.isAuthenticated() && !req.memberContext;
+}
+
+function isValidPermissionList(value: unknown): value is StaffPermission[] {
+  return Array.isArray(value)
+    && value.every(permission => typeof permission === "string" && STAFF_PERMISSIONS.includes(permission as StaffPermission));
 }
 
 // ── GET /api/members ─────────────────────────────────────────────────────────
@@ -43,12 +55,13 @@ router.post("/members", async (req: Request, res: Response): Promise<void> => {
   if (!isHeadAdmin(req)) { res.status(403).json({ error: "Forbidden" }); return; }
   const schoolUserId = req.user!.id;
 
-  const { role, name, email, phone, assignedClasses } = req.body as {
-    role: "teacher" | "supervisor" | "counselor";
+  const { role, name, email, phone, assignedClasses, permissions } = req.body as {
+    role: StaffRole;
     name: string;
     email?: string;
     phone?: string;
     assignedClasses?: string[];
+    permissions?: unknown;
   };
 
   // Admin can only create staff roles — parents self-register via /api/parent-register
@@ -60,12 +73,20 @@ router.post("/members", async (req: Request, res: Response): Promise<void> => {
     res.status(400).json({ error: "name is required" });
     return;
   }
+  if (permissions !== undefined && !isValidPermissionList(permissions)) {
+    res.status(400).json({ error: "permissions contains an unknown permission" });
+    return;
+  }
 
   const [created] = await db
     .insert(schoolMembersTable)
     .values({
       schoolUserId,
       role,
+      permissions: normalizeStaffPermissions(
+        permissions ?? DEFAULT_STAFF_PERMISSIONS[role],
+        role,
+      ),
       name: name.trim(),
       email: email?.trim() || null,
       phone: phone?.trim() || null,
@@ -83,12 +104,13 @@ router.patch("/members/:id", async (req: Request, res: Response): Promise<void> 
   const schoolUserId = req.user!.id;
   const { id } = req.params as { id: string };
 
-  const { name, email, phone, assignedClasses, linkedStudentId } = req.body as {
+  const { name, email, phone, assignedClasses, linkedStudentId, permissions } = req.body as {
     name?: string;
     email?: string;
     phone?: string;
     assignedClasses?: string[];
     linkedStudentId?: string | null;
+    permissions?: unknown;
   };
 
   const updates: Partial<typeof schoolMembersTable.$inferInsert> = {};
@@ -97,6 +119,21 @@ router.patch("/members/:id", async (req: Request, res: Response): Promise<void> 
   if (phone !== undefined) updates.phone = phone?.trim() || null;
   if (assignedClasses !== undefined) updates.assignedClasses = assignedClasses;
   if (linkedStudentId !== undefined) updates.linkedStudentId = linkedStudentId;
+  if (permissions !== undefined) {
+    const [member] = await db.select({ role: schoolMembersTable.role })
+      .from(schoolMembersTable)
+      .where(and(eq(schoolMembersTable.id, id), eq(schoolMembersTable.schoolUserId, schoolUserId)))
+      .limit(1);
+    if (!member || member.role === "parent") {
+      res.status(member ? 400 : 404).json({ error: member ? "Parents do not have staff permissions" : "Member not found" });
+      return;
+    }
+    if (!isValidPermissionList(permissions)) {
+      res.status(400).json({ error: "permissions contains an unknown permission" });
+      return;
+    }
+    updates.permissions = normalizeStaffPermissions(permissions, member.role);
+  }
 
   const [updated] = await db
     .update(schoolMembersTable)

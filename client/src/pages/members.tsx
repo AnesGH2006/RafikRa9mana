@@ -25,10 +25,16 @@ import {
   UserCheck, AlertCircle, BookOpen, Copy, Check,
   ShieldCheck, MessageSquare, ExternalLink,
 } from "lucide-react";
+import {
+  DEFAULT_STAFF_PERMISSIONS,
+  STAFF_PERMISSION_LABELS,
+  STAFF_PERMISSIONS,
+  type StaffPermission,
+  type StaffRole,
+} from "@shared/member-permissions";
 
 const BASE = import.meta.env.BASE_URL;
 
-type StaffRole   = "teacher" | "supervisor" | "counselor";
 type MemberRole  = StaffRole | "parent";
 
 interface Member {
@@ -40,6 +46,7 @@ interface Member {
   email: string | null;
   phone: string | null;
   assignedClasses: string[];
+  permissions: StaffPermission[] | null;
   linkedStudentId: string | null;
   createdAt: string;
 }
@@ -56,12 +63,13 @@ const pageVariants = {
   animate: { opacity: 1, y: 0, transition: { duration: 0.4 } },
 };
 
-const EMPTY_FORM: { role: StaffRole; name: string; email: string; phone: string; assignedClasses: string } = {
+const EMPTY_FORM: { role: StaffRole; name: string; email: string; phone: string; assignedClasses: string; permissions: StaffPermission[] } = {
   role: "teacher",
   name: "",
   email: "",
   phone: "",
   assignedClasses: "",
+  permissions: [...DEFAULT_STAFF_PERMISSIONS.teacher],
 };
 
 const ROLE_META: Record<MemberRole, { label: string; arLabel: string; color: string; bg: string; icon: React.ElementType }> = {
@@ -115,6 +123,7 @@ export default function MembersPage() {
       email: m.email ?? "",
       phone: m.phone ?? "",
       assignedClasses: (m.assignedClasses ?? []).join(", "),
+      permissions: m.permissions ?? [...DEFAULT_STAFF_PERMISSIONS[m.role as StaffRole]],
     });
     setDialogOpen(true);
   }
@@ -130,6 +139,7 @@ export default function MembersPage() {
       assignedClasses: form.role === "teacher"
         ? form.assignedClasses.split(",").map(s => s.trim()).filter(Boolean)
         : [],
+      permissions: form.permissions,
     };
     try {
       const url    = editing ? `${BASE}api/members/${editing.id}` : `${BASE}api/members`;
@@ -336,7 +346,10 @@ export default function MembersPage() {
             {!editing && (
               <div className="space-y-1.5">
                 <Label>{t("members.role")}</Label>
-                <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v as StaffRole }))}>
+                <Select value={form.role} onValueChange={v => {
+                  const role = v as StaffRole;
+                  setForm(f => ({ ...f, role, permissions: [...DEFAULT_STAFF_PERMISSIONS[role]] }));
+                }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="teacher">
@@ -409,6 +422,31 @@ export default function MembersPage() {
                 <p className="text-xs text-muted-foreground">{t("members.class_hint")}</p>
               </div>
             )}
+
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">الصلاحيات</legend>
+              <p className="text-xs text-muted-foreground">
+                تم اختيار صلاحيات افتراضية حسب الدور؛ يمكنك تعديلها لهذا الحساب فقط.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border p-3">
+                {STAFF_PERMISSIONS.map(permission => (
+                  <label key={permission} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.permissions.includes(permission)}
+                      onChange={event => setForm(current => ({
+                        ...current,
+                        permissions: event.target.checked
+                          ? [...current.permissions, permission]
+                          : current.permissions.filter(item => item !== permission),
+                      }))}
+                      className="accent-primary"
+                    />
+                    {STAFF_PERMISSION_LABELS[permission]}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
