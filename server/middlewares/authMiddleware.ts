@@ -90,10 +90,11 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       }
     }
   } catch (error) {
-    req.log?.error({ error, userId: session.user.id }, "Unable to load school-member permissions");
-    res.status(503).json({ error: "Unable to verify account permissions" });
-    return;
-  }
+  console.error("Unable to load school-member permissions:", error);
+  req.log?.error({ error, userId: session.user.id }, "Unable to load school-member permissions");
+  res.status(503).json({ error: "Unable to verify account permissions" });
+  return;
+}
 
   next();
 }
