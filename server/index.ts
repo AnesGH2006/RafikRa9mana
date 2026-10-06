@@ -64,8 +64,48 @@ async function probeDb(attempt = 1): Promise<void> {
   const DELAY_MS = 3000;
   try {
     await db.execute(sql`SELECT 1`);
-    // Run migrations in order: create tables first, then add missing columns.
-    // All create statements are guarded with IF NOT EXISTS, so they're safe on repeated runs.
+    
+    // Create tables in dependency order: base tables first, then tables that reference them
+    // 1. Create users table (no dependencies)
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        email varchar UNIQUE,
+        first_name varchar,
+        last_name varchar,
+        profile_image_url varchar,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    
+    // 2. Create enum types needed by students table
+    await db.execute(sql`DO $$ BEGIN CREATE TYPE niveau AS ENUM ('1AM','2AM','3AM','4AM'); EXCEPTION WHEN duplicate_object THEN null; END $$`);
+    await db.execute(sql`ALTER TYPE niveau ADD VALUE IF NOT EXISTS '1AS'`);
+    await db.execute(sql`ALTER TYPE niveau ADD VALUE IF NOT EXISTS '2AS'`);
+    await db.execute(sql`ALTER TYPE niveau ADD VALUE IF NOT EXISTS '3AS'`);
+    await db.execute(sql`DO $$ BEGIN CREATE TYPE sexe AS ENUM ('M','F'); EXCEPTION WHEN duplicate_object THEN null; END $$`);
+    await db.execute(sql`DO $$ BEGIN CREATE TYPE statut_eleve AS ENUM ('nouveau','redoublant'); EXCEPTION WHEN duplicate_object THEN null; END $$`);
+    await db.execute(sql`DO $$ BEGIN CREATE TYPE resultat_eleve AS ENUM ('admis','non_admis'); EXCEPTION WHEN duplicate_object THEN null; END $$`);
+    
+    // 3. Create students table (references users)
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS students (
+        id varchar(64) PRIMARY KEY,
+        user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        nom_prenom varchar(255) NOT NULL,
+        date_naissance varchar(30),
+        niveau niveau NOT NULL,
+        classe varchar(10) NOT NULL,
+        sexe sexe NOT NULL,
+        statut statut_eleve NOT NULL DEFAULT 'nouveau',
+        resultat resultat_eleve,
+        annee varchar(20) NOT NULL DEFAULT '2025-2026',
+        created_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    
+    // 4. Create grades table (references users and students)
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS grades (
         id varchar(64) PRIMARY KEY,
@@ -79,8 +119,9 @@ async function probeDb(attempt = 1): Promise<void> {
         created_at timestamptz NOT NULL DEFAULT now()
       )
     `);
-    // Keep the parent feed compatible with databases created before assessment types existed.
     await db.execute(sql`ALTER TABLE grades ADD COLUMN IF NOT EXISTS grade_type varchar(20) NOT NULL DEFAULT 'general'`);
+    
+    // 5. Create student_daily_attendance table (references users and students)
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS student_daily_attendance (
         id varchar(64) PRIMARY KEY,
@@ -102,6 +143,7 @@ async function probeDb(attempt = 1): Promise<void> {
     await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS annee varchar(20) NOT NULL DEFAULT '2025-2026'`);
     await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS parent_absence_reason varchar(500)`);
     await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS parent_absence_reason_at timestamptz`);
+    
     // Repair names imported from combined Excel name columns before the parser fix.
     await db.execute(sql`UPDATE students SET nom_prenom = regexp_replace(nom_prenom, '^(.+)\\s+\\1$', '\\1') WHERE nom_prenom ~ '^(.+)\\s+\\1$'`);
     logger.info("Database connection verified");
