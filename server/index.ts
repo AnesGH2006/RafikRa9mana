@@ -54,13 +54,6 @@ if (!process.env.GEMINI_API_KEY) {
 import { db } from "../shared/db.js";
 import { sql } from "drizzle-orm";
 
-async function ensureTableExists(tableName: string, createSql: string): Promise<void> {
-  const { rows } = await db.execute(sql`SELECT to_regclass(${`public.${tableName}`}) AS table_name`);
-  if (rows.length === 0 || !rows[0]?.table_name) {
-    await db.execute(sql.raw(createSql));
-  }
-}
-
 async function probeDb(attempt = 1): Promise<void> {
   if (!isDatabaseConfigured) {
     logger.warn("DATABASE_URL is not configured — skipping database health probe. Database-dependent routes will fail until it is set.");
@@ -71,10 +64,10 @@ async function probeDb(attempt = 1): Promise<void> {
   const DELAY_MS = 3000;
   try {
     await db.execute(sql`SELECT 1`);
-    // Keep the parent feed compatible with databases created before assessment types existed.
-    await ensureTableExists(
-      "grades",
-      `CREATE TABLE IF NOT EXISTS grades (
+    // Run migrations in order: create tables first, then add missing columns.
+    // All create statements are guarded with IF NOT EXISTS, so they're safe on repeated runs.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS grades (
         id varchar(64) PRIMARY KEY,
         user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         student_id varchar(64) NOT NULL REFERENCES students(id) ON DELETE CASCADE,
@@ -84,12 +77,12 @@ async function probeDb(attempt = 1): Promise<void> {
         grade_type varchar(20) NOT NULL DEFAULT 'general',
         score numeric(5,2) NOT NULL,
         created_at timestamptz NOT NULL DEFAULT now()
-      );`,
-    );
+      )
+    `);
+    // Keep the parent feed compatible with databases created before assessment types existed.
     await db.execute(sql`ALTER TABLE grades ADD COLUMN IF NOT EXISTS grade_type varchar(20) NOT NULL DEFAULT 'general'`);
-    await ensureTableExists(
-      "student_daily_attendance",
-      `CREATE TABLE IF NOT EXISTS student_daily_attendance (
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS student_daily_attendance (
         id varchar(64) PRIMARY KEY,
         user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         student_id varchar(64) NOT NULL REFERENCES students(id) ON DELETE CASCADE,
@@ -104,8 +97,8 @@ async function probeDb(attempt = 1): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS "UQ_student_daily_attendance_user_student_date"
         ON student_daily_attendance(user_id, student_id, attendance_date);
       CREATE INDEX IF NOT EXISTS "IDX_student_daily_attendance_user_date"
-        ON student_daily_attendance(user_id, attendance_date);`,
-    );
+        ON student_daily_attendance(user_id, attendance_date)
+    `);
     await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS annee varchar(20) NOT NULL DEFAULT '2025-2026'`);
     await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS parent_absence_reason varchar(500)`);
     await db.execute(sql`ALTER TABLE student_daily_attendance ADD COLUMN IF NOT EXISTS parent_absence_reason_at timestamptz`);
