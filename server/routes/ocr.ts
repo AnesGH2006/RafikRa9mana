@@ -1,4 +1,4 @@
-﻿/**
+/**
  * OCR Grade Sheet & Absence Sheet Processing
  *
  * POST /api/ocr/parse-grades?type=grades|absences&engine=auto|gemini|vision|tesseract
@@ -8,10 +8,15 @@
 import { Router } from "express";
 import multer from "multer";
 import { logger } from "../lib/logger.js";
-import { processOcr, type OcrEngine } from "../services/ocrService.js";
 import { db, ocrUploadsTable } from "../../shared/db.js";
 import { getUserGroqKey, getUserGeminiKey } from "../lib/groq-key.js";
+import { processOcr, type OcrEngine, type OcrType } from "../services/ocrService.js";
 
+const rawType = String(req.query.type ?? "grades");
+const ocrType = (["absences", "daily_register", "daily_attendance"].includes(rawType)
+  ? rawType
+  : "grades") as OcrType;
+const isDaily = ocrType === "daily_register" || ocrType === "daily_attendance";
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -44,7 +49,10 @@ router.post(
     }
 
     const userId = req.user!.id;
-    const ocrType = (req.query.type as string) === "absences" ? "absences" : "grades";
+    const requestedType = String(req.query.type ?? "grades");
+    const ocrType = requestedType === "absences" || requestedType === "daily_attendance" || requestedType === "daily_register"
+      ? requestedType
+      : "grades";
     if (req.file.mimetype === "application/pdf") {
       res.status(415).json({
         error: "ملفات PDF تحتاج إلى تحويل صفحاتها إلى صور قبل OCR. ارفع PNG أو JPG لكل صفحة.",
@@ -89,7 +97,9 @@ router.post(
         res.status(422).json({
           error: ocrType === "absences"
             ? "لم يتم العثور على بيانات غياب في الصورة. جرّب مرة أخرى."
-            : "لم يتم العثور على أي درجات في الصورة. جرّب مرة أخرى.",
+            : ocrType === "daily_register"
+              ? "لم يتم التعرف على سجل الغياب اليومي. تأكد من وضوح أسماء التلاميذ وعلامات الحضور."
+              : "لم يتم العثور على أي درجات في الصورة. جرّب مرة أخرى.",
           engine: result.engine,
           suggestions,
           rawText: result.rawText?.slice(0, 500),
@@ -97,25 +107,20 @@ router.post(
         return;
       }
 
-      const rows = result.rows.map((r, i) => {
-        const base = {
-          rowNumber: i + 1,
-          studentName: r.studentName,
-          confidence: r.confidence,
-          lowConfidence: r.confidence < 80,
-        };
-        if (ocrType === "absences" && "justifiedHours" in r) {
-          return {
-            ...base,
-            justifiedHours: r.justifiedHours,
-            unjustifiedHours: r.unjustifiedHours,
-          };
-        }
-        if ("grade" in r) {
-          return { ...base, grade: r.grade };
-        }
-        return base;
-      });
+      const rows = result.rows.map((r: any, i: number) => {
+  const base = {
+    rowNumber: i + 1,
+    studentName: r.studentName,
+    confidence: r.confidence,
+    lowConfidence: r.confidence < 80,
+  };
+  if (isDaily) return { ...r, ...base };
+  if (ocrType === "absences" && "justifiedHours" in r) {
+    return { ...base, justifiedHours: r.justifiedHours, unjustifiedHours: r.unjustifiedHours };
+  }
+  if ("grade" in r) return { ...base, grade: r.grade };
+  return base;
+});
 
       // Audit log
       try {
@@ -132,29 +137,32 @@ router.post(
       }
 
       res.json({
-        success: true,
-        type: ocrType,
-        engine: result.engine,
-        rows,
-        totalLines: rows.length,
-        overallConfidence: result.overallConfidence,
-        rawText: result.rawText?.slice(0, 2000),
-      });
+  success: true,
+  type: ocrType,
+  engine: result.engine,
+  rows,
+  reportDate: (result as any).reportDate ?? null,
+  totalLines: rows.length,
+  overallConfidence: result.overallConfidence,
+  rawText: result.rawText?.slice(0, 2000),
+});
     } catch (err: any) {
       logger.error({ err }, "OCR processing failed");
       const errorMessage = err?.message ?? "Unknown error";
+      const quotaExhausted = /(?:API\s+429|RESOURCE_EXHAUSTED|rate_limit_exceeded|tokens per minute|quota exceeded)/i.test(errorMessage);
 
-      // Show the REAL error to the user directly (no Tesseract fallback to
-      // hide behind anymore), so a bad API key or network issue is obvious
-      // immediately instead of requiring a look at server logs.
-      res.status(500).json({
-        error: `فشل معالجة الصورة: ${errorMessage}`,
-        details: errorMessage,
-        suggestions: [
-          errorMessage.includes("API_KEY") || errorMessage.includes("API key") || errorMessage.includes("401") || errorMessage.includes("400")
-            ? "تأكد من صحة مفتاح Gemini أو Groq في الإعدادات (قد يكون منتهي الصلاحية أو منسوخًا بشكل خاطئ)"
-            : "جرّب صورة أخرى أو تحقق من جودة الصورة",
-        ],
+      res.status(quotaExhausted ? 503 : 500).json({
+        error: quotaExhausted
+          ? "حصة خدمة OCR ممتلئة مؤقتًا. لم يتمكن أي محرك من معالجة الصورة."
+          : "فشل معالجة الصورة",
+        suggestions: quotaExhausted
+          ? [
+              "انتظر حتى تتجدد حصة Gemini أو Groq ثم أعد المحاولة",
+              "أضف مفتاح API آخر من صفحة الإعدادات أو اختر محركًا تتوفر له حصة",
+            ]
+          : [errorMessage.includes("API_KEY") || errorMessage.includes("API key")
+              ? "تأكد من صحة مفتاح Gemini أو Groq في الإعدادات"
+              : "تحقق من اتصال الإنترنت وجودة الصورة ثم أعد المحاولة"],
       });
     }
   },
