@@ -14,7 +14,7 @@ import { logger } from "../lib/logger.js";
 const router = Router();
 const MAX_MESSAGES = 11;
 const MAX_MESSAGE_LENGTH = 2000;
-const MODEL = "gemini-1.5-flash";
+const MODEL = "gemini-3.8-flash";
 
 const SYSTEM_PROMPT = `أنت رفيق، مساعد أولياء التلاميذ في تطبيق رفيق الرقمنة بالجزائر.
 تحدث بعربية سليمة بسيطة، باحترام وطمأنينة، وأجب باختصار.

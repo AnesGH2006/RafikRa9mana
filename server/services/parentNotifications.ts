@@ -26,6 +26,17 @@ export async function notifyParentAccount(input: {
       url: input.url,
       type: input.type,
     });
+    if (pushSent === 0) {
+      logger.warn(
+        { userId: input.userId, notificationId: notification!.id },
+        "Push NOT delivered: this parent has no saved push subscription, or every send failed",
+      );
+    } else {
+      logger.info(
+        { userId: input.userId, notificationId: notification!.id, pushSent },
+        "Push delivered to push service",
+      );
+    }
   } catch (error) {
     logger.error({ error, userId: input.userId, notificationId: notification!.id }, "Parent push notification failed");
   }
