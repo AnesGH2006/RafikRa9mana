@@ -1,7 +1,7 @@
 /**
- * OCR Grade Sheet & Absence Sheet Processing
+ * OCR Grade Sheet, Absence Sheet & Daily Register Processing
  *
- * POST /api/ocr/parse-grades?type=grades|absences&engine=auto|gemini|vision|tesseract
+ * POST /api/ocr/parse-grades?type=grades|absences|daily_attendance|daily_register&engine=auto|gemini|vision|tesseract
  *
  * Pipeline: Sharp preprocess → Gemini Vision or Groq Vision (user's own key) → Tesseract.js (fallback)
  */
@@ -12,11 +12,6 @@ import { db, ocrUploadsTable } from "../../shared/db.js";
 import { getUserGroqKey, getUserGeminiKey } from "../lib/groq-key.js";
 import { processOcr, type OcrEngine, type OcrType } from "../services/ocrService.js";
 
-const rawType = String(req.query.type ?? "grades");
-const ocrType = (["absences", "daily_register", "daily_attendance"].includes(rawType)
-  ? rawType
-  : "grades") as OcrType;
-const isDaily = ocrType === "daily_register" || ocrType === "daily_attendance";
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -39,10 +34,21 @@ router.post(
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
-    if (req.memberContext || (req.user!.role !== "admin" && req.user!.subscriptionStatus !== "active")) {
-      res.status(403).json({ error: "ميزة OCR متاحة لصاحب الاشتراك فقط" });
+
+    // Who may use OCR:
+    //  - the school owner (admin, or an active subscription)
+    //  - a non-parent member who has the "imports" permission, when the school's subscription is active
+    const member = req.memberContext;
+    const ownerAllowed = !member && (req.user!.role === "admin" || req.user!.subscriptionStatus === "active");
+    const memberAllowed = !!member
+      && member.role !== "parent"
+      && member.permissions.includes("imports")
+      && member.schoolSubscriptionStatus === "active";
+    if (!ownerAllowed && !memberAllowed) {
+      res.status(403).json({ error: "ميزة OCR متاحة لصاحب الاشتراك أو للأعضاء المصرّح لهم فقط" });
       return;
     }
+
     if (!req.file) {
       res.status(400).json({ error: "لم يتم رفع أي صورة. أرفق الصورة في حقل 'image'." });
       return;
@@ -50,9 +56,15 @@ router.post(
 
     const userId = req.user!.id;
     const requestedType = String(req.query.type ?? "grades");
-    const ocrType = requestedType === "absences" || requestedType === "daily_attendance" || requestedType === "daily_register"
-      ? requestedType
-      : "grades";
+    const ocrType: OcrType = (
+      requestedType === "absences" ||
+      requestedType === "daily_attendance" ||
+      requestedType === "daily_register"
+        ? requestedType
+        : "grades"
+    ) as OcrType;
+    const isDaily = ocrType === "daily_register" || ocrType === "daily_attendance";
+
     if (req.file.mimetype === "application/pdf") {
       res.status(415).json({
         error: "ملفات PDF تحتاج إلى تحويل صفحاتها إلى صور قبل OCR. ارفع PNG أو JPG لكل صفحة.",
@@ -97,7 +109,7 @@ router.post(
         res.status(422).json({
           error: ocrType === "absences"
             ? "لم يتم العثور على بيانات غياب في الصورة. جرّب مرة أخرى."
-            : ocrType === "daily_register"
+            : isDaily
               ? "لم يتم التعرف على سجل الغياب اليومي. تأكد من وضوح أسماء التلاميذ وعلامات الحضور."
               : "لم يتم العثور على أي درجات في الصورة. جرّب مرة أخرى.",
           engine: result.engine,
@@ -108,19 +120,19 @@ router.post(
       }
 
       const rows = result.rows.map((r: any, i: number) => {
-  const base = {
-    rowNumber: i + 1,
-    studentName: r.studentName,
-    confidence: r.confidence,
-    lowConfidence: r.confidence < 80,
-  };
-  if (isDaily) return { ...r, ...base };
-  if (ocrType === "absences" && "justifiedHours" in r) {
-    return { ...base, justifiedHours: r.justifiedHours, unjustifiedHours: r.unjustifiedHours };
-  }
-  if ("grade" in r) return { ...base, grade: r.grade };
-  return base;
-});
+        const base = {
+          rowNumber: i + 1,
+          studentName: r.studentName,
+          confidence: r.confidence,
+          lowConfidence: r.confidence < 80,
+        };
+        if (isDaily) return { ...r, ...base };
+        if (ocrType === "absences" && "justifiedHours" in r) {
+          return { ...base, justifiedHours: r.justifiedHours, unjustifiedHours: r.unjustifiedHours };
+        }
+        if ("grade" in r) return { ...base, grade: r.grade };
+        return base;
+      });
 
       // Audit log
       try {
@@ -137,15 +149,15 @@ router.post(
       }
 
       res.json({
-  success: true,
-  type: ocrType,
-  engine: result.engine,
-  rows,
-  reportDate: (result as any).reportDate ?? null,
-  totalLines: rows.length,
-  overallConfidence: result.overallConfidence,
-  rawText: result.rawText?.slice(0, 2000),
-});
+        success: true,
+        type: ocrType,
+        engine: result.engine,
+        rows,
+        reportDate: (result as any).reportDate ?? null,
+        totalLines: rows.length,
+        overallConfidence: result.overallConfidence,
+        rawText: result.rawText?.slice(0, 2000),
+      });
     } catch (err: any) {
       logger.error({ err }, "OCR processing failed");
       const errorMessage = err?.message ?? "Unknown error";
