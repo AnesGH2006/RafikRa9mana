@@ -118,27 +118,36 @@ export default function PaywallScreen() {
   }
 
   async function startCheckout(planKey: string, amountDzd: number) {
-    setCheckoutBusy(true);
-    setCheckoutError("");
-    try {
-      const response = await fetch(`${import.meta.env.BASE_URL}api/payments/chargily/checkout`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          planKey,
-          amountDzd,
-          returnUrl: `${window.location.origin}${isParent ? "/my-child" : "/"}` 
-        }),
-      });
-      const payload = (await response.json()) as { checkoutUrl?: string; error?: string };
-      if (!response.ok || !payload.checkoutUrl) throw new Error(payload.error ?? "تعذر بدء عملية الدفع");
-      window.location.assign(payload.checkoutUrl);
-    } catch (error) {
-      setCheckoutError(error instanceof Error ? error.message : "تعذر بدء عملية الدفع");
-      setCheckoutBusy(false);
+  setCheckoutBusy(true);
+  setCheckoutError("");
+  
+  try {
+    // Standard relative API path
+    const response = await fetch(`/api/payments/chargily/checkout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        planKey,
+        amountDzd,
+        returnUrl: `${window.location.origin}${isParent ? "/my-child" : "/"}` 
+      }),
+    });
+
+    const payload = (await response.json()) as { checkoutUrl?: string; error?: string };
+
+    if (!response.ok || !payload.checkoutUrl) {
+      throw new Error(payload.error || `خطأ سيرفر: (${response.status})`);
     }
+
+    // Redirect user to Chargily payment page
+    window.location.href = payload.checkoutUrl;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "تعذر الاتصال ببوابة الدفع";
+    setCheckoutError(errorMsg);
+    alert(`تعذر الدفع: ${errorMsg}`); // Direct feedback for user
+    setCheckoutBusy(false);
   }
+}
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-start pt-0 overflow-hidden relative">

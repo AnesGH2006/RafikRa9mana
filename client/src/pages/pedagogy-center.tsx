@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import {
   Activity, AlertTriangle, BookOpenCheck, Check, ClipboardCopy, FileQuestion,
   LoaderCircle, MessageSquareText, Printer, RefreshCw, Send, ShieldAlert,
-  Sparkles, Star, UsersRound,
+  Sparkles, Star, UsersRound, Plus, Trash2, ArrowRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL;
@@ -51,15 +52,15 @@ async function readJson(response: Response) {
 function OutputValue({ value }: { value: unknown }) {
   if (value === null || value === undefined) return <span className="text-muted-foreground">—</span>;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return <span className="whitespace-pre-wrap leading-7">{String(value)}</span>;
+    return <span className="whitespace-pre-wrap leading-7 font-medium">{String(value)}</span>;
   }
   if (Array.isArray(value)) {
-    return <ol className="list-decimal space-y-2 ps-5">{value.map((entry, index) => <li key={index}><OutputValue value={entry} /></li>)}</ol>;
+    return <ol className="list-decimal space-y-2 ps-5 text-sm">{value.map((entry, index) => <li key={index}><OutputValue value={entry} /></li>)}</ol>;
   }
   if (typeof value === "object") {
     return <div className="space-y-3">{Object.entries(value as Record<string, unknown>).map(([key, entry]) => (
-      <div key={key} className="min-w-0">
-        <p className="mb-1 text-xs font-bold text-muted-foreground">{labels[key] ?? key}</p>
+      <div key={key} className="min-w-0 bg-muted/30 p-3 rounded-lg border border-border/50">
+        <p className="mb-1 text-xs font-bold text-emerald-700 dark:text-emerald-400">{labels[key] ?? key}</p>
         <div className="text-sm"><OutputValue value={entry} /></div>
       </div>
     ))}</div>;
@@ -117,6 +118,7 @@ export default function PedagogyCenterPage() {
       });
       const data = await readJson(response);
       setRemarks(data.remarks ?? []);
+      toast({ title: "تم إنشاء الملاحظات بنجاح" });
     } catch (error) {
       toast({ variant: "destructive", title: "تعذر إنشاء الملاحظات", description: error instanceof Error ? error.message : "حاول مجدداً" });
     } finally { setRemarksBusy(false); }
@@ -137,6 +139,7 @@ export default function PedagogyCenterPage() {
       });
       const data = await readJson(response);
       setQuiz(data.quiz);
+      toast({ title: "تم إعداد ورقة الاختبار بنجاح" });
     } catch (error) {
       toast({ variant: "destructive", title: "تعذر إنشاء الاختبار", description: error instanceof Error ? error.message : "تحقق من إعدادات الذكاء الاصطناعي" });
     } finally { setQuizBusy(false); }
@@ -164,13 +167,11 @@ export default function PedagogyCenterPage() {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ student_id: selectedWarning.studentId, template_ar: message.trim() }),
       })) as { portalRecipients?: number };
-      const channels = [
-        delivery.portalRecipients ? "بوابة الأولياء" : "",
-      ].filter(Boolean);
-      if (channels.length > 0) {
-        toast({ title: `تم إرسال التنبيه عبر ${channels.join(" و ")}` });
+      
+      if (delivery.portalRecipients) {
+        toast({ title: "تم إرسال التنبيه إلى تطبيق ولي الأمر بنجاح" });
       } else {
-        toast({ variant: "destructive", title: "لم يصل التنبيه إلى ولي الأمر", description: "لا يوجد حساب وليّ مربوط بالتلميذ." });
+        toast({ variant: "destructive", title: "لم يصل التنبيه", description: "لا يوجد حساب وليّ مربوط بهذا التلميذ." });
       }
       setSelectedWarning(null);
       setMessage("");
@@ -180,167 +181,350 @@ export default function PedagogyCenterPage() {
   }
 
   async function copyText(text: string) {
-    try { await navigator.clipboard.writeText(text); toast({ title: "تم النسخ" }); }
+    try { await navigator.clipboard.writeText(text); toast({ title: "تم النسخ للحافظة" }); }
     catch { toast({ variant: "destructive", title: "تعذر النسخ" }); }
   }
 
   const tabs: Array<{ id: View; label: string; icon: typeof Star }> = [
     { id: "remarks", label: "ملاحظات التلاميذ", icon: MessageSquareText },
-    { id: "quiz", label: "إنشاء اختبار", icon: FileQuestion },
+    { id: "quiz", label: "صانع الاختبارات", icon: FileQuestion },
     { id: "risks", label: "متابعة التعثر", icon: Activity },
   ];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6" dir="rtl">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 font-sans" dir="rtl">
+      {/* Page Header */}
+      <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-emerald-600/10 via-teal-600/5 to-transparent p-6 border border-emerald-500/10">
         <div>
-          <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400">
-            <BookOpenCheck className="h-4 w-4" /> التتبع البيداغوجي
+          <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400">
+            <BookOpenCheck className="h-4 w-4" /> المركز البيداغوجي المساعد
           </div>
-          <h1 className="text-2xl font-black tracking-normal">فضاء المتابعة والتقويم</h1>
-          <p className="mt-1 text-sm text-muted-foreground">ملاحظات التلاميذ، إعداد الاختبارات، والتنبيه المبكر للتعثر</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">فضاء المتابعة والتقويم الذكي</h1>
+          <p className="mt-1 text-sm text-muted-foreground">صياغة الملاحظات البيداغوجية، إنشاء الامتحانات بالـ AI، والتنبيه الآلي للتعثر الدراسي</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="h-2 w-2 rounded-full bg-emerald-500" /> أدوات المؤسسة
-        </div>
+        <Badge variant="outline" className="bg-background px-3 py-1.5 text-xs font-semibold shadow-sm">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-600 ml-1.5" /> باقة Pro الاحترافية
+        </Badge>
       </header>
 
-      <nav aria-label="أدوات المتابعة" className="flex gap-1 overflow-x-auto border-b">
+      {/* Tabs Navigation */}
+      <nav aria-label="أدوات المتابعة" className="flex gap-2 border-b pb-2">
         {tabs.map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" onClick={() => setView(id)} aria-current={view === id ? "page" : undefined}
-            className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-bold transition-colors ${view === id ? "border-emerald-600 text-emerald-700 dark:text-emerald-400" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
-            <Icon className="h-4 w-4" />{label}
+          <button
+            key={id}
+            type="button"
+            onClick={() => setView(id)}
+            aria-current={view === id ? "page" : undefined}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              view === id
+                ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
           </button>
         ))}
       </nav>
 
+      {/* VIEW 1: REMARKS GENERATOR */}
       {view === "remarks" && (
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.85fr)]">
-          <form onSubmit={generateRemarks} className="space-y-5">
-            <div>
-              <h2 className="text-lg font-bold">توليد الملاحظات</h2>
-              <p className="mt-1 text-sm text-muted-foreground">أدخل معدل المادة والفصل، ثم راجع صياغة الملاحظة قبل اعتمادها.</p>
-            </div>
-            <div className="space-y-3">
-              {subjects.map((item, index) => (
-                <div key={item.id} className="grid gap-3 border-b pb-3 sm:grid-cols-[minmax(0,1fr)_130px_130px]">
-                  <Field label="المادة">
-                    <Select value={item.subject} onValueChange={value => setSubjects(rows => rows.map(row => row.id === item.id ? { ...row, subject: value } : row))}>
+        <div className="grid items-start gap-6 lg:grid-cols-[1fr_1.1fr]">
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-emerald-600" /> مدخلات التلميذ والمعدلات
+              </CardTitle>
+              <CardDescription>أدخل المعدلات لتوليد الملاحظات التربوية المخصصة لكشف النقاط.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={generateRemarks} className="space-y-5">
+                <div className="space-y-3">
+                  {subjects.map((item) => (
+                    <div key={item.id} className="grid gap-3 p-3 rounded-xl bg-muted/40 border border-border/50 sm:grid-cols-[1fr_100px_100px]">
+                      <Field label="المادة">
+                        <Select value={item.subject} onValueChange={value => setSubjects(rows => rows.map(row => row.id === item.id ? { ...row, subject: value } : row))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>{SUBJECTS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </Field>
+                      <Field label="الفصل">
+                        <Select value={item.trimester} onValueChange={value => setSubjects(rows => rows.map(row => row.id === item.id ? { ...row, trimester: value } : row))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>{[1, 2, 3].map(t => <SelectItem key={t} value={String(t)}>الفصل {t}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </Field>
+                      <Field label="المعدل / 20">
+                        <Input type="number" min="0" max="20" step="0.01" required value={item.average} onChange={e => setSubjects(rows => rows.map(row => row.id === item.id ? { ...row, average: e.target.value } : row))} placeholder="15.5" />
+                      </Field>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => setSubjects(rows => [...rows, { id: Date.now(), subject: SUBJECTS[0]!, trimester: "1", average: "" }])}>
+                      <Plus className="w-4 h-4 ml-1" /> إضافة مادة
+                    </Button>
+                    {subjects.length > 1 && (
+                      <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => setSubjects(rows => rows.slice(0, -1))}>
+                        <Trash2 className="w-4 h-4 ml-1" /> حذف المادة
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 border-t pt-4 sm:grid-cols-3">
+                  <Field label="نسبة الحضور %"><Input type="number" min="0" max="100" value={attendanceRate} onChange={e => setAttendanceRate(e.target.value)} /></Field>
+                  <Field label="السلوك (1 إلى 5)">
+                    <Select value={behavior} onValueChange={setBehavior}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{SUBJECTS.map(subject => <SelectItem key={subject} value={subject}>{subject}</SelectItem>)}</SelectContent>
+                      <SelectContent>{[1, 2, 3, 4, 5].map(s => <SelectItem key={s} value={String(s)}>{s} / 5</SelectItem>)}</SelectContent>
                     </Select>
                   </Field>
-                  <Field label="الفصل">
-                    <Select value={item.trimester} onValueChange={value => setSubjects(rows => rows.map(row => row.id === item.id ? { ...row, trimester: value } : row))}>
+                  <Field label="لغة الملاحظة">
+                    <Select value={language} onValueChange={v => setLanguage(v as Language)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{[1, 2, 3].map(term => <SelectItem key={term} value={String(term)}>الفصل {term}</SelectItem>)}</SelectContent>
+                      <SelectContent>
+                        <SelectItem value="both">العربية والفرنسية</SelectItem>
+                        <SelectItem value="ar">العربية فقط</SelectItem>
+                        <SelectItem value="fr">الفرنسية فقط</SelectItem>
+                      </SelectContent>
                     </Select>
-                  </Field>
-                  <Field label="المعدل / 20">
-                    <Input type="number" min="0" max="20" step="0.01" required value={item.average} onChange={event => setSubjects(rows => rows.map(row => row.id === item.id ? { ...row, average: event.target.value } : row))} placeholder="مثال: 15.5" />
                   </Field>
                 </div>
-              ))}
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => setSubjects(rows => [...rows, { id: Date.now(), subject: SUBJECTS[0]!, trimester: "1", average: "" }])}>إضافة مادة</Button>
-                {subjects.length > 1 && <Button type="button" size="sm" variant="ghost" onClick={() => setSubjects(rows => rows.slice(0, -1))}>حذف آخر مادة</Button>}
-              </div>
-            </div>
-            <div className="grid gap-4 border-y py-4 sm:grid-cols-3">
-              <Field label="نسبة الحضور %"><Input type="number" min="0" max="100" value={attendanceRate} onChange={event => setAttendanceRate(event.target.value)} /></Field>
-              <Field label="السلوك (1 إلى 5)">
-                <Select value={behavior} onValueChange={setBehavior}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[1, 2, 3, 4, 5].map(score => <SelectItem key={score} value={String(score)}>{score} / 5</SelectItem>)}</SelectContent></Select>
-              </Field>
-              <Field label="لغة الملاحظة">
-                <Select value={language} onValueChange={value => setLanguage(value as Language)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="both">العربية والفرنسية</SelectItem><SelectItem value="ar">العربية</SelectItem><SelectItem value="fr">الفرنسية</SelectItem></SelectContent></Select>
-              </Field>
-            </div>
-            <Button type="submit" disabled={remarksBusy} className="min-w-44 bg-emerald-700 hover:bg-emerald-800">
-              {remarksBusy ? <LoaderCircle className="animate-spin" /> : <Sparkles />}إنشاء الملاحظات
-            </Button>
-          </form>
 
-          <section className="space-y-4" aria-live="polite">
-            <div className="flex items-center justify-between gap-3">
-              <div><h2 className="text-lg font-bold">الملاحظات المقترحة</h2><p className="text-sm text-muted-foreground">تظهر النتيجة هنا بعد الإنشاء.</p></div>
-              {remarks.length > 0 && <Button variant="ghost" size="icon" aria-label="نسخ الملاحظات" title="نسخ الملاحظات" onClick={() => void copyText(remarks.map(item => `${item.subject} · الفصل ${item.trimester}: ${typeof item.remark === "string" ? item.remark : `${item.remark.ar}\n${item.remark.fr}`}`).join("\n"))}><ClipboardCopy /></Button>}
-            </div>
-            {remarks.length === 0 ? <div className="border-y py-12 text-center text-sm text-muted-foreground"><MessageSquareText className="mx-auto mb-3 h-8 w-8 opacity-40" />أدخل المعدلات لإنشاء صياغة مقترحة.</div> : remarks.map((item, index) => (
-              <article key={`${item.subject}-${item.trimester}-${index}`} className="border-b pb-4">
-                <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground"><span className="font-bold text-foreground">{item.subject}</span><span>الفصل {item.trimester} · {item.average.toFixed(2)} / 20</span></div>
-                {typeof item.remark === "string" ? <p className="text-sm leading-7">{item.remark}</p> : <><p className="text-sm leading-7">{item.remark.ar}</p><p dir="ltr" className="mt-1 text-sm leading-7 text-muted-foreground">{item.remark.fr}</p></>}
-              </article>
-            ))}
-          </section>
+                <Button type="submit" disabled={remarksBusy} className="w-full bg-emerald-600 hover:bg-emerald-700 font-bold">
+                  {remarksBusy ? <LoaderCircle className="animate-spin ml-2" /> : <Sparkles className="ml-2" />} صياغة الملاحظات الذكية
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm min-h-[400px] flex flex-col justify-between">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <div>
+                <CardTitle className="text-lg">الملاحظات المقترحة لكشف النقاط</CardTitle>
+                <CardDescription>صياغة بيداغوجية دقيقة ودافعة للتحسين.</CardDescription>
+              </div>
+              {remarks.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => void copyText(remarks.map(item => `${item.subject} (ف${item.trimester}): ${typeof item.remark === "string" ? item.remark : `${item.remark.ar}\n${item.remark.fr}`}`).join("\n\n"))}>
+                  <ClipboardCopy className="w-4 h-4 ml-1" /> نسخ الكل
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="flex-1 space-y-4">
+              {remarks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground border-2 border-dashed rounded-xl">
+                  <MessageSquareText className="h-10 w-10 opacity-30 mb-2" />
+                  <p className="text-sm font-semibold">أدخل البيانات واضغط على "صياغة الملاحظات" لعرض النتيجة.</p>
+                </div>
+              ) : (
+                remarks.map((item, index) => (
+                  <div key={index} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                      <span>{item.subject} — الفصل {item.trimester}</span>
+                      <Badge variant="secondary">{item.average.toFixed(2)} / 20</Badge>
+                    </div>
+                    {typeof item.remark === "string" ? (
+                      <p className="text-sm leading-relaxed">{item.remark}</p>
+                    ) : (
+                      <>
+                        <p className="text-sm leading-relaxed">{item.remark.ar}</p>
+                        <p dir="ltr" className="text-xs text-muted-foreground font-sans mt-1 leading-relaxed border-t pt-1">{item.remark.fr}</p>
+                      </>
+                    )}
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 
+      {/* VIEW 2: QUIZ GENERATOR */}
       {view === "quiz" && (
-        <div className="grid items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <form onSubmit={generateQuiz} className="space-y-4">
-            <div><h2 className="text-lg font-bold">صانع الاختبارات</h2><p className="mt-1 text-sm text-muted-foreground">ورقة منظمة حسب المستوى والدرس المطلوب.</p></div>
-            <Field label="المستوى"><Select value={gradeLevel} onValueChange={setGradeLevel}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{LEVELS.map(level => <SelectItem key={level} value={level}>{level}</SelectItem>)}</SelectContent></Select></Field>
-            <Field label="المادة"><Select value={quizSubject} onValueChange={setQuizSubject}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{SUBJECTS.map(subject => <SelectItem key={subject} value={subject}>{subject}</SelectItem>)}</SelectContent></Select></Field>
-            <Field label="موضوع الدرس"><Input required maxLength={300} value={topic} onChange={event => setTopic(event.target.value)} placeholder="مثال: التحولات الكيميائية" /></Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="الصعوبة"><Select value={difficulty} onValueChange={setDifficulty}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Easy">سهل</SelectItem><SelectItem value="Medium">متوسط</SelectItem><SelectItem value="Hard">صعب</SelectItem></SelectContent></Select></Field>
-              <Field label="عدد الأسئلة"><Input type="number" min="3" max="30" value={questionCount} onChange={event => setQuestionCount(event.target.value)} /></Field>
-            </div>
-            <Button type="submit" disabled={quizBusy} className="w-full bg-emerald-700 hover:bg-emerald-800">{quizBusy ? <LoaderCircle className="animate-spin" /> : <Sparkles />}إنشاء الاختبار</Button>
-          </form>
+        <div className="grid items-start gap-6 lg:grid-cols-[320px_1fr]">
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">إعداد موضوع الاختبار</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={generateQuiz} className="space-y-4">
+                <Field label="المستوى الدراسي">
+                  <Select value={gradeLevel} onValueChange={setGradeLevel}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{LEVELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+                <Field label="المادة">
+                  <Select value={quizSubject} onValueChange={setQuizSubject}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{SUBJECTS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+                <Field label="عنوان الدرس / الموضوع">
+                  <Input required maxLength={300} value={topic} onChange={e => setTopic(e.target.value)} placeholder="مثال: التوازن الميكانيكي" />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="مستوى الصعوبة">
+                    <Select value={difficulty} onValueChange={setDifficulty}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Easy">سهل</SelectItem>
+                        <SelectItem value="Medium">متوسط</SelectItem>
+                        <SelectItem value="Hard">صعب</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="عدد الأسئلة">
+                    <Input type="number" min="3" max="30" value={questionCount} onChange={e => setQuestionCount(e.target.value)} />
+                  </Field>
+                </div>
+                <Button type="submit" disabled={quizBusy} className="w-full bg-emerald-600 hover:bg-emerald-700 font-bold">
+                  {quizBusy ? <LoaderCircle className="animate-spin ml-2" /> : <Sparkles className="ml-2" />} توليد موضوع الامتحان
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
 
-          <section className="min-w-0" aria-live="polite">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-              <div><h2 className="text-lg font-bold">ورقة الاختبار والتصحيح</h2><p className="text-sm text-muted-foreground">تمارين، وضعية إدماجية، وشبكة تقييم.</p></div>
-              {quiz && <div className="flex gap-1"><Button variant="ghost" size="icon" title="نسخ الاختبار" aria-label="نسخ الاختبار" onClick={() => void copyText(JSON.stringify(quiz, null, 2))}><ClipboardCopy /></Button><Button variant="ghost" size="icon" title="طباعة الاختبار" aria-label="طباعة الاختبار" onClick={() => window.print()}><Printer /></Button></div>}
+          <Card className="shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
+              <div>
+                <CardTitle className="text-lg">ورقة الاختبار والتصحيح النموذجية</CardTitle>
+                <CardDescription>مطابقة لمعايير المنهاج الوزاري الجزائري.</CardDescription>
+              </div>
+              {quiz && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => void copyText(JSON.stringify(quiz, null, 2))}>
+                    <ClipboardCopy className="w-4 h-4 ml-1" /> نسخ
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => window.print()}>
+                    <Printer className="w-4 h-4 ml-1" /> طباعة
+                  </Button>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="pt-6">
+              {quizBusy ? (
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                  <LoaderCircle className="h-8 w-8 animate-spin text-emerald-600 mb-3" />
+                  <p className="text-sm font-semibold">جارٍ صياغة التمارين والوضعية الإدماجية وشبكة التقييم...</p>
+                </div>
+              ) : !quiz ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground border-2 border-dashed rounded-xl">
+                  <FileQuestion className="h-10 w-10 opacity-30 mb-2" />
+                  <p className="text-sm font-semibold">حدد الدرس واضغط على توليد الامتحان لعرض الورقة جاهزة للطباعة.</p>
+                </div>
+              ) : (
+                <div className="space-y-6 print:p-0">
+                  <div className="flex justify-between items-center bg-muted/40 p-3 rounded-lg text-sm font-bold border">
+                    <span>المستوى: {gradeLevel}</span>
+                    <span>المادة: {quizSubject}</span>
+                    <span>الموضوع: {topic}</span>
+                  </div>
+                  {["exercise1", "exercise2", "integrationSituation", "answerKey"].map((key) => quiz[key] !== undefined && (
+                    <section key={key} className="p-4 rounded-xl border space-y-2">
+                      <h3 className="font-extrabold text-base text-emerald-700 dark:text-emerald-400 border-b pb-2">
+                        {labels[key]}
+                      </h3>
+                      <OutputValue value={quiz[key]} />
+                    </section>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* VIEW 3: EARLY WARNING RISKS */}
+      {view === "risks" && (
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
+            <div>
+              <CardTitle className="text-lg">مؤشرات التعثر والتدخل المبكر</CardTitle>
+              <CardDescription>كشف أوتوماتيكي للتلاميذ المعرضين للرسوب أو الانقطاع.</CardDescription>
             </div>
-            {quizBusy ? <div className="flex items-center gap-3 py-12 text-sm text-muted-foreground"><LoaderCircle className="h-5 w-5 animate-spin" />جارٍ إعداد ورقة الاختبار...</div> : !quiz ? <div className="border-y py-12 text-center text-sm text-muted-foreground"><FileQuestion className="mx-auto mb-3 h-8 w-8 opacity-40" />أكمل بيانات الدرس لعرض الاختبار هنا.</div> : (
-              <div className="space-y-6 print:text-black">
-                <div className="flex flex-wrap gap-x-5 gap-y-1 border-b pb-3 text-sm"><strong>{gradeLevel}</strong><span>{quizSubject}</span><span>{topic}</span><span>{difficulty === "Easy" ? "سهل" : difficulty === "Hard" ? "صعب" : "متوسط"}</span></div>
-                {["exercise1", "exercise2", "integrationSituation", "answerKey"].map(key => quiz[key] !== undefined && (
-                  <section key={key} className="border-b pb-5"><h3 className="mb-3 flex items-center gap-2 font-bold"><span className="h-2 w-2 rounded-full bg-emerald-600" />{labels[key]}</h3><div className="text-sm leading-7"><OutputValue value={quiz[key]} /></div></section>
+            <div className="flex items-center gap-2">
+              <Input className="w-32 h-9 text-xs" value={academicYear} onChange={e => setAcademicYear(e.target.value)} />
+              <Button variant="outline" size="sm" disabled={warningsBusy} onClick={() => void loadWarnings()}>
+                {warningsBusy ? <LoaderCircle className="animate-spin w-4 h-4" /> : <RefreshCw className="w-4 h-4 ml-1" />} تحديث
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-6">
+            {/* Risk Category Cards */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              {[
+                ["CRITICAL_DROP", "انخفاض حاد في النتائج", "border-rose-200 bg-rose-50/50 text-rose-800 dark:bg-rose-950/20 dark:text-rose-300", AlertTriangle],
+                ["ATTENDANCE_WARNING", "تنبيه غياب متكرر", "border-amber-200 bg-amber-50/50 text-amber-800 dark:bg-amber-950/20 dark:text-amber-300", ShieldAlert],
+                ["ACADEMIC_RISK", "معدل تحت العتبة (دون 10)", "border-blue-200 bg-blue-50/50 text-blue-800 dark:bg-blue-950/20 dark:text-blue-300", Activity],
+              ].map(([riskKey, title, styleClass, IconComponent]: any) => (
+                <div key={riskKey} className={`p-4 rounded-xl border flex items-center justify-between ${styleClass}`}>
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <IconComponent className="w-5 h-5" />
+                    <span>{title}</span>
+                  </div>
+                  <span className="text-2xl font-black">{warnings.filter(w => w.risk === riskKey).length}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Notification Modal / Form */}
+            {selectedWarning && (
+              <form onSubmit={sendDisciplineAlert} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-emerald-500/30 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-sm">إرسال إشعار ولي أمر التلميذ: <span className="text-emerald-600">{selectedWarning.studentName}</span></span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedWarning(null)}>إلغاء</Button>
+                </div>
+                <Textarea required maxLength={1200} rows={3} value={message} onChange={e => setMessage(e.target.value)} />
+                <Button type="submit" disabled={sending || !message.trim()} className="bg-emerald-600 hover:bg-emerald-700 font-bold text-sm">
+                  {sending ? <LoaderCircle className="animate-spin ml-2" /> : <Send className="w-4 h-4 ml-2" />} إرسال إلى تطبيق ولي الأمر
+                </Button>
+              </form>
+            )}
+
+            {/* Warnings Table / List */}
+            {warningsBusy ? (
+              <div className="flex justify-center py-16 text-muted-foreground">
+                <LoaderCircle className="h-6 w-6 animate-spin text-emerald-600 ml-2" /> تحليل سجلات النقاط والغياب...
+              </div>
+            ) : warnings.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-xl">
+                <Check className="h-10 w-10 text-emerald-600 mx-auto mb-2" />
+                <p className="text-sm font-semibold">ممتاز! لا توجد حالياً أي حالات تعثر حرجة في هذه السنة.</p>
+              </div>
+            ) : (
+              <div className="divide-y border rounded-xl overflow-hidden">
+                {warnings.map((item) => (
+                  <div key={`${item.studentId}-${item.risk}`} className="p-4 flex flex-col md:flex-row justify-between gap-4 items-start md:items-center hover:bg-muted/30">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-base">{item.studentName}</span>
+                        <Badge variant="outline">{item.niveau} · {item.classe}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{item.intervention}</p>
+                      <div className="flex gap-4 text-xs font-semibold mt-2 text-slate-600 dark:text-slate-400">
+                        <span>ف1: {item.trimester1Average ?? "—"}</span>
+                        <span>ف2: {item.trimester2Average ?? "—"}</span>
+                        <span className="text-rose-600">انخفاض: {item.averageDrop.toFixed(2)}</span>
+                        <span className="text-amber-600">غياب متصل: {item.consecutiveUnexcusedDays} أيام</span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedWarning(item);
+                        setMessage(`عزيزي الولي، نسترعي انتباهكم إلى ضرورة التواصل مع مستشار التربية لمتابعة وضعية ابنكم/ابنتكم (${item.studentName}) المدرسية.`);
+                      }}
+                    >
+                      <MessageSquareText className="w-4 h-4 ml-1" /> إشعار الولي
+                    </Button>
+                  </div>
                 ))}
               </div>
             )}
-          </section>
-        </div>
-      )}
-
-      {view === "risks" && (
-        <section className="space-y-5">
-          <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-4">
-            <div><h2 className="text-lg font-bold">مؤشرات التعثر والتدخل المبكر</h2><p className="mt-1 text-sm text-muted-foreground">انخفاض المعدل، الغياب المتواصل، أو معدل دون 10.</p></div>
-            <div className="flex items-center gap-2"><Field label="السنة الدراسية"><Input className="w-36" value={academicYear} onChange={event => setAcademicYear(event.target.value)} /></Field><Button variant="outline" size="icon" title="تحديث القائمة" aria-label="تحديث القائمة" disabled={warningsBusy} onClick={() => void loadWarnings()}>{warningsBusy ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}</Button></div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            {([
-              ["CRITICAL_DROP", "انخفاض حاد", "text-rose-700 bg-rose-50 dark:bg-rose-950/30", AlertTriangle],
-              ["ATTENDANCE_WARNING", "تنبيه غياب", "text-amber-700 bg-amber-50 dark:bg-amber-950/30", ShieldAlert],
-              ["ACADEMIC_RISK", "خطر دراسي", "text-blue-700 bg-blue-50 dark:bg-blue-950/30", Activity],
-            ] as const).map(([risk, title, style, Icon]) => <div key={risk} className={`flex items-center justify-between border-b p-3 ${style}`}><span className="flex items-center gap-2 text-sm font-bold"><Icon className="h-4 w-4" />{title}</span><span className="text-xl font-black">{warnings.filter(item => item.risk === risk).length}</span></div>)}
-          </div>
-
-          {selectedWarning && (
-            <form onSubmit={sendDisciplineAlert} className="grid gap-3 border-y py-4 md:grid-cols-[minmax(0,1fr)_auto]">
-              <div className="space-y-2"><div className="flex items-center justify-between gap-2"><p className="text-sm font-bold">إشعار ولي أمر {selectedWarning.studentName}</p><button type="button" className="text-xs text-muted-foreground underline" onClick={() => setSelectedWarning(null)}>إلغاء</button></div><Textarea required maxLength={1200} rows={3} value={message} onChange={event => setMessage(event.target.value)} /></div>
-              <div className="flex items-end"><Button type="submit" disabled={sending || !message.trim()} className="bg-emerald-700 hover:bg-emerald-800">{sending ? <LoaderCircle className="animate-spin" /> : <Send />}إرسال التنبيه</Button></div>
-            </form>
-          )}
-
-          {warningsBusy ? <div className="flex items-center gap-3 py-12 text-sm text-muted-foreground"><LoaderCircle className="h-5 w-5 animate-spin" />جارٍ تحليل النتائج والغياب...</div> : warnings.length === 0 ? <div className="border-y py-12 text-center text-sm text-muted-foreground"><Check className="mx-auto mb-3 h-8 w-8 text-emerald-600" />لا توجد مؤشرات تعثر لهذه السنة.</div> : (
-            <div className="divide-y">
-              {warnings.map(item => <article key={`${item.studentId}-${item.risk}`} className="grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2"><h3 className="font-bold">{item.studentName}</h3><span className="text-xs text-muted-foreground">{item.niveau} · {item.classe}</span><span className={`rounded-sm px-2 py-1 text-[11px] font-bold ${item.risk === "CRITICAL_DROP" ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200" : item.risk === "ATTENDANCE_WARNING" ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200" : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200"}`}>{item.risk === "CRITICAL_DROP" ? "انخفاض حاد" : item.risk === "ATTENDANCE_WARNING" ? "تنبيه غياب" : "خطر دراسي"}</span></div>
-                  <p className="mt-1 text-sm text-muted-foreground">{item.intervention}</p>
-                  <p className="mt-2 text-xs">الفصل 1: {item.trimester1Average ?? "—"} · الفصل 2: {item.trimester2Average ?? "—"} · انخفاض: {item.averageDrop.toFixed(2)} · غياب متواصل: {item.consecutiveUnexcusedDays} أيام</p>
-                </div>
-                <Button type="button" size="sm" variant="outline" onClick={() => { setSelectedWarning(item); setMessage(`تنهي إدارة المؤسسة إلى علمكم بضرورة متابعة وضعية ابنكم ${item.studentName}، ونرجو التواصل مع مستشار التربية في أقرب وقت.`); }}><MessageSquareText />إشعار الولي</Button>
-              </article>)}
-            </div>
-          )}
-        </section>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
