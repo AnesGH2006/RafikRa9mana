@@ -94,14 +94,37 @@ router.post("/payments/chargily/checkout", async (req, res): Promise<void> => {
   }
 });
 
+// Chargily Pay v2 webhook.
+//  - The signature arrives in the `signature` header (HMAC-SHA256 of the RAW body, keyed with the API secret key).
+//  - The payload is an event: { id, type: "checkout.paid" | ..., data: { id, status, metadata, ... } },
+//    so the checkout id and status are inside `data`, not at the top level.
 router.post("/payments/chargily/webhook", async (req, res): Promise<void> => {
   const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
-  const signature = req.header("x-chargily-signature") ?? req.header("signature");
-  if (!verifyChargilySignature(rawBody, signature)) { res.status(401).json({ error: "Invalid signature" }); return; }
-  const payload = req.body as { id?: string; reference?: string; status?: string; metadata?: { paymentId?: string; userId?: string } };
-  const reference = payload.reference ?? payload.id;
-  if (!reference || !payload.status) { res.status(400).json({ error: "Invalid webhook payload" }); return; }
-  const result = await settleChargilyPayment({ reference, userId: payload.metadata?.userId, status: payload.status });
+  const signature = req.header("signature") ?? req.header("x-chargily-signature");
+
+  if (!verifyChargilySignature(rawBody, signature)) {
+    req.log?.warn?.(
+      { hasSignature: Boolean(signature), hasRawBody: Boolean((req as Request & { rawBody?: string }).rawBody) },
+      "Chargily webhook rejected: invalid signature",
+    );
+    res.status(401).json({ error: "Invalid signature" });
+    return;
+  }
+
+  const event = req.body as {
+    type?: string;
+    data?: { id?: string; status?: string; metadata?: { paymentId?: string; userId?: string } | null };
+  };
+  const checkout = event.data;
+  if (!checkout?.id) { res.status(400).json({ error: "Invalid webhook payload" }); return; }
+
+  const status = event.type === "checkout.paid" ? "paid" : (checkout.status ?? "");
+  const result = await settleChargilyPayment({
+    reference: checkout.id,
+    userId: checkout.metadata?.userId,
+    status,
+  });
+  req.log?.info?.({ eventType: event.type, checkoutId: checkout.id, ...result }, "Chargily webhook processed");
   res.json({ received: true, ...result });
 });
 

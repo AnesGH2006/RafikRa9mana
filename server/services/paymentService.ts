@@ -20,7 +20,8 @@ function paidPlanForAmount(amountDzd: number): "basic" | "pro" | null {
 }
 
 export function verifyChargilySignature(rawBody: string, signature: string | undefined): boolean {
-  const secret = process.env.CHARGILY_WEBHOOK_SECRET;
+  // Chargily signs webhooks with the API secret key, so fall back to it when no dedicated secret is set.
+  const secret = process.env.CHARGILY_WEBHOOK_SECRET ?? process.env.CHARGILY_API_KEY;
   if (!secret || !signature) return false;
   const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
   const left = Buffer.from(expected, "utf8");
