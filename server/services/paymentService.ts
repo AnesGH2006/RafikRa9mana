@@ -8,7 +8,7 @@ const ALLOWED_AMOUNTS_DZD = new Set([DEFAULT_AMOUNT_DZD, ...Object.values(PAID_P
 
 function requireAllowedAmount(amountDzd: number): number {
   if (!Number.isInteger(amountDzd) || !ALLOWED_AMOUNTS_DZD.has(amountDzd)) {
-    throw new Error("Unsupported payment amount");
+    throw new Error("Unsupported payment amount"); // <-- هنا يُطلق الخطأ!
   }
   return amountDzd;
 }
