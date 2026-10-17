@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Lock, Phone, Mail, CheckCircle2, Clock, Shield, Zap, Crown, Star, Sparkles, Leaf, UserCheck, School } from "lucide-react";
+import { 
+  BookOpen, Lock, Phone, Mail, CheckCircle2, Clock, Shield, Zap, Crown, 
+  Sparkles, Leaf, School, BellRing, TrendingUp, Users, CreditCard, ArrowLeft, ShieldCheck 
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { SCHOOL_STAGE } from "@/lib/deployment";
@@ -35,8 +38,8 @@ const plans = [
     features: [
       "توليد الملاحظات بالذكاء الاصطناعي (AI)",
       "مسح وقراءة الشهادات الطبية (OCR)",
-      "حظر الغياب وتفريق المبررات بضغطة زر",
       "تصدير وحقن ملفات Excel تلقائياً",
+      "تسجيل الغيابات بنقرة زر واحدة",
       "طباعة التقارير واستدعاءات الأولياء"
     ],
     gradient: "from-emerald-500 to-teal-600",
@@ -87,6 +90,29 @@ const plans = [
   },
 ];
 
+const PARENT_FEATURES = [
+  {
+    icon: BellRing,
+    title: "تنبيهات الغياب والتأخر اللحظية",
+    description: "إشعار فور تسجيل غياب أو تأخر طفلك من طرف الإدارة أو الأساتذة."
+  },
+  {
+    icon: TrendingUp,
+    title: "تحليل النتائج والمستوى بالذكاء الاصطناعي",
+    description: "تقرير شامل يحدد نقاط القوة والمواد التي تحتاج لمراجعة ودعم."
+  },
+  {
+    icon: BookOpen,
+    title: "كشف النقاط والفروض الرقمي",
+    description: "متابعة النقاط والتقويمات الفصلية فور رصدها مباشرة."
+  },
+  {
+    icon: Users,
+    title: "تواصل مباشر مع الطاقم التربوي",
+    description: "استلام الاستدعاءات والملاحظات التربوية الخاصة بطفلك."
+  }
+];
+
 const steps = [
   { icon: Phone, text: "اختر الباقة المناسبة لدورك في المؤسسة" },
   { icon: CheckCircle2, text: "أتمّ عملية الدفع الآمن عبر البطاقة الذهبية / CIB" },
@@ -118,39 +144,36 @@ export default function PaywallScreen() {
   }
 
   async function startCheckout(planKey: string, amountDzd: number) {
-  setCheckoutBusy(true);
-  setCheckoutError("");
-  
-  try {
-    // Standard relative API path
-    const response = await fetch(`/api/payments/chargily/checkout`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        planKey,
-        amountDzd,
-        returnUrl: `${window.location.origin}${isParent ? "/my-child" : "/"}` 
-      }),
-    });
+    setCheckoutBusy(true);
+    setCheckoutError("");
+    try {
+      const response = await fetch("/api/payments/chargily/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          planKey,
+          amountDzd,
+          returnUrl: `${window.location.origin}${isParent ? "/my-child" : "/"}` 
+        }),
+      });
 
-    const payload = (await response.json()) as { checkoutUrl?: string; error?: string };
+      const payload = (await response.json()) as { checkoutUrl?: string; error?: string };
 
-    if (!response.ok || !payload.checkoutUrl) {
-      throw new Error(payload.error || `خطأ سيرفر: (${response.status})`);
+      if (!response.ok || !payload.checkoutUrl) {
+        throw new Error(payload.error || `خطأ في الاتصال: (${response.status})`);
+      }
+
+      window.location.href = payload.checkoutUrl;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "تعذر الاتصال ببوابة الدفع";
+      setCheckoutError(errorMsg);
+      alert(`تعذر الدفع: ${errorMsg}`);
+      setCheckoutBusy(false);
     }
-
-    // Redirect user to Chargily payment page
-    window.location.href = payload.checkoutUrl;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : "تعذر الاتصال ببوابة الدفع";
-    setCheckoutError(errorMsg);
-    alert(`تعذر الدفع: ${errorMsg}`); // Direct feedback for user
-    setCheckoutBusy(false);
   }
-}
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-start pt-0 overflow-hidden relative">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-start pt-0 overflow-hidden relative font-sans" dir="rtl">
       {/* Background Blobs */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <motion.div 
@@ -168,8 +191,8 @@ export default function PaywallScreen() {
       {/* Top Header Bar */}
       <div className="w-full border-b bg-background/80 backdrop-blur px-6 py-3 flex items-center justify-between relative z-10">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
-            <BookOpen className="w-4 h-4 text-white" />
+          <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md text-white font-bold text-xs">
+            ر
           </div>
           <span className="font-extrabold text-sm bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">
             رفيق الرقمنة
@@ -201,51 +224,110 @@ export default function PaywallScreen() {
             transition={{ duration: 2.5, repeat: Infinity }}
           >
             <Lock className="w-4 h-4" />
-            اختر الباقة المناسبة لدورك
+            {isParent ? "خدمة ولي الأمر الرقمية" : "اختر الباقة المناسبة لدورك"}
           </motion.div>
           <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
-            {isParent ? "فعّل خدمة متابعة طفلك" : "اختر باقتك المخصصة وابدأ الآن"}
+            {isParent ? "تابع التحصيل الدراسي لابنك لحظة بلحظة" : "اختر باقتك المخصصة وابدأ الآن"}
           </h1>
           <p className="text-muted-foreground text-base max-w-lg mx-auto">
             {isParent
-              ? "ادفع اشتراك خدمة ولي الأمر للوصول إلى نتائج طفلك وغياباته وإشعارات المدرسة لحظة بلحظة."
+              ? "تطبيق ولي الأمر يربطك مباشرة بمدرسة وأساتذة أبنائك لتضمن نجاحهم وانضباطهم طوال الموسم."
               : "اشتراك سنوي شامل يضمن لك تغطية الفصول الدراسية الثلاثة بالكامل وتوفير وقتك وجهدك."}
           </p>
         </motion.div>
 
-        {/* Parent B2C View */}
+        {/* ----------------- PARENT SPECIFIC VIEW ----------------- */}
         {isParent && (
           <motion.div
-            className="rounded-2xl border border-emerald-200 bg-emerald-50/70 dark:border-emerald-800/50 dark:bg-emerald-950/20 p-6 text-center space-y-4 max-w-xl mx-auto"
+            className="bg-card rounded-3xl border border-emerald-500/30 shadow-xl overflow-hidden p-6 sm:p-8"
             initial={{ opacity: 0, y: 20 }} 
             animate={{ opacity: 1, y: 0 }} 
             transition={{ delay: 0.15 }}
           >
-            <div className="inline-flex p-3 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
-              <Sparkles className="w-6 h-6" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+              {/* Left Column: Pricing & Payment CTA */}
+              <div className="space-y-6">
+                <div>
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">اشتراك الفصول الثلاثة</span>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-4xl font-black text-foreground">1 000</span>
+                    <span className="text-lg font-bold text-muted-foreground">دج / سنوياً</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    دفعة واحدة لعام دراسي كامل (أقل من 100 دج للشهر).
+                  </p>
+                </div>
+
+                <div className="space-y-3 border-t pt-4">
+                  <div className="flex items-center gap-2 text-sm text-foreground/80">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>تفعيل فوري وآلي فور تأكيد الدفع</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-foreground/80">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>تغطية الفصول الثلاثة والامتحانات الرسمية</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-foreground/80">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>ربط مباشر وموثوق مع تطبيق المدرسة</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <Button
+                    onClick={() => startCheckout("parent_premium", 1000)}
+                    disabled={checkoutBusy}
+                    className="w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-base shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 transition-all"
+                  >
+                    {checkoutBusy ? (
+                      <span className="animate-pulse">جاري التحويل لبوابة الدفع...</span>
+                    ) : (
+                      <>
+                        <CreditCard className="w-5 h-5" />
+                        <span>تفعيل الخدمة بـ 1,000 دج (الذهبية / CIB)</span>
+                        <ArrowLeft className="w-5 h-5 mr-auto" />
+                      </>
+                    )}
+                  </Button>
+
+                  {checkoutError && (
+                    <p className="text-xs text-rose-600 font-semibold text-center">{checkoutError}</p>
+                  )}
+
+                  <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>دفع إلكتروني موثوق ومعتمد 100% عبر Chargily</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Features List */}
+              <div className="space-y-4 bg-muted/40 p-6 rounded-2xl border border-border/50">
+                <h3 className="font-bold text-sm text-foreground mb-3">
+                  ماذا يمنحك اشتراك ولي الأمر؟
+                </h3>
+                {PARENT_FEATURES.map((feat, idx) => {
+                  const IconComponent = feat.icon;
+                  return (
+                    <div key={idx} className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 shrink-0 mt-0.5">
+                        <IconComponent className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-foreground">{feat.title}</h4>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{feat.description}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <h3 className="font-extrabold text-xl text-foreground">خدمة ولي الأمر الممتازة</h3>
-            <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400">
-              1 000 <span className="text-sm font-normal text-muted-foreground">دج / سنة كاملة</span>
-            </p>
-            <p className="text-sm text-muted-foreground">
-              سيتم فتح حساب طفلك تلقائيًا بعد تأكيد الدفع عبر الذهبية أو CIB.
-            </p>
-            <Button 
-              onClick={() => startCheckout("parent_premium", 1000)} 
-              disabled={checkoutBusy} 
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 text-base shadow-lg shadow-emerald-600/20"
-            >
-              {checkoutBusy ? "جارٍ فتح صفحة الدفع…" : "ادفع 1,000 دج عبر Chargily"}
-            </Button>
-            {checkoutError && <p className="text-sm text-red-600">{checkoutError}</p>}
           </motion.div>
         )}
 
-        {/* Staff & Institution View */}
+        {/* ----------------- STAFF & SCHOOL VIEW ----------------- */}
         {!isParent && (
           <>
-            {/* School Stage Info */}
             <motion.div
               className="rounded-2xl border bg-card/70 backdrop-blur p-5 md:p-6"
               initial={{ opacity: 0, y: 20 }} 
@@ -261,7 +343,6 @@ export default function PaywallScreen() {
               </p>
             </motion.div>
 
-            {/* Plans Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
               {plans.map((plan, i) => {
                 const Icon = plan.icon;
@@ -362,7 +443,7 @@ export default function PaywallScreen() {
           transition={{ delay: 0.4 }}
         >
           <div>
-            <p className="font-bold text-lg mb-1">هل تحتاج لمساعدة في اختيار باقتك؟</p>
+            <p className="font-bold text-lg mb-1">هل تحتاج لمساعدة في الاشتراك؟</p>
             <p className="text-white/70 text-sm">فريقنا متواجد للإجابة عن تساؤلات المدارس والأساتذة والأولياء</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
