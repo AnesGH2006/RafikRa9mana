@@ -4,6 +4,15 @@ import { activateFreePlan, completeDemoPayment, createDemoCheckout, createChargi
 
 const router = Router();
 
+// خريطة المبالغ المعتمدة لكل باقة بالدينار الجزائري (DZD)
+const PLAN_PRICES: Record<string, number> = {
+  parent_premium: 1000,
+  teacher_pro: 2000,
+  school_full: 8000,
+  basic: 3000,
+  pro: 7000,
+};
+
 function requireAuth(req: Request, res: Response): boolean {
   if (!req.isAuthenticated() || !req.user) { res.status(401).json({ error: "Unauthorized" }); return false; }
   return true;
@@ -81,12 +90,19 @@ router.post("/payments/demo/complete", async (req, res): Promise<void> => {
   }
 });
 
+// Chargily Checkout Handler (Updated with validation & plan matching)
 router.post("/payments/chargily/checkout", async (req, res): Promise<void> => {
   if (!requireAuth(req, res)) return;
+
   const returnUrl = typeof req.body?.returnUrl === "string" ? req.body.returnUrl : `${req.protocol}://${req.get("host")}/account`;
-  const amountDzd = Number(req.body?.amountDzd ?? 1000);
+  const planKey = String(req.body?.planKey ?? "parent_premium");
+  
+  // تحديد المبلغ بناءً على نوع الباقة المرسلة أو استخدام القيمة التخلفية
+  const requestedAmount = Number(req.body?.amountDzd);
+  const amountDzd = PLAN_PRICES[planKey] ?? (Number.isFinite(requestedAmount) && requestedAmount >= 100 ? requestedAmount : 1000);
+
   try {
-    const payment = await createChargilyCheckout(req.user!.id, returnUrl, amountDzd);
+    const payment = await createChargilyCheckout(req.user!.id, returnUrl, Math.round(amountDzd), planKey);
     res.status(201).json({ id: payment!.id, checkoutUrl: payment!.checkoutUrl, amountDzd: payment!.amountDzd });
   } catch (error) {
     req.log.error({ error }, "Chargily checkout creation failed");
@@ -94,10 +110,7 @@ router.post("/payments/chargily/checkout", async (req, res): Promise<void> => {
   }
 });
 
-// Chargily Pay v2 webhook.
-//  - The signature arrives in the `signature` header (HMAC-SHA256 of the RAW body, keyed with the API secret key).
-//  - The payload is an event: { id, type: "checkout.paid" | ..., data: { id, status, metadata, ... } },
-//    so the checkout id and status are inside `data`, not at the top level.
+// Chargily Pay v2 webhook
 router.post("/payments/chargily/webhook", async (req, res): Promise<void> => {
   const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
   const signature = req.header("signature") ?? req.header("x-chargily-signature");
