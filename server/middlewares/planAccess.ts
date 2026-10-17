@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { hasOwnStaffSubscription } from "./Staffaccess.ts";
 
 const FREE_TIER_PATHS = [
   /^\/school(?:\/|$)/,
@@ -12,8 +13,7 @@ const FREE_TIER_PATHS = [
 // Routes that must work for people who have no plan of their own:
 //  - public lookups (no login, e.g. the school join-code lookup)
 //  - auth endpoints
-//  - parent self-registration (the parent is a normal logged-in user until this succeeds,
-//    so without this exemption they would be judged like a school owner and blocked)
+//  - parent self-registration (the parent is a normal logged-in user until this succeeds)
 const ALWAYS_ALLOWED_PATHS = [
   /^\/public(?:\/|$)/,
   /^\/auth(?:\/|$)/,
@@ -31,14 +31,20 @@ export function requirePaidPlan(req: Request, res: Response, next: NextFunction)
     next();
     return;
   }
-    const member = req.memberContext;
+
+  const member = req.memberContext;
   const isSchoolStaff = !!member && member.role !== "parent";
-  const plan = isSchoolStaff
-    ? member?.schoolSubscriptionPlan
-    : user.subscriptionPlan;
-  const status = isSchoolStaff
-    ? member?.schoolSubscriptionStatus
-    : user.subscriptionStatus;
+
+  // A teacher/supervisor who personally paid the staff plan passes here.
+  // Which paid feature they may use is decided per route (requireStaffFeature)
+  // and by their role permissions, not by this general gate.
+  if (isSchoolStaff && hasOwnStaffSubscription(user)) {
+    next();
+    return;
+  }
+
+  const plan = isSchoolStaff ? member?.schoolSubscriptionPlan : user.subscriptionPlan;
+  const status = isSchoolStaff ? member?.schoolSubscriptionStatus : user.subscriptionStatus;
   if (plan === "basic" || plan === "pro") {
     next();
     return;

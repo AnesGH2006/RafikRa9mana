@@ -11,6 +11,7 @@ import { logger } from "../lib/logger.js";
 import { db, ocrUploadsTable } from "../../shared/db.js";
 import { getUserGroqKey, getUserGeminiKey } from "../lib/groq-key.js";
 import { processOcr, type OcrEngine, type OcrType } from "../services/ocrService.js";
+import { STAFF_PLAN_PRICE_DZD } from "../middlewares/Staffaccess.js";
 
 const router = Router();
 const upload = multer({
@@ -40,10 +41,7 @@ router.post(
     //  - a non-parent member who has the "imports" permission, when the school's subscription is active
     const member = req.memberContext;
     const ownerAllowed = !member && (req.user!.role === "admin" || req.user!.subscriptionStatus === "active");
-    const memberAllowed = !!member
-      && member.role !== "parent"
-      && member.permissions.includes("imports")
-      && member.schoolSubscriptionStatus === "active";
+    const memberAllowed = !!member && member.role !== "parent" && member.permissions.includes("imports");
     if (!ownerAllowed && !memberAllowed) {
       res.status(403).json({ error: "ميزة OCR متاحة لصاحب الاشتراك أو للأعضاء المصرّح لهم فقط" });
       return;
@@ -64,7 +62,16 @@ router.post(
         : "grades"
     ) as OcrType;
     const isDaily = ocrType === "daily_register" || ocrType === "daily_attendance";
-
+    const ocrFeature = ocrType === "grades" ? "ocr_grades" : "ocr_absences";
+if (member && !canUseStaffFeature(req, ocrFeature)) {
+  res.status(402).json({
+    error: "هذه الميزة تتطلب اشتراك الأستاذ/المشرف (2000 دج في السنة)",
+    requiredPlan: "staff",
+    priceDzd: STAFF_PLAN_PRICE_DZD,
+    feature: ocrFeature,
+  });
+  return;
+}
     if (req.file.mimetype === "application/pdf") {
       res.status(415).json({
         error: "ملفات PDF تحتاج إلى تحويل صفحاتها إلى صور قبل OCR. ارفع PNG أو JPG لكل صفحة.",
@@ -181,3 +188,7 @@ router.post(
 );
 
 export default router;
+
+function canUseStaffFeature(req: string, ocrFeature: unknown) {
+  throw new Error("Function not implemented.");
+}
