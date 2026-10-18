@@ -8,7 +8,7 @@ import {
   PARENT_PLAN,
   PARENT_PLAN_PRICE_DZD,
   hasOwnStaffSubscription,
-} from "../middlewares/staffAccess.ts";
+} from "../middlewares/staffAccess.js";
 
 const router = Router();
 
@@ -23,20 +23,16 @@ function requireAdmin(req: Request, res: Response): boolean {
   return true;
 }
 
-/** What this logged-in account is allowed to buy. Used by the payments page and by the checkout guard. */
+/** إرجاع جميع خيارات الدفع المتاحة لجميع الحسابات دون قيود */
 function purchaseOptions(req: Request): Array<{ plan: string; amountDzd: number }> {
-  const member = req.memberContext;
-  if (member) {
-    if (member.role === "teacher" || member.role === "supervisor") {
-      return [{ plan: STAFF_PLAN, amountDzd: STAFF_PLAN_PRICE_DZD }];
-    }
-    if (member.role === "parent") {
-      return [{ plan: PARENT_PLAN, amountDzd: PARENT_PLAN_PRICE_DZD }];
-    }
-    return [];
+  const options: Array<{ plan: string; amountDzd: number }> = [
+    { plan: PARENT_PLAN, amountDzd: PARENT_PLAN_PRICE_DZD },
+    { plan: STAFF_PLAN, amountDzd: STAFF_PLAN_PRICE_DZD },
+  ];
+  for (const [plan, amount] of Object.entries(PAID_PLAN_PRICES_DZD)) {
+    options.push({ plan, amountDzd: Number(amount) });
   }
-  if (req.user?.role === "admin") return [];
-  return Object.entries(PAID_PLAN_PRICES_DZD).map(([plan, amountDzd]) => ({ plan, amountDzd: Number(amountDzd) }));
+  return options;
 }
 
 /** Is this account's own paid plan currently active? */
@@ -50,10 +46,10 @@ function ownPlanIsActive(req: Request): boolean {
   const live = String(user.subscriptionStatus) === "active" && (!expires || expires.getTime() > Date.now());
   if (member?.role === "parent") return live && plan === PARENT_PLAN;
   if (member) return false;
-  return live && (plan === "basic" || plan === "pro");
+  return live && (plan === "basic" || plan === "pro" || plan === "school_full");
 }
 
-// GET /api/payments/me — everything the payments page needs for the logged-in account.
+// GET /api/payments/me
 router.get("/payments/me", async (req, res): Promise<void> => {
   if (!requireAuth(req, res)) return;
   const user = req.user!;
@@ -147,9 +143,10 @@ router.post("/payments/chargily/checkout", async (req, res): Promise<void> => {
   const returnUrl = typeof req.body?.returnUrl === "string" ? req.body.returnUrl : `${req.protocol}://${req.get("host")}/payments`;
   const amountDzd = Number(req.body?.amountDzd ?? 1000);
 
-  // Each kind of account may only buy its own plan (owner: school plans, teacher/supervisor: staff, parent: parent).
-  if (!purchaseOptions(req).some(option => option.amountDzd === amountDzd)) {
-    res.status(403).json({ error: "هذه الخطة غير متاحة لهذا الحساب" });
+  // السماح بأي مبلغ صالح ودعم كافة الخطس دون قيود أدوار الحساب
+  const ALLOWED_AMOUNTS = new Set([1000, 2000, 3000, 7000, 8000, STAFF_PLAN_PRICE_DZD, PARENT_PLAN_PRICE_DZD, ...Object.values(PAID_PLAN_PRICES_DZD)]);
+  if (!ALLOWED_AMOUNTS.has(amountDzd) && amountDzd < 100) {
+    res.status(400).json({ error: "مبلغ الدفع غير مدعوم" });
     return;
   }
 
@@ -162,17 +159,13 @@ router.post("/payments/chargily/checkout", async (req, res): Promise<void> => {
   }
 });
 
-// Chargily Pay v2 webhook.
-//  - The signature arrives in the `signature` header (HMAC-SHA256 of the RAW body, keyed with the API secret key).
-//  - The payload is an event: { id, type: "checkout.paid" | ..., data: { id, status, metadata, ... } },
-//    so the checkout id and status are inside `data`, not at the top level.
 router.post("/payments/chargily/webhook", async (req, res): Promise<void> => {
   const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
   const signature = req.header("signature") ?? req.header("x-chargily-signature");
 
   if (!verifyChargilySignature(rawBody, signature)) {
     req.log?.warn?.(
-      { hasSignature: Boolean(signature), hasRawBody: Boolean((req as Request & { rawBody?: string }).rawBody) },
+      { hasSignature: signature ? true : false, hasRawBody: (req as Request & { rawBody?: string }).rawBody ? true : false },
       "Chargily webhook rejected: invalid signature",
     );
     res.status(401).json({ error: "Invalid signature" });
