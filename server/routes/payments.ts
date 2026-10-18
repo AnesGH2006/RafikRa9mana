@@ -1,17 +1,16 @@
 import { Router, type Request, type Response } from "express";
 import { generateActivationBatch, redeemActivationCode } from "../services/activationCodeService.js";
 import { activateFreePlan, completeDemoPayment, createDemoCheckout, createChargilyCheckout, settleChargilyPayment, verifyChargilySignature } from "../services/paymentService.js";
+import { PAID_PLAN_PRICES_DZD } from "../../shared/subscription.js";
+import {
+  STAFF_PLAN,
+  STAFF_PLAN_PRICE_DZD,
+  PARENT_PLAN,
+  PARENT_PLAN_PRICE_DZD,
+  hasOwnStaffSubscription,
+} from "../middlewares/staffAccess.ts";
 
 const router = Router();
-
-// خريطة المبالغ المعتمدة لكل باقة بالدينار الجزائري (DZD)
-const PLAN_PRICES: Record<string, number> = {
-  parent_premium: 1000,
-  teacher_pro: 2000,
-  school_full: 8000,
-  basic: 3000,
-  pro: 7000,
-};
 
 function requireAuth(req: Request, res: Response): boolean {
   if (!req.isAuthenticated() || !req.user) { res.status(401).json({ error: "Unauthorized" }); return false; }
@@ -23,6 +22,59 @@ function requireAdmin(req: Request, res: Response): boolean {
   if (req.user!.role !== "admin") { res.status(403).json({ error: "Forbidden" }); return false; }
   return true;
 }
+
+/** What this logged-in account is allowed to buy. Used by the payments page and by the checkout guard. */
+function purchaseOptions(req: Request): Array<{ plan: string; amountDzd: number }> {
+  const member = req.memberContext;
+  if (member) {
+    if (member.role === "teacher" || member.role === "supervisor") {
+      return [{ plan: STAFF_PLAN, amountDzd: STAFF_PLAN_PRICE_DZD }];
+    }
+    if (member.role === "parent") {
+      return [{ plan: PARENT_PLAN, amountDzd: PARENT_PLAN_PRICE_DZD }];
+    }
+    return [];
+  }
+  if (req.user?.role === "admin") return [];
+  return Object.entries(PAID_PLAN_PRICES_DZD).map(([plan, amountDzd]) => ({ plan, amountDzd: Number(amountDzd) }));
+}
+
+/** Is this account's own paid plan currently active? */
+function ownPlanIsActive(req: Request): boolean {
+  const user = req.user!;
+  const member = req.memberContext;
+  if (member?.role === "teacher" || member?.role === "supervisor") return hasOwnStaffSubscription(user);
+
+  const plan = String(user.subscriptionPlan);
+  const expires = user.subscriptionExpiresAt ? new Date(String(user.subscriptionExpiresAt)) : null;
+  const live = String(user.subscriptionStatus) === "active" && (!expires || expires.getTime() > Date.now());
+  if (member?.role === "parent") return live && plan === PARENT_PLAN;
+  if (member) return false;
+  return live && (plan === "basic" || plan === "pro");
+}
+
+// GET /api/payments/me — everything the payments page needs for the logged-in account.
+router.get("/payments/me", async (req, res): Promise<void> => {
+  if (!requireAuth(req, res)) return;
+  const user = req.user!;
+  const member = req.memberContext;
+  const role = member ? member.role : (user.role === "admin" ? "admin" : "owner");
+  const expires = user.subscriptionExpiresAt ? new Date(String(user.subscriptionExpiresAt)) : null;
+
+  res.set("Cache-Control", "private, no-store").json({
+    role,
+    plan: String(user.subscriptionPlan),
+    status: String(user.subscriptionStatus),
+    expiresAt: expires && !Number.isNaN(expires.getTime()) ? expires.toISOString() : null,
+    active: ownPlanIsActive(req),
+    options: purchaseOptions(req),
+    prices: {
+      school: Object.fromEntries(Object.entries(PAID_PLAN_PRICES_DZD).map(([plan, amount]) => [plan, Number(amount)])),
+      staff: STAFF_PLAN_PRICE_DZD,
+      parent: PARENT_PLAN_PRICE_DZD,
+    },
+  });
+});
 
 router.post("/payments/activation-codes/batches", async (req, res): Promise<void> => {
   if (!requireAdmin(req, res)) return;
@@ -90,19 +142,19 @@ router.post("/payments/demo/complete", async (req, res): Promise<void> => {
   }
 });
 
-// Chargily Checkout Handler (Updated with validation & plan matching)
 router.post("/payments/chargily/checkout", async (req, res): Promise<void> => {
   if (!requireAuth(req, res)) return;
+  const returnUrl = typeof req.body?.returnUrl === "string" ? req.body.returnUrl : `${req.protocol}://${req.get("host")}/payments`;
+  const amountDzd = Number(req.body?.amountDzd ?? 1000);
 
-  const returnUrl = typeof req.body?.returnUrl === "string" ? req.body.returnUrl : `${req.protocol}://${req.get("host")}/account`;
-  const planKey = String(req.body?.planKey ?? "parent_premium");
-  
-  // تحديد المبلغ بناءً على نوع الباقة المرسلة أو استخدام القيمة التخلفية
-  const requestedAmount = Number(req.body?.amountDzd);
-  const amountDzd = PLAN_PRICES[planKey] ?? (Number.isFinite(requestedAmount) && requestedAmount >= 100 ? requestedAmount : 1000);
+  // Each kind of account may only buy its own plan (owner: school plans, teacher/supervisor: staff, parent: parent).
+  if (!purchaseOptions(req).some(option => option.amountDzd === amountDzd)) {
+    res.status(403).json({ error: "هذه الخطة غير متاحة لهذا الحساب" });
+    return;
+  }
 
   try {
-    const payment = await createChargilyCheckout(req.user!.id, returnUrl, Math.round(amountDzd), planKey);
+    const payment = await createChargilyCheckout(req.user!.id, returnUrl, amountDzd);
     res.status(201).json({ id: payment!.id, checkoutUrl: payment!.checkoutUrl, amountDzd: payment!.amountDzd });
   } catch (error) {
     req.log.error({ error }, "Chargily checkout creation failed");
@@ -110,7 +162,10 @@ router.post("/payments/chargily/checkout", async (req, res): Promise<void> => {
   }
 });
 
-// Chargily Pay v2 webhook
+// Chargily Pay v2 webhook.
+//  - The signature arrives in the `signature` header (HMAC-SHA256 of the RAW body, keyed with the API secret key).
+//  - The payload is an event: { id, type: "checkout.paid" | ..., data: { id, status, metadata, ... } },
+//    so the checkout id and status are inside `data`, not at the top level.
 router.post("/payments/chargily/webhook", async (req, res): Promise<void> => {
   const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
   const signature = req.header("signature") ?? req.header("x-chargily-signature");
