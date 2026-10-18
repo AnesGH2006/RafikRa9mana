@@ -56,10 +56,9 @@ export async function createChargilyCheckout(userId: string, returnUrl: string, 
   const amountDzd = requireAllowedAmount(requestedAmountDzd);
   const apiKey = process.env.CHARGILY_API_KEY;
   const endpoint = process.env.CHARGILY_API_URL
-    ?? (process.env.CHARGILY_MODE === "test"
-      ? "https://pay.chargily.com/test/api/v2/checkouts"
-      : "https://pay.chargily.com/api/v2/checkouts");
-  if (!apiKey) throw new Error("CHARGILY_API_KEY is not configured");
+  ?? (process.env.CHARGILY_MODE === "test"
+    ? "https://pay.chargily.net/test/api/v2/checkouts"
+    : "https://pay.chargily.net/api/v2/checkouts");
 
   const [payment] = await db.insert(paymentsTable).values({
     userId,
