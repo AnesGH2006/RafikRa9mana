@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Lock, Phone, Mail, CheckCircle2, Clock, Shield, Zap, Crown, Sparkles, Leaf, School, CreditCard } from "lucide-react";
+import { BookOpen, Lock, Phone, Mail, CheckCircle2, Clock, Shield, Zap, Crown, Sparkles, Leaf, School, CreditCard, Users } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { SCHOOL_STAGE } from "@/lib/deployment";
@@ -24,6 +24,25 @@ const plans = [
     icon: Leaf,
     popular: false,
     priceDzd: 0,
+  },
+  {
+    key: "parent_premium",
+    name: "ولي الأمر (Parent)",
+    nameEn: "Parent Portal",
+    price: "1 000",
+    period: "سنة",
+    perMonth: "متابعة مسار التلميذ",
+    features: [
+      "تنبيهات الغياب والتأخر الفورية",
+      "كشف النقاط والنتائج الرقمية",
+      "تحليل المستوى بالذكاء الاصطناعي",
+      "تواصل مباشر مع الإدارة والأساتذة"
+    ],
+    gradient: "from-blue-500 to-indigo-600",
+    glow: "shadow-blue-500/30",
+    icon: Users,
+    popular: false,
+    priceDzd: 1000,
   },
   {
     key: "teacher_pro",
@@ -95,7 +114,7 @@ const steps = [
 
 export default function PaywallScreen() {
   const { user, logout } = useAuth();
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutBusyKey, setCheckoutBusyKey] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState("");
   const [freeBusy, setFreeBusy] = useState(false);
 
@@ -117,7 +136,7 @@ export default function PaywallScreen() {
   }
 
   async function startCheckout(planKey: string, amountDzd: number) {
-    setCheckoutBusy(true);
+    setCheckoutBusyKey(planKey);
     setCheckoutError("");
     try {
       const response = await fetch(`/api/payments/chargily/checkout`, {
@@ -138,7 +157,7 @@ export default function PaywallScreen() {
       const errorMsg = error instanceof Error ? error.message : "تعذر الاتصال ببوابة الدفع";
       setCheckoutError(errorMsg);
       alert(`تعذر الدفع: ${errorMsg}`);
-      setCheckoutBusy(false);
+      setCheckoutBusyKey(null);
     }
   }
 
@@ -198,10 +217,11 @@ export default function PaywallScreen() {
           </p>
         </motion.div>
 
-        {/* 4 Clean Pricing Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+        {/* Pricing Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {plans.map((plan, i) => {
             const Icon = plan.icon;
+            const isBusy = checkoutBusyKey === plan.key;
             return (
               <motion.div key={plan.key}
                 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
@@ -213,7 +233,7 @@ export default function PaywallScreen() {
                   <div className="absolute -top-3.5 inset-x-0 flex justify-center z-10">
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-extrabold uppercase tracking-wider shadow-lg">
                       <Sparkles className="w-3 h-3 fill-white" />
-                      الأكثر طلباً للأستاذة
+                      الأكثر طلباً للأساتذة
                     </span>
                   </div>
                 )}
@@ -245,7 +265,7 @@ export default function PaywallScreen() {
                       </Button>
                     ) : plan.key === "institution" ? (
                       <a 
-                        href="mailto:contact@rafik-raqamna.dz" 
+                        href="mailto:alaagh23dz@gmail.com" 
                         className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2.5 text-sm font-bold text-amber-500 transition hover:bg-amber-500/20 w-full"
                       >
                         <Mail className="h-4 w-4" /> تواصل معنا
@@ -253,11 +273,11 @@ export default function PaywallScreen() {
                     ) : (
                       <Button 
                         onClick={() => startCheckout(plan.key, plan.priceDzd)} 
-                        disabled={checkoutBusy} 
+                        disabled={isBusy} 
                         className="w-full bg-emerald-600 text-white hover:bg-emerald-700 font-bold flex items-center justify-center gap-2"
                       >
                         <CreditCard className="w-4 h-4" />
-                        {checkoutBusy ? "جارٍ فتح صفحة الدفع…" : "الدفع عبر Chargily"}
+                        {isBusy ? "جاري التحويل..." : "الدفع عبر Chargily"}
                       </Button>
                     )}
                   </div>
@@ -288,26 +308,6 @@ export default function PaywallScreen() {
                 <p className="text-sm text-foreground/80">{step.text}</p>
               </div>
             ))}
-          </div>
-        </motion.div>
-
-        {/* Contact Footer */}
-        <motion.div className="rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg"
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
-        >
-          <div>
-            <p className="font-bold text-lg mb-1">هل تحتاج لمساعدة في الاشتراك؟</p>
-            <p className="text-white/70 text-sm">فريقنا متواجد للإجابة عن تساؤلات المدارس والأساتذة والأولياء</p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <a href="mailto:contact@rafik-raqamna.dz"
-              className="flex items-center gap-2 px-4 py-2 bg-white/15 hover:bg-white/25 rounded-xl text-sm font-semibold transition-colors">
-              <Mail className="w-4 h-4" /> alaagh23dz@gmail.com
-            </a>
-            <a href="tel:+213"
-              className="flex items-center gap-2 px-4 py-2 bg-white/15 hover:bg-white/25 rounded-xl text-sm font-semibold transition-colors">
-              <Phone className="w-4 h-4" /> اتصل بنا
-            </a>
           </div>
         </motion.div>
       </div>
