@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { hasOwnStaffSubscription } from "./Staffaccess.ts";
+import { hasOwnStaffSubscription } from "./staffAccess.ts";
 
 const FREE_TIER_PATHS = [
   /^\/school(?:\/|$)/,
@@ -18,6 +18,8 @@ const ALWAYS_ALLOWED_PATHS = [
   /^\/public(?:\/|$)/,
   /^\/auth(?:\/|$)/,
   /^\/parent-register$/,
+  // payment routes do their own auth checks; staff and parents must be able to reach them to pay
+  /^\/payments(?:\/|$)/,
 ];
 
 export function requirePaidPlan(req: Request, res: Response, next: NextFunction): void {

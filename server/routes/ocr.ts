@@ -11,8 +11,7 @@ import { logger } from "../lib/logger.js";
 import { db, ocrUploadsTable } from "../../shared/db.js";
 import { getUserGroqKey, getUserGeminiKey } from "../lib/groq-key.js";
 import { processOcr, type OcrEngine, type OcrType } from "../services/ocrService.js";
-import { STAFF_PLAN_PRICE_DZD } from "../middlewares/Staffaccess.js";
-
+import { canUseStaffFeature, STAFF_PLAN_PRICE_DZD } from "../middlewares/staffAccess.js";
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
