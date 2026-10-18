@@ -68,5 +68,131 @@ export async function createChargilyCheckout(userId: string, returnUrl: string, 
   const amountDzd = requireAllowedAmount(requestedAmountDzd);
   const apiKey = process.env.CHARGILY_API_KEY;
   const endpoint = process.env.CHARGILY_API_URL
-    ?? (process.env.CHARGILY_MODE === "test"
-      ? "
+      ? process.env.CHARGILY_API_URL
+      : (process.env.CHARGILY_MODE === "test"
+          ? "https://pay.chargily.net/test/api/v2/checkouts"
+          : "https://pay.chargily.net/api/v2/checkouts");
+
+  if (!apiKey) throw new Error("CHARGILY_API_KEY is not configured");
+
+  const [payment] = await db.insert(paymentsTable).values({
+    userId,
+    provider: "chargily",
+    amountDzd,
+    status: "pending",
+    metadata: { returnUrl },
+  }).returning();
+  if (!payment) throw new Error("Unable to create payment record");
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "RafikRa9mana/1.0",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ 
+      amount: amountDzd, 
+      currency: "dzd", 
+      success_url: returnUrl, 
+      failure_url: returnUrl, 
+      metadata: { paymentId: payment.id, userId } 
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    await db.update(paymentsTable).set({ status: "failed", updatedAt: new Date() }).where(eq(paymentsTable.id, payment.id));
+    const providerMessage = await response.text().catch(() => "");
+    let detail = providerMessage.trim();
+    if (/<!doctype html|<html/i.test(detail)) {
+      detail = "بوابة Chargily أرجعت صفحة حماية بدل استجابة API. تحقق من رابط البيئة ومفتاح API.";
+    }
+    try {
+      const parsed = JSON.parse(detail) as { message?: string; error?: string };
+      detail = parsed.message ?? parsed.error ?? detail;
+    } catch {
+      // Keep raw provider response
+    }
+    throw new Error(`Chargily checkout failed with HTTP ${response.status}${detail ? `: ${detail.slice(0, 240)}` : ""}`);
+  }
+
+  const payload = await response.json() as { id?: string; checkout_url?: string; url?: string };
+  const checkoutUrl = payload.checkout_url ?? payload.url;
+  if (!payload.id || !checkoutUrl) throw new Error("Chargily returned an incomplete checkout response");
+
+  const [updated] = await db.update(paymentsTable)
+    .set({ providerReference: payload.id, checkoutUrl, updatedAt: new Date() })
+    .where(eq(paymentsTable.id, payment.id))
+    .returning();
+    
+  return updated;
+}
+
+export async function createDemoCheckout(userId: string, returnUrl: string, requestedAmountDzd = DEFAULT_AMOUNT_DZD) {
+  const amountDzd = requireAllowedAmount(requestedAmountDzd);
+  const [payment] = await db.insert(paymentsTable).values({
+    userId,
+    provider: "chargily",
+    amountDzd,
+    status: "pending",
+    metadata: { returnUrl, mode: "demo" },
+  }).returning();
+  if (!payment) throw new Error("Unable to create demo payment record");
+
+  const reference = `demo-${payment.id}`;
+  const checkoutUrl = `/payment-demo?paymentId=${encodeURIComponent(payment.id)}`;
+  const [updated] = await db.update(paymentsTable)
+    .set({ providerReference: reference, checkoutUrl, updatedAt: new Date() })
+    .where(eq(paymentsTable.id, payment.id))
+    .returning();
+  return updated;
+}
+
+export async function completeDemoPayment(paymentId: string, userId: string) {
+  const [payment] = await db.select().from(paymentsTable)
+    .where(and(eq(paymentsTable.id, paymentId), eq(paymentsTable.userId, userId)))
+    .limit(1);
+  if (!payment || payment.providerReference !== `demo-${payment.id}`) {
+    throw new Error("Demo payment not found");
+  }
+  if (payment.status === "paid") return payment;
+
+  const now = new Date();
+  const plan = paidPlanForAmount(payment.amountDzd);
+  await db.transaction(async (tx) => {
+    await tx.update(paymentsTable)
+      .set({ status: "paid", paidAt: now, updatedAt: now })
+      .where(eq(paymentsTable.id, payment.id));
+    await tx.update(usersTable)
+      .set({
+        subscriptionStatus: "active",
+        ...(plan ? { subscriptionPlan: plan } : {}),
+        subscriptionExpiresAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
+        updatedAt: now,
+      })
+      .where(eq(usersTable.id, userId));
+  });
+  return { ...payment, status: "paid" as const, paidAt: now };
+}
+
+export async function settleChargilyPayment(input: { reference: string; userId?: string; status: string }) {
+  if (!['paid', 'success', 'completed'].includes(input.status.toLowerCase())) return { settled: false };
+  const [payment] = await db.select().from(paymentsTable).where(and(eq(paymentsTable.provider, "chargily"), eq(paymentsTable.providerReference, input.reference))).limit(1);
+  if (!payment) return { settled: false };
+  if (payment.status === "paid") return { settled: true, idempotent: true };
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx.update(paymentsTable).set({ status: "paid", paidAt: now, updatedAt: now }).where(eq(paymentsTable.id, payment.id));
+    const plan = paidPlanForAmount(payment.amountDzd);
+    await tx.update(usersTable).set({
+      subscriptionStatus: "active",
+      ...(plan ? { subscriptionPlan: plan } : {}),
+      subscriptionExpiresAt: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
+      updatedAt: now,
+    }).where(eq(usersTable.id, payment.userId));
+  });
+  return { settled: true, idempotent: false };
+}
