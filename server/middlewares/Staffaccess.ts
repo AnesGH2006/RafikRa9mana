@@ -75,3 +75,8 @@ export function requireStaffFeature(feature: StaffFeature) {
     });
   };
 }
+
+/** Plan value stored in users.subscription_plan for a paying parent (premium student tracking). */
+export const PARENT_PLAN = "parent";
+/** Yearly price in DZD for the parent plan. */
+export const PARENT_PLAN_PRICE_DZD = 1000;
