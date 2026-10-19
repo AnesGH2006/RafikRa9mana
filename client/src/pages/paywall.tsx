@@ -128,16 +128,26 @@ export default function PaywallScreen() {
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "تعذر تفعيل الخطة المجانية");
-      window.location.assign("/");
+      window.location.assign("/admin");
     } catch (error) {
       setCheckoutError(error instanceof Error ? error.message : "تعذر تفعيل الخطة المجانية");
       setFreeBusy(false);
     }
   }
 
-  async function startCheckout(planKey: string, amountDzd: number) {
+ async function startCheckout(planKey: string, amountDzd: number) {
     setCheckoutBusyKey(planKey);
     setCheckoutError("");
+    
+    // تحديد مسار العودة بدقة حسب الباقة التي اختارها المستخدم
+    let targetReturnUrl = `${window.location.origin}/admin`; // الافتراضي للمؤسسات
+    
+    if (planKey === "parent_premium") {
+      targetReturnUrl = `${window.location.origin}/parent/select-school`; // مسار اختيار مدرسة الابن لولي الأمر
+    } else if (planKey === "teacher_pro") {
+      targetReturnUrl = `${window.location.origin}/teacher/dashboard`; // مسار لوحة الأستاذ
+    }
+
     try {
       const response = await fetch(`/api/payments/chargily/checkout`, {
         method: "POST",
@@ -145,7 +155,7 @@ export default function PaywallScreen() {
         body: JSON.stringify({ 
           planKey,
           amountDzd,
-          returnUrl: `${window.location.origin}/` 
+          returnUrl: targetReturnUrl 
         }),
       });
 
