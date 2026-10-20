@@ -2,6 +2,7 @@
  * OCR Grade Sheet, Absence Sheet & Daily Register Processing
  *
  * POST /api/ocr/parse-grades?type=grades|absences|daily_attendance|daily_register&engine=auto|gemini|vision|tesseract
+ * POST /api/ocr/export   (paid "excel_export" feature) — turns reviewed rows into a CSV that Excel opens
  *
  * Pipeline: Sharp preprocess → Gemini Vision or Groq Vision (user's own key) → Tesseract.js (fallback)
  */
@@ -11,7 +12,8 @@ import { logger } from "../lib/logger.js";
 import { db, ocrUploadsTable } from "../../shared/db.js";
 import { getUserGroqKey, getUserGeminiKey } from "../lib/groq-key.js";
 import { processOcr, type OcrEngine, type OcrType } from "../services/ocrService.js";
-import { canUseStaffFeature, STAFF_PLAN_PRICE_DZD } from "../middlewares/staffAccess.js";
+import { canUseStaffFeature, requireStaffFeature, STAFF_PLAN_PRICE_DZD } from "../middlewares/staffAccess.js";
+
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -37,7 +39,8 @@ router.post(
 
     // Who may use OCR:
     //  - the school owner (admin, or an active subscription)
-    //  - a non-parent member who has the "imports" permission, when the school's subscription is active
+    //  - a non-parent member who has the "imports" permission; whether they may use the
+    //    specific OCR feature (school plan or their own 2,000 DZD staff plan) is checked below
     const member = req.memberContext;
     const ownerAllowed = !member && (req.user!.role === "admin" || req.user!.subscriptionStatus === "active");
     const memberAllowed = !!member && member.role !== "parent" && member.permissions.includes("imports");
@@ -61,16 +64,19 @@ router.post(
         : "grades"
     ) as OcrType;
     const isDaily = ocrType === "daily_register" || ocrType === "daily_attendance";
+
+    // Teachers unlock grade OCR, supervisors unlock absence OCR (daily register included).
     const ocrFeature = ocrType === "grades" ? "ocr_grades" : "ocr_absences";
-if (member && !canUseStaffFeature(req, ocrFeature)) {
-  res.status(402).json({
-    error: "هذه الميزة تتطلب اشتراك الأستاذ/المشرف (2000 دج في السنة)",
-    requiredPlan: "staff",
-    priceDzd: STAFF_PLAN_PRICE_DZD,
-    feature: ocrFeature,
-  });
-  return;
-}
+    if (member && !canUseStaffFeature(req, ocrFeature)) {
+      res.status(402).json({
+        error: "هذه الميزة تتطلب اشتراك الأستاذ/المشرف (2000 دج في السنة)",
+        requiredPlan: "staff",
+        priceDzd: STAFF_PLAN_PRICE_DZD,
+        feature: ocrFeature,
+      });
+      return;
+    }
+
     if (req.file.mimetype === "application/pdf") {
       res.status(415).json({
         error: "ملفات PDF تحتاج إلى تحويل صفحاتها إلى صور قبل OCR. ارفع PNG أو JPG لكل صفحة.",
@@ -186,8 +192,40 @@ if (member && !canUseStaffFeature(req, ocrFeature)) {
   },
 );
 
-export default router;
+// ── Export reviewed rows to a CSV that Excel opens (paid "excel_export" feature) ──────────────
+const csvCell = (value: unknown): string => {
+  let text = String(value ?? "").replace(/\r?\n/g, " ");
+  if (/^[=+\-@]/.test(text)) text = `'${text}`; // stops Excel from running formulas
+  return `"${text.replace(/"/g, '""')}"`;
+};
 
-function canUseStaffFeature(req: string, ocrFeature: unknown) {
-  throw new Error("Function not implemented.");
-}
+router.post(
+  "/ocr/export",
+  (req, res, next) => {
+    if (!req.isAuthenticated()) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    next();
+  },
+  requireStaffFeature("excel_export"),
+  (req, res): void => {
+    const rows = Array.isArray(req.body?.rows)
+      ? (req.body.rows as Array<Record<string, unknown>>).slice(0, 2000)
+      : [];
+    const header = ["#", "الاسم الكامل", "العلامة", "الحالة", "ملاحظة", "ساعات مبررة", "ساعات غير مبررة"];
+    const lines = [header.map(csvCell).join(";")];
+    rows.forEach((r, i) => {
+      lines.push(
+        [i + 1, r.studentName, r.grade, r.status, r.note, r.justifiedHours, r.unjustifiedHours]
+          .map(csvCell)
+          .join(";"),
+      );
+    });
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="ocr-export.csv"');
+    res.send("\uFEFF" + lines.join("\r\n"));
+  },
+);
+
+export default router;

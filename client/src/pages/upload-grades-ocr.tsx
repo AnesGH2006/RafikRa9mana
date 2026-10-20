@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { flushDailyAttendance, queueDailyAttendance } from "@/lib/attendance-outbox";
 import {
   ScanLine, Upload, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
-  Pencil, Save, RotateCcw, FileImage, Clock, BookOpen, ClipboardCheck,
+  Pencil, Save, RotateCcw, FileImage, Clock, BookOpen, ClipboardCheck, Download,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL;
@@ -39,6 +38,7 @@ interface OcrRow {
   unjustifiedHours?: number;
   status?: string;
   isAbsent?: boolean | null;
+  note?: string;
   confidence: number;
   lowConfidence: boolean;
   editedName?: string;
@@ -296,6 +296,45 @@ export default function UploadGradesOcrPage() {
   const effectiveStatus     = (r: OcrRow) => r.editedStatus ?? r.status ?? "";
   const effectiveAbsent     = (r: OcrRow) => r.editedAbsent !== undefined ? r.editedAbsent : r.isAbsent ?? null;
 
+  // Sends the reviewed rows (matched or not) to the server, which returns a CSV that Excel opens.
+  // The server checks the paid "Excel export" feature and answers 402 when it is not unlocked.
+  async function exportToExcel() {
+    try {
+      const res = await fetch(`${BASE}api/ocr/export`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows: rows.map(r => ({
+            studentName: effectiveName(r),
+            grade: effectiveGrade(r),
+            status: effectiveStatus(r),
+            note: r.note ?? "",
+            justifiedHours: effectiveJustified(r),
+            unjustifiedHours: effectiveUnjustified(r),
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast({
+          variant: "destructive",
+          title: res.status === 402 ? "ميزة مدفوعة" : "تعذر التصدير",
+          description: d.error ?? "حاول مرة أخرى",
+        });
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ocr-${mode}-${reportDate || new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "تعذر التصدير", description: e?.message ?? "حاول مرة أخرى" });
+    }
+  }
+
   async function fetchStudents(): Promise<Array<{ id: string; nomPrenom: string }>> {
     if ((mode !== "daily_register" && !classe) || (mode === "grades" && !niveau)) return [];
     const params = new URLSearchParams({ annee });
@@ -335,14 +374,18 @@ export default function UploadGradesOcrPage() {
     const students = await fetchStudents();
 
     if (students.length === 0) {
+      // No student list to match against: keep every extracted row on screen so it can be edited or exported.
       const msg = mode === "grades"
         ? `لم يتم العثور على أي تلميذ في ${niveau} — الفوج ${classe} — سنة ${annee}. تحقق من صحة المستوى والفوج المحددين أو تأكد من استيراد القائمة أولاً.`
         : classe
           ? `لم يتم العثور على أي تلميذ في الفوج ${classe} — سنة ${annee}. تحقق من الفوج أو تأكد من استيراد القائمة أولاً.`
           : `لم يتم العثور على تلاميذ في سنة ${annee}. تأكد من استيراد القائمة أولاً.`;
       setSaveState({ phase: "done", saved: 0, failed: rows.length, errors: [msg] });
-      setRows(prev => prev.map(r => ({ ...r, saveError: "لا يوجد تلاميذ في هذا الفوج" })));
-      toast({ variant: "destructive", title: "لم يتم العثور على تلاميذ", description: msg });
+      setRows(prev => prev.map(r => ({ ...r, saveError: "غير مطابق: عدّل الاسم أو صدّر الملف" })));
+      toast({
+        title: "لم تتم مطابقة الأسماء مع قائمة التلاميذ",
+        description: "الأسماء المستخرجة بقيت في الجدول: عدّلها هنا أو صدّرها إلى Excel.",
+      });
       return;
     }
 
@@ -381,7 +424,10 @@ export default function UploadGradesOcrPage() {
       if (entries.length === 0) {
         setRows(updatedRows);
         setSaveState({ phase: "done", saved: 0, failed: rows.length, errors });
-        toast({ variant: "destructive", title: "لم يتم العثور على تطابقات", description: errors[0] });
+        toast({
+          title: "لم تتم مطابقة أي اسم",
+          description: "الصفوف باقية في الجدول للتعديل أو التصدير إلى Excel.",
+        });
         return;
       }
 
@@ -746,6 +792,11 @@ export default function UploadGradesOcrPage() {
                   <RotateCcw className="w-3.5 h-3.5" />
                   صورة جديدة
                 </Button>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8"
+                  onClick={() => void exportToExcel()}>
+                  <Download className="w-3.5 h-3.5" />
+                  تصدير Excel
+                </Button>
                 <Button
                   size="sm"
                   className="gap-1.5 text-xs h-8 bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-0 shadow-sm"
@@ -796,7 +847,7 @@ export default function UploadGradesOcrPage() {
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded bg-red-100 border border-red-400" />
-                خطأ في الحفظ
+                غير مطابق / خطأ في الحفظ
               </span>
             </div>
 
@@ -813,7 +864,7 @@ export default function UploadGradesOcrPage() {
                         </>
                       ) : mode === "daily_register" ? (
                         <>
-                          {["#", "اسم التلميذ (قابل للتعديل)", "العلامة في السجل", "الحالة المراجعة", "الثقة", "الحالة"].map(h => (
+                          {["#", "اسم التلميذ (قابل للتعديل)", "العلامة في السجل", "الحالة المراجعة", "ملاحظة", "الثقة", "الحالة"].map(h => (
                             <th key={h} className="px-4 py-2.5 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                           ))}
                         </>
@@ -901,6 +952,9 @@ export default function UploadGradesOcrPage() {
                                   onClick={() => updateRow(idx, { editedAbsent: true })}
                                 >غائب</Button>
                               </div>
+                            </td>
+                            <td className="px-4 py-2 min-w-32 text-xs text-muted-foreground">
+                              {row.note || "—"}
                             </td>
                             <td className="px-4 py-2 w-20">
                               <span className={`text-xs font-mono ${row.confidence >= 85 ? "text-emerald-600" : row.confidence >= 70 ? "text-amber-600" : "text-red-500"}`}>{row.confidence}%</span>
