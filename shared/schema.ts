@@ -502,3 +502,15 @@ export const paymentsTable = pgTable("payments", {
 
 export type Payment = typeof paymentsTable.$inferSelect;
 export type InsertPayment = typeof paymentsTable.$inferInsert;
+export const studentDocumentsTable = pgTable("student_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  studentId: varchar("student_id", { length: 64 }).notNull().references(() => studentsTable.id, { onDelete: "cascade" }),
+  docType: varchar("doc_type", { length: 40 }).notNull(),
+  fields: jsonb("fields").notNull().$type<Record<string, string>>(),
+  createdBy: varchar("created_by"),
+  createdByName: varchar("created_by_name", { length: 255 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("IDX_student_documents_student").on(table.studentId, table.createdAt)]);
+
+export type StudentDocument = typeof studentDocumentsTable.$inferSelect;
