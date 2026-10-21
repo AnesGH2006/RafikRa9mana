@@ -1,15 +1,34 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { and, eq, inArray } from "drizzle-orm";
 import { db, absencesTable, gradesTable, studentsTable } from "../../shared/db.js";
 import { injectStudentValuesIntoWorkbook, inspectExcelTemplate, type ExcelInjectionOptions, type StudentCellPayload } from "../lib/excel-injection.js";
+import { canUseStaffFeature } from "../middlewares/staffAccess.js";
 
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024, files: 1 },
 });
+
+/**
+ * Who may read a spreadsheet and inject values into a template:
+ *  - the school owner
+ *  - a teacher/supervisor who has the "imports" permission AND unlocked "Excel export"
+ *    (school paid plan, or their own 2,000 DZD staff plan)
+ * These routes only work on the file the user uploads, so they never touch school data.
+ */
+function mayUseInjection(req: Request): boolean {
+  if (!req.isAuthenticated() || !req.user) return false;
+  const member = req.memberContext;
+  if (!member) return true;
+  return member.role !== "parent"
+    && member.permissions.includes("imports")
+    && canUseStaffFeature(req, "excel_export");
+}
+
+const INJECTION_DENIED = "هذه الميزة متاحة لمسؤول المؤسسة أو لمن فعّل اشتراك تصدير Excel";
 
 function normalizeHeader(value: unknown): string {
   return String(value ?? "").normalize("NFKC").toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g, "").replace(/\s+/g, " ").trim();
@@ -37,7 +56,7 @@ function parseNumericCell(value: unknown): number | null {
 }
 
 router.post("/excel-injection/extract", upload.single("source"), async (req, res): Promise<void> => {
-  if (!req.isAuthenticated() || !req.user || req.memberContext) { res.status(403).json({ error: "مسؤول المؤسسة فقط" }); return; }
+  if (!mayUseInjection(req)) { res.status(403).json({ error: INJECTION_DENIED }); return; }
   if (!req.file) { res.status(400).json({ error: "ارفع ملف المصدر أولاً" }); return; }
   if (!/\.xlsx$/i.test(req.file.originalname)) { res.status(400).json({ error: "ملف المصدر يجب أن يكون بصيغة .xlsx" }); return; }
   const mode = req.body?.mode === "absences" ? "absences" : "grades";
@@ -86,7 +105,7 @@ router.post("/excel-injection/extract", upload.single("source"), async (req, res
 });
 
 router.post("/excel-injection/inspect", upload.single("template"), async (req, res): Promise<void> => {
-  if (!req.isAuthenticated() || !req.user || req.memberContext) { res.status(403).json({ error: "مسؤول المؤسسة فقط" }); return; }
+  if (!mayUseInjection(req)) { res.status(403).json({ error: INJECTION_DENIED }); return; }
   if (!req.file) { res.status(400).json({ error: "ارفع القالب أولاً" }); return; }
   try {
     const result = await inspectExcelTemplate(req.file.buffer, {
@@ -101,6 +120,7 @@ router.post("/excel-injection/inspect", upload.single("template"), async (req, r
   }
 });
 
+// School data stays owner-only: it reads grades/absences of the whole school.
 router.get("/excel-injection/school-data", async (req, res): Promise<void> => {
   if (!req.isAuthenticated() || !req.user || req.memberContext) { res.status(403).json({ error: "مسؤول المؤسسة فقط" }); return; }
   const annee = String(req.query.annee ?? "2025-2026");
@@ -165,8 +185,8 @@ router.get("/excel-injection/school-data", async (req, res): Promise<void> => {
 });
 
 router.post("/excel-injection", upload.single("template"), async (req, res): Promise<void> => {
-  if (!req.isAuthenticated() || !req.user || req.memberContext) {
-    res.status(403).json({ error: "هذه العملية متاحة لمسؤول المؤسسة فقط" });
+  if (!mayUseInjection(req)) {
+    res.status(403).json({ error: INJECTION_DENIED });
     return;
   }
   if (!req.file) {

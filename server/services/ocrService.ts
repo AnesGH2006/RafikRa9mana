@@ -17,6 +17,7 @@ import sharp from "sharp";
 import Tesseract from "tesseract.js";
 import { logger } from "../lib/logger.js";
 
+
 export type OcrEngine = "gemini" | "vision" | "tesseract" | "auto";
 export type OcrType = "grades" | "absences" | "daily_attendance" | "daily_register";
 
@@ -46,6 +47,7 @@ export interface OcrDailyRegisterRow {
   status: string;
   isAbsent: boolean | null;
   confidence: number;
+  note?: string;
 }
 
 export interface OcrResult {
@@ -319,17 +321,20 @@ const DAILY_ATTENDANCE_PROMPT = `هذه صورة سجل حضور وغياب مد
 - اقرأ الجدول حتى لو كانت الكتابة اليدوية أو الصورة مائلة أو فيها بقع أو إضاءة غير متساوية — ابذل قصارى جهدك، ولا تتجاهل صفاً كاملاً لمجرد صعوبة جزء منه.
 - لا تخترع بيانات لم تُكتب في الصورة.`;
 
-const DAILY_REGISTER_PROMPT = `اقرأ صورة سجل غياب مدرسي يومي جزائري. يحتوي الجدول عادة على أسماء التلاميذ، تاريخ التقرير، وعلامة أو كلمة تبين حالة كل تلميذ مثل "غائب" أو "حاضر". قد يحتوي أيضًا أعمدة لا علاقة لها بالحضور مثل الجنس، تاريخ الميلاد، القسم، والرقم التسلسلي.
+const DAILY_REGISTER_PROMPT = `اقرأ صورة ورقة غياب أو حضور مدرسية جزائرية (قد تكون "قائمة الغائبين" أو سجل حضور كاملاً). قد تحتوي أعمدة لا علاقة لها بالحضور مثل الجنس، تاريخ الميلاد، القسم، والرقم التسلسلي.
 
 أعد كائن JSON فقط بهذا الشكل:
-{"reportDate":"2024-03-15","rows":[{"studentName":"الاسم الكامل","status":"غائب","isAbsent":true}]}
+{"reportDate":"2024-03-15","rows":[{"studentName":"الاسم الكامل","status":"غائب","isAbsent":true,"note":""}]}
 
 قواعد:
-- استخرج التاريخ من عنوان التقرير وحوّله إلى YYYY-MM-DD. إذا لم يظهر تاريخ واضح، أعد reportDate بقيمة null.
-- استخرج كل صف تلميذ، ولا تخلط بين عمود الحالة وبين الجنس أو المستوى أو الحالة الإدارية مثل "جديد".
-- انسخ نص أو رمز الحضور كما يظهر في عمود الحالة إلى status.
-- isAbsent=true فقط إذا كانت علامة الحضور تعني بوضوح الغياب، وfalse إذا كانت تعني الحضور، وnull إذا لم تكن الحالة واضحة.
-- تجاهل أرقام التسلسل، تاريخ الميلاد، والعناوين. لا تخترع أسماء أو علامات.`;
+- اقرأ كل الأسطر المكتوبة في الصورة ولا تعتمد على أي قائمة تلاميذ مسبقة. انسخ كل اسم كما هو مكتوب دون تصحيح أو دمج أو حذف.
+- لا تُرجع rows فارغة إذا كان هناك سطر مقروء واحد على الأقل. السطر غير الواضح أرجعه كما قرأته ولا تحذفه.
+- استخرج التاريخ من عنوان الورقة وحوّله إلى YYYY-MM-DD. إذا لم يظهر تاريخ واضح، أعد reportDate بقيمة null.
+- status قيمة من ثلاث فقط: "حاضر" أو "غائب" أو "معذور". اعتمد على علامة أو كلمة الحضور في الصف.
+- إذا كان عنوان الورقة "قائمة الغائبين" أو ما يشبهه، فكل تلميذ مدرج فيها غائب: status="غائب" حتى لو لم تُكتب كلمة الغياب في الصف.
+- isAbsent=true للحالتين "غائب" و"معذور"، وfalse للحالة "حاضر"، وnull فقط إذا كانت الحالة غير مقروءة إطلاقاً.
+- note: أي ملاحظة جانبية مكتوبة في الصف (نص فارغ إن لم توجد). لا تضع كلمة الحالة نفسها ("غائب") في note.
+- تجاهل أرقام التسلسل وتواريخ الميلاد والعناوين. لا تخترع أسماء أو علامات.`;
 
 // ── JSON extraction helpers ────────────────────────────────────────────────────
 
@@ -360,7 +365,7 @@ function extractJsonArrayCandidate(raw: string): string | null {
   return null;
 }
 
-function extractJsonObjectCandidate(raw: string): string | null {
+export function extractJsonObjectCandidate(raw: string): string | null {
   const candidates: string[] = [];
 
   const codeFence = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
@@ -441,7 +446,7 @@ export function estimateLineConfidence(
 
 // ── Vision extraction (shared logic for both Gemini and Groq) ───────────────────
 
-async function callVisionEngine(
+export async function callVisionEngine(
   engine: "gemini" | "vision",
   imageB64: string,
   mimeType: string,
@@ -454,7 +459,7 @@ async function callVisionEngine(
   return callGroqVision(imageB64, mimeType, prompt, apiKeys.groqApiKey ?? null);
 }
 
-async function extractWithVision(
+export async function extractWithVision(
   engine: "gemini" | "vision",
   imageB64: string,
   mimeType: string,
@@ -478,13 +483,19 @@ async function extractWithVision(
         .map((row: any) => {
           const studentName = String(row.studentName).trim();
           const status = typeof row.status === "string" ? row.status.trim() : "";
-          const isAbsent = typeof row.isAbsent === "boolean" ? row.isAbsent : null;
-          return {
-            studentName,
-            status,
-            isAbsent,
-            confidence: estimateLineConfidence(studentName, { status }, "daily_register"),
-          };
+let isAbsent: boolean | null = typeof row.isAbsent === "boolean" ? row.isAbsent : null;
+if (isAbsent === null) {
+  if (/غائب|غياب|معذور/.test(status)) isAbsent = true;
+  else if (/حاضر/.test(status)) isAbsent = false;
+}
+const note = typeof row.note === "string" ? row.note.trim() : "";
+return {
+  studentName,
+  status,
+  isAbsent,
+  note,
+  confidence: estimateLineConfidence(studentName, { status }, "daily_register"),
+};
         });
       return { rows, rawText: content, reportDate };
     } catch (err) {
