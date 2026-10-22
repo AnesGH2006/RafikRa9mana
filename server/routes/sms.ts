@@ -1,11 +1,43 @@
-import { Router, type IRouter } from "express";
-import { and, eq, sql } from "drizzle-orm";
+import { Router, type IRouter, type Request, type Response } from "express";
+import { and, eq } from "drizzle-orm";
 import { db, studentsTable, gradesTable, absencesTable } from "../../shared/db.js";
 import { getSubjectsForLevel, calcWeightedAvg } from "../../shared/subjects.js";
 import type { Niveau } from "../../shared/types.js";
 import { sendSmsAlertTool } from "../lib/tools/send-sms-alert.js";
+import { canUseStaffFeature, STAFF_PLAN_PRICE_DZD } from "../middlewares/staffAccess.js";
 
 const router: IRouter = Router();
+
+/**
+ * Who may use the SMS tools, and for which school.
+ *  - school owner: their own school
+ *  - teacher / supervisor / counselor: the SCHOOL they belong to, but only when the "parent_notifications"
+ *    feature is unlocked (school paid plan, or the supervisor's own 2,000 DZD plan)
+ *  - parents and logged-out visitors: never
+ * Returns the school owner's user id (the tenant), or null after sending the error response.
+ */
+function schoolIdForSms(req: Request, res: Response): string | null {
+  if (!req.isAuthenticated() || !req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+  const member = req.memberContext;
+  if (!member) return req.user.id;
+  if (member.role === "parent") {
+    res.status(403).json({ error: "غير مسموح" });
+    return null;
+  }
+  if (!canUseStaffFeature(req, "parent_notifications")) {
+    res.status(402).json({
+      error: "إرسال الرسائل لأولياء التلاميذ يتطلب اشتراك المشرف (2000 دج في السنة)",
+      requiredPlan: "staff",
+      priceDzd: STAFF_PLAN_PRICE_DZD,
+      feature: "parent_notifications",
+    });
+    return null;
+  }
+  return member.schoolUserId;
+}
 
 // ── GET /api/sms/alerts ───────────────────────────────────────────────────────
 // Returns students that need an SMS message — either an alert or a
@@ -16,12 +48,12 @@ const router: IRouter = Router();
 //   - passed:      annual weighted average >= 10 (congratulation candidate)
 // Each student can have multiple reasons (e.g. passed + high_absence).
 router.get("/sms/alerts", async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
-  const userId = req.user!.id;
+  const userId = schoolIdForSms(req, res);
+  if (!userId) return;
   const annee = (req.query.annee as string) || "2025-2026";
   const absThreshold = parseInt((req.query.absThreshold as string) || "10");
 
-  // ── 1. Fetch all students for this user/year ────────────────────────────────
+  // ── 1. Fetch all students for this school/year ──────────────────────────────
   const students = await db.select().from(studentsTable)
     .where(and(eq(studentsTable.userId, userId), eq(studentsTable.annee, annee)));
 
@@ -124,8 +156,8 @@ router.get("/sms/alerts", async (req, res): Promise<void> => {
 // ── PATCH /api/students/:id/phone ─────────────────────────────────────────────
 // Update (or set) a student's parent phone number
 router.patch("/students/:id/phone", async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
-  const userId = req.user!.id;
+  const userId = schoolIdForSms(req, res);
+  if (!userId) return;
   const { id } = req.params;
   const { phone } = req.body as { phone?: string };
 
@@ -148,16 +180,12 @@ router.patch("/students/:id/phone", async (req, res): Promise<void> => {
 });
 
 // ── POST /api/sms/send ────────────────────────────────────────────────────────
-// Actually dispatches the SMS server-side, instead of relying on the client's
-// `sms:` protocol link — which only works on phones and does nothing on a
-// desktop/PC browser (no default SMS app to hand off to). This reuses the
-// exact same dispatch logic (gateway → modem fallback, logged to
-// smsLogsTable) already built for the AI assistant's send_sms_alert_tool,
-// so behavior stays identical whether the SMS is triggered from this page
-// or from the assistant chat.
+// Dispatches the SMS server-side (gateway → modem fallback, logged to sms_logs)
+// through the same tool the AI assistant uses, so behavior is identical whether
+// the SMS is triggered from this page or from the assistant chat.
 router.post("/sms/send", async (req, res): Promise<void> => {
-  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
-  const userId = req.user!.id;
+  const userId = schoolIdForSms(req, res);
+  if (!userId) return;
   const { studentId, message, phone } = req.body as {
     studentId?: string;
     message?: string;

@@ -1,18 +1,24 @@
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
-  MessageSquare, Phone, AlertCircle, TrendingDown, TrendingUp,
-  Clock, CheckCheck, Copy, Send, Save, RefreshCw,
-  Filter, ChevronLeft, X, Edit3, Search, Loader2,
-  Settings, Globe, Key, ChevronDown, ChevronUp, Wifi, WifiOff,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import {
+  MessageSquare, Send, Loader2, Save, Search, CheckCircle2, AlertCircle, RefreshCw,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL;
+const YEARS = ["2026-2027", "2025-2026", "2024-2025", "2023-2024"];
+const PHONE_RE = /^[+0-9()\-\s]{7,20}$/;
+const MAX_BATCH = 100;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type AlertReason = "avg_below_10" | "high_absence" | "mustarrak" | "passed";
+type Reason = "avg_below_10" | "high_absence" | "mustarrak" | "passed";
 
-interface AlertStudent {
+interface AlertRow {
   id: string;
   nomPrenom: string;
   niveau: string;
@@ -22,690 +28,420 @@ interface AlertStudent {
   annualAvg: number | null;
   unjustifiedHours: number;
   justifiedHours: number;
-  reasons: AlertReason[];
+  reasons: Reason[];
 }
 
-// ─── Templates ────────────────────────────────────────────────────────────────
-function buildMessage(reason: AlertReason, student: AlertStudent): string {
-  const name = student.nomPrenom;
-  if (reason === "avg_below_10") {
-    const avg = student.annualAvg !== null ? student.annualAvg.toFixed(2) : "—";
-    return `السيد / السيدة ولي أمر التلميذ(ة): ${name}\nنُحيطكم علمًا بأن معدّل ابنكم/ابنتكم الدراسي السنوي بلغ ${avg}/20، وهو دون عتبة النجاح المطلوبة (10/20). نرجو منكم متابعته/متابعتها عن كثب ومراجعة دروسه/دروسها يومياً، والتواصل معنا لأي استفسار.\nمع فائق التقدير — إدارة المتوسطة`;
-  }
-  if (reason === "mustarrak") {
-    const avg = student.annualAvg !== null ? student.annualAvg.toFixed(2) : "—";
-    return `السيد / السيدة ولي أمر التلميذ(ة): ${name}\nمعدّل ابنكم/ابنتكم الدراسي السنوي هو ${avg}/20. يُعنى باجتياز اختبار الاستدراك للحصول على فرصة النجاح. نأمل حضوره/حضورها في الموعد المحدد.\nمع فائق التقدير — إدارة المتوسطة`;
-  }
-  if (reason === "high_absence") {
-    const hrs = student.unjustifiedHours;
-    return `السيد / السيدة ولي أمر التلميذ(ة): ${name}\nنُبلّغكم بأن عدد ساعات الغياب غير المبرر لابنكم/ابنتكم بلغ ${hrs} ساعة، مما قد يؤثر سلباً على نتائجه/نتائجها الدراسية. يُرجى التواصل مع الإدارة في أقرب وقت لتسوية الوضعية.\nمع فائق التقدير — إدارة المتوسطة`;
-  }
-  if (reason === "passed") {
-    const avg = student.annualAvg !== null ? student.annualAvg.toFixed(2) : "—";
-    return `السيد / السيدة ولي أمر التلميذ(ة): ${name}\nيسرّنا إعلامكم بأن ابنكم/ابنتكم قد حقق معدّلاً سنوياً جيداً بلغ ${avg}/20، وقد تحصّل على النجاح. نشكركم على متابعتكم ونشجعه/نشجعها على مواصلة الاجتهاد.\nمع فائق التقدير — إدارة المتوسطة`;
-  }
-  return "";
-}
+type Filter = "all" | "no_phone" | Reason;
 
-// ─── Reason badge ─────────────────────────────────────────────────────────────
-const REASON_META: Record<AlertReason, { label: string; icon: React.ReactNode; color: string }> = {
-  avg_below_10: {
-    label: "معدّل ضعيف",
-    icon: <TrendingDown className="h-3 w-3" />,
-    color: "bg-red-500/15 text-red-400 border-red-500/30",
-  },
-  mustarrak: {
-    label: "مستدرك",
-    icon: <AlertCircle className="h-3 w-3" />,
-    color: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  },
-  high_absence: {
-    label: "غياب مفرط",
-    icon: <Clock className="h-3 w-3" />,
-    color: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  },
-  passed: {
-    label: "ناجح",
-    icon: <TrendingUp className="h-3 w-3" />,
-    color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  },
+const REASON_LABEL: Record<Reason, string> = {
+  avg_below_10: "معدل دون 10",
+  high_absence: "غياب مرتفع",
+  mustarrak: "مستدرك",
+  passed: "ناجح",
 };
 
-function ReasonBadge({ reason }: { reason: AlertReason }) {
-  const m = REASON_META[reason];
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${m.color}`}>
-      {m.icon} {m.label}
-    </span>
-  );
+const REASON_CLASS: Record<Reason, string> = {
+  avg_below_10: "bg-rose-500/15 text-rose-400 border-rose-500/30",
+  high_absence: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  mustarrak: "bg-sky-500/15 text-sky-400 border-sky-500/30",
+  passed: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+};
+
+const REASON_PRIORITY: Reason[] = ["high_absence", "avg_below_10", "mustarrak", "passed"];
+
+const FILTERS: Array<{ id: Filter; label: string }> = [
+  { id: "all", label: "الكل" },
+  { id: "no_phone", label: "بدون هاتف" },
+  { id: "high_absence", label: "غياب مرتفع" },
+  { id: "avg_below_10", label: "معدل دون 10" },
+  { id: "mustarrak", label: "مستدرك" },
+  { id: "passed", label: "ناجحون" },
+];
+
+function buildMessage(row: AlertRow): string {
+  const reason = REASON_PRIORITY.find(r => row.reasons.includes(r)) ?? "avg_below_10";
+  const avg = row.annualAvg !== null ? row.annualAvg.toFixed(2) : "";
+  const head = `السيد ولي أمر التلميذ(ة) ${row.nomPrenom}: `;
+  switch (reason) {
+    case "high_absence":
+      return `${head}بلغ مجموع غياباته غير المبررة ${row.unjustifiedHours} ساعة. نرجو التواصل مع إدارة المؤسسة وتبرير الغياب.`;
+    case "mustarrak":
+      return `${head}معدله ${avg}/20 وهو قريب من المتوسط. نرجو متابعته للتحسن.`;
+    case "passed":
+      return `نهنئكم بنجاح ابنكم/ابنتكم ${row.nomPrenom} بمعدل ${avg}/20. مبارك عليكم.`;
+    default:
+      return `${head}معدله ${avg}/20 وهو دون المتوسط. نرجو التواصل مع إدارة المؤسسة.`;
+  }
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-type FilterType = "all" | AlertReason;
-type SendState = "idle" | "sending" | "sent" | "error";
+/** Arabic SMS: 70 chars for one message, 67 per part when it needs several. */
+function countSegments(text: string): number {
+  return text.length <= 70 ? 1 : Math.ceil(text.length / 67);
+}
+
+type SendResult = { ok: boolean; text: string };
+
+async function sendSms(row: AlertRow, message: string, phone: string): Promise<SendResult> {
+  try {
+    const res = await fetch(`${BASE}api/sms/send`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studentId: row.id, message, phone }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, text: data.error ?? data.message ?? `خطأ ${res.status}` };
+    if (data.success === false) return { ok: false, text: data.message ?? "فشل الإرسال" };
+    return { ok: true, text: "تم الإرسال" };
+  } catch (error: any) {
+    return { ok: false, text: error?.message ?? "خطأ في الاتصال" };
+  }
+}
 
 export default function SmsPage() {
+  const { toast } = useToast();
+
   const [annee, setAnnee] = useState("2025-2026");
-  const [students, setStudents] = useState<AlertStudent[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<FilterType>("all");
-  const [search, setSearch] = useState("");
+  const [absThreshold, setAbsThreshold] = useState("10");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
 
-  // Gateway config state
-  const [gatewayOpen, setGatewayOpen] = useState(false);
-  const [gatewayUrl, setGatewayUrl]   = useState("");
-  const [gatewayKey, setGatewayKey]   = useState("");
-  const [gatewaySaving, setGatewaySaving] = useState(false);
-  const [gatewaySaved,  setGatewaySaved]  = useState(false);
-  const [gatewayConfigured, setGatewayConfigured] = useState<boolean | null>(null);
+  const [rows, setRows] = useState<AlertRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Selected student + compose panel
-  const [selected, setSelected] = useState<AlertStudent | null>(null);
-  const [activeReason, setActiveReason] = useState<AlertReason | null>(null);
-  const [message, setMessage] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [phones, setPhones] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [results, setResults] = useState<Record<string, SendResult>>({});
+  const [bulkBusy, setBulkBusy] = useState(false);
 
-  // Server-side send state
-  const [sendState, setSendState] = useState<SendState>("idle");
-  const [sendResultMsg, setSendResultMsg] = useState<string | null>(null);
-
-  // Phone editing
-  const [phoneEdit, setPhoneEdit] = useState<Record<string, string>>({});
-  const [phoneSaving, setPhoneSaving] = useState<Record<string, boolean>>({});
-  const [phoneSaved, setPhoneSaved] = useState<Record<string, boolean>>({});
-
-  // ── Fetch school / gateway config ────────────────────────────────────────────
-  useEffect(() => {
-    fetch(`${BASE}api/school`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then((d: any) => {
-        if (d) {
-          setGatewayUrl(d.smsGatewayUrl ?? "");
-          setGatewayKey(d.smsGatewayApiKey ?? "");
-          setGatewayConfigured(!!(d.smsGatewayUrl));
-        } else {
-          setGatewayConfigured(false);
-        }
-      })
-      .catch(() => setGatewayConfigured(false));
-  }, []);
-
-  const saveGateway = async () => {
-    setGatewaySaving(true);
-    try {
-      // First fetch current school info, then update with gateway fields
-      const schoolRes = await fetch(`${BASE}api/school`, { credentials: "include" });
-      const school = schoolRes.ok ? await schoolRes.json() : null;
-      const body = {
-        nom: school?.nom || "المتوسطة",
-        wilaya: school?.wilaya || "—",
-        commune: school?.commune || "—",
-        annee: school?.annee || "2025-2026",
-        directeur: school?.directeur || "",
-        phone: school?.phone || "",
-        smsGatewayUrl: gatewayUrl.trim(),
-        smsGatewayApiKey: gatewayKey.trim(),
-      };
-      const res = await fetch(`${BASE}api/school`, {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (res.ok) {
-        setGatewayConfigured(!!gatewayUrl.trim());
-        setGatewaySaved(true);
-        setTimeout(() => setGatewaySaved(false), 2500);
-      }
-    } finally {
-      setGatewaySaving(false);
-    }
-  };
-
-  // ── Fetch alerts ────────────────────────────────────────────────────────────
-  const fetchAlerts = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    setSelected(null);
+    setError("");
     try {
-      const res = await fetch(`${BASE}api/sms/alerts?annee=${encodeURIComponent(annee)}`);
-      if (res.ok) {
-        const data: AlertStudent[] = await res.json();
-        setStudents(data);
-        const edits: Record<string, string> = {};
-        data.forEach(s => { if (!s.parentPhone) edits[s.id] = ""; });
-        setPhoneEdit(prev => ({ ...edits, ...prev }));
+      const params = new URLSearchParams({ annee, absThreshold: String(parseInt(absThreshold) || 10) });
+      const res = await fetch(`${BASE}api/sms/alerts?${params}`, { credentials: "include" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setRows([]);
+        setError((data as { error?: string } | null)?.error ?? `تعذر تحميل القائمة (${res.status})`);
+        return;
       }
-    } catch (err) {
-      console.error("fetchAlerts failed:", err);
+      setRows(Array.isArray(data) ? (data as AlertRow[]) : []);
+      setSelected(new Set());
+    } catch (e: any) {
+      setError(e?.message ?? "تعذر تحميل القائمة");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }, [annee, absThreshold]);
 
-  useEffect(() => { fetchAlerts(); }, [annee]);
-
-  // ── When student or reason selected, rebuild message ────────────────────────
   useEffect(() => {
-    if (!selected || !activeReason) { setMessage(""); return; }
-    setMessage(buildMessage(activeReason, selected));
-    setSendState("idle");
-    setSendResultMsg(null);
-  }, [selected, activeReason]);
+    void load();
+  }, [load]);
 
-  const handleSelect = (s: AlertStudent) => {
-    setSelected(s);
-    const priority: AlertReason[] = ["avg_below_10", "mustarrak", "high_absence", "passed"];
-    const first = priority.find(r => s.reasons.includes(r)) ?? s.reasons[0] ?? null;
-    setActiveReason(first);
-    setCopied(false);
-    setSendState("idle");
-    setSendResultMsg(null);
-  };
+  const phoneOf = (row: AlertRow) => (phones[row.id] ?? row.parentPhone ?? "").trim();
+  const messageOf = (row: AlertRow) => drafts[row.id] ?? buildMessage(row);
 
-  // ── Save phone ──────────────────────────────────────────────────────────────
-  const savePhone = async (studentId: string) => {
-    const phone = (phoneEdit[studentId] ?? "").trim();
-    if (!phone) return;
-    setPhoneSaving(p => ({ ...p, [studentId]: true }));
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter(row => {
+      if (q && !row.nomPrenom.toLowerCase().includes(q)) return false;
+      if (filter === "all") return true;
+      if (filter === "no_phone") return !(phones[row.id] ?? row.parentPhone);
+      return row.reasons.includes(filter);
+    });
+  }, [rows, filter, query, phones]);
+
+  const setBusy = (id: string, on: boolean) =>
+    setBusyIds(prev => {
+      const next = new Set(prev);
+      if (on) next.add(id); else next.delete(id);
+      return next;
+    });
+
+  async function savePhone(row: AlertRow) {
+    const phone = (phones[row.id] ?? "").replace(/\s+/g, "");
+    if (phone && !PHONE_RE.test(phone)) {
+      toast({ variant: "destructive", title: "رقم غير صالح", description: "أدخل رقم هاتف صحيحاً" });
+      return;
+    }
+    setBusy(row.id, true);
     try {
-      const res = await fetch(`${BASE}api/students/${studentId}/phone`, {
+      const res = await fetch(`${BASE}api/students/${encodeURIComponent(row.id)}/phone`, {
         method: "PATCH",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone }),
       });
-      if (res.ok) {
-        setPhoneSaved(p => ({ ...p, [studentId]: true }));
-        setStudents(prev => prev.map(s =>
-          s.id === studentId ? { ...s, parentPhone: phone } : s
-        ));
-        if (selected?.id === studentId) setSelected(s => s ? { ...s, parentPhone: phone } : s);
-        setTimeout(() => setPhoneSaved(p => ({ ...p, [studentId]: false })), 2000);
-      }
-    } catch (err) {
-      console.error("savePhone failed:", err);
-    }
-    setPhoneSaving(p => ({ ...p, [studentId]: false }));
-  };
-
-  // ── Copy ────────────────────────────────────────────────────────────────────
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(message);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const effectivePhone = selected
-    ? (selected.parentPhone || (phoneEdit[selected.id] ?? "").trim() || null)
-    : null;
-
-  // ── Send via server (works on desktop — dispatches through the SMS
-  //    gateway or the connected desktop agent's modem, same path used by
-  //    the AI assistant's send_sms_alert_tool) ─────────────────────────────
-  const handleSendNow = async () => {
-    if (!selected || !message.trim() || !effectivePhone) return;
-    setSendState("sending");
-    setSendResultMsg(null);
-    try {
-      const res = await fetch(`${BASE}api/sms/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: selected.id,
-          message: message.trim(),
-          // Only send phone override if it differs from what's already
-          // stored — otherwise let the server use the saved parentPhone.
-          phone: selected.parentPhone ? undefined : effectivePhone,
-        }),
-      });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success) {
-        setSendState("sent");
-        setSendResultMsg(data.message || "تم إرسال الرسالة بنجاح.");
-        setTimeout(() => setSendState("idle"), 3000);
-      } else {
-        setSendState("error");
-        setSendResultMsg(data.message || data.error || "فشل إرسال الرسالة.");
-      }
-    } catch (err: any) {
-      setSendState("error");
-      setSendResultMsg(err?.message || "تعذّر الاتصال بالخادم.");
+      if (!res.ok) throw new Error(data.error ?? "تعذر حفظ الرقم");
+      setRows(prev => prev.map(r => (r.id === row.id ? { ...r, parentPhone: data.parentPhone ?? null } : r)));
+      setPhones(prev => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+      toast({ title: "تم حفظ رقم الولي" });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "تعذر حفظ الرقم", description: e?.message });
+    } finally {
+      setBusy(row.id, false);
     }
-  };
+  }
 
-  // ── Filtering ───────────────────────────────────────────────────────────────
-  const filtered = students.filter(s => {
-    if (filter !== "all" && !s.reasons.includes(filter as AlertReason)) return false;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      if (!s.nomPrenom.toLowerCase().includes(q) && !s.classe.toLowerCase().includes(q)) return false;
+  async function sendOne(row: AlertRow) {
+    const phone = phoneOf(row);
+    if (!PHONE_RE.test(phone)) {
+      setResults(prev => ({ ...prev, [row.id]: { ok: false, text: "أدخل رقم هاتف صالحاً" } }));
+      return;
     }
-    return true;
-  });
+    const message = messageOf(row).trim();
+    if (!message) {
+      setResults(prev => ({ ...prev, [row.id]: { ok: false, text: "الرسالة فارغة" } }));
+      return;
+    }
+    setBusy(row.id, true);
+    const result = await sendSms(row, message, phone);
+    setResults(prev => ({ ...prev, [row.id]: result }));
+    setBusy(row.id, false);
+    if (result.ok) setOpenId(null);
+  }
 
-  const counts: Record<FilterType, number> = {
-    all: students.length,
-    avg_below_10: students.filter(s => s.reasons.includes("avg_below_10")).length,
-    mustarrak: students.filter(s => s.reasons.includes("mustarrak")).length,
-    high_absence: students.filter(s => s.reasons.includes("high_absence")).length,
-    passed: students.filter(s => s.reasons.includes("passed")).length,
-  };
+  async function sendSelected() {
+    const targets = filtered.filter(row => selected.has(row.id) && PHONE_RE.test(phoneOf(row))).slice(0, MAX_BATCH);
+    if (targets.length === 0) {
+      toast({ variant: "destructive", title: "لا يوجد مستلمون", description: "حدد تلاميذ لديهم أرقام هاتف صالحة" });
+      return;
+    }
+    const parts = targets.reduce((sum, row) => sum + countSegments(messageOf(row)), 0);
+    if (!window.confirm(`سيتم إرسال ${targets.length} رسالة (${parts} وحدة SMS). هل تريد المتابعة؟`)) return;
 
-  const filterTabs: { key: FilterType; label: string; color: string }[] = [
-    { key: "all",         label: `الكل (${counts.all})`,               color: "text-foreground" },
-    { key: "avg_below_10",label: `معدّل ضعيف (${counts.avg_below_10})`, color: "text-red-400"    },
-    { key: "mustarrak",   label: `مستدركون (${counts.mustarrak})`,      color: "text-amber-400"  },
-    { key: "high_absence",label: `غياب مفرط (${counts.high_absence})`,  color: "text-orange-400" },
-    { key: "passed",      label: `ناجحون (${counts.passed})`,           color: "text-emerald-400"},
-  ];
+    setBulkBusy(true);
+    let ok = 0;
+    for (const row of targets) {
+      const result = await sendSms(row, messageOf(row).trim(), phoneOf(row));
+      setResults(prev => ({ ...prev, [row.id]: result }));
+      if (result.ok) ok += 1;
+      await new Promise(resolve => window.setTimeout(resolve, 300));
+    }
+    setBulkBusy(false);
+    setSelected(new Set());
+    toast({
+      variant: ok === targets.length ? "default" : "destructive",
+      title: `أُرسلت ${ok} من ${targets.length} رسالة`,
+      description: ok < targets.length ? "راجع الصفوف الحمراء لمعرفة السبب" : undefined,
+    });
+  }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const toggle = (id: string) =>
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every(row => selected.has(row.id));
+
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
-
-      {/* ── Gateway config banner ─────────────────────────────────────────── */}
-      <div className={`border-b px-6 py-3 text-sm transition-colors ${
-        gatewayConfigured === false
-          ? "bg-amber-500/5 border-amber-500/20"
-          : gatewayConfigured === true
-          ? "bg-emerald-500/5 border-emerald-500/20"
-          : "bg-muted/30 border-border"
-      }`}>
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            {gatewayConfigured === true
-              ? <Wifi className="h-4 w-4 text-emerald-400 shrink-0" />
-              : <WifiOff className="h-4 w-4 text-amber-400 shrink-0" />}
-            <span className={gatewayConfigured === true ? "text-emerald-400 font-medium" : "text-amber-400 font-medium"}>
-              {gatewayConfigured === true
-                ? "بوابة SMS مضبوطة — الإرسال يعمل عبر الإنترنت مباشرةً (لا حاجة لتثبيت أي تطبيق)"
-                : "لم تُضبط بوابة SMS — أدخل رابط البوابة أدناه لتفعيل الإرسال"}
-            </span>
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="p-6 max-w-5xl mx-auto space-y-5"
+      dir="rtl"
+    >
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-blue-700 items-center justify-center shadow-lg shadow-sky-500/30">
+            <MessageSquare className="w-5 h-5 text-white" />
+          </span>
+          <div>
+            <h1 className="text-xl font-bold">الرسائل القصيرة (SMS)</h1>
+            <p className="text-xs text-muted-foreground">أرسل تنبيهات أو تهاني لأولياء التلاميذ</p>
           </div>
+        </div>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void load()} disabled={loading}>
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          تحديث
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Select value={annee} onValueChange={setAnnee}>
+          <SelectTrigger><SelectValue placeholder="السنة" /></SelectTrigger>
+          <SelectContent>{YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+        </Select>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">حد الغياب غير المبرر (ساعة)</span>
+          <Input
+            type="number" min={1} value={absThreshold}
+            onChange={e => setAbsThreshold(e.target.value)}
+            className="w-20" dir="ltr"
+          />
+        </div>
+        <div className="relative">
+          <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 start-3 text-muted-foreground" />
+          <Input
+            placeholder="ابحث باسم التلميذ…" value={query}
+            onChange={e => setQuery(e.target.value)} className="ps-9"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {FILTERS.map(item => (
           <button
-            onClick={() => setGatewayOpen(o => !o)}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
+            key={item.id}
+            type="button"
+            onClick={() => setFilter(item.id)}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+              filter === item.id
+                ? "bg-sky-500/15 border-sky-500/50 text-sky-300"
+                : "border-border text-muted-foreground hover:border-sky-500/30"
+            }`}
           >
-            <Settings className="h-3.5 w-3.5" />
-            إعداد البوابة
-            {gatewayOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {item.label}
           </button>
-        </div>
-
-        <AnimatePresence>
-          {gatewayOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <div className="mt-3 p-4 rounded-xl border border-border bg-background space-y-3">
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  أدخل رابط أي بوابة SMS متوافقة مع REST API (مثل Twilio أو Vonage أو أي بوابة محلية).
-                  ولي أمر التلميذ يستقبل رسائل SMS عادية على هاتفه دون الحاجة لتثبيت أي تطبيق.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="flex-1 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
-                    <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <input
-                      type="url"
-                      value={gatewayUrl}
-                      onChange={e => setGatewayUrl(e.target.value)}
-                      placeholder="https://api.example.com/sms/send"
-                      className="flex-1 bg-transparent text-xs font-mono outline-none placeholder:text-muted-foreground/50"
-                      dir="ltr"
-                    />
-                  </div>
-                  <div className="flex-1 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
-                    <Key className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <input
-                      type="password"
-                      value={gatewayKey}
-                      onChange={e => setGatewayKey(e.target.value)}
-                      placeholder="API Key (اختياري)"
-                      className="flex-1 bg-transparent text-xs font-mono outline-none placeholder:text-muted-foreground/50"
-                      dir="ltr"
-                    />
-                  </div>
-                  <button
-                    onClick={saveGateway}
-                    disabled={gatewaySaving}
-                    className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs text-white font-semibold hover:bg-emerald-700 disabled:opacity-50 shrink-0"
-                  >
-                    {gatewaySaved
-                      ? <><CheckCheck className="h-3.5 w-3.5" /> تم الحفظ</>
-                      : gatewaySaving
-                      ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      : <><Save className="h-3.5 w-3.5" /> حفظ</>}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        ))}
       </div>
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="border-b border-border bg-card/50 px-6 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      {error && (
+        <div className="flex items-start gap-2 text-sm rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2" role="alert">
+          <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/30 px-3 py-2">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={() =>
+                setSelected(allVisibleSelected ? new Set() : new Set(filtered.filter(r => phoneOf(r)).map(r => r.id)))
+              }
+            />
+            تحديد الكل (الذين لديهم هاتف)
+          </label>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 shadow">
-              <MessageSquare className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold bg-gradient-to-l from-emerald-400 to-teal-300 bg-clip-text text-transparent">
-                إشعارات SMS الأولياء
-              </h1>
-              <p className="text-xs text-muted-foreground">تنبيهات وتهانٍ تلقائية للنتائج والغياب</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <select
-              value={annee}
-              onChange={e => setAnnee(e.target.value)}
-              className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500/30"
+            <span className="text-xs text-muted-foreground">{selected.size} محدد · {filtered.length} ظاهر</span>
+            <Button
+              size="sm" className="gap-1.5"
+              disabled={bulkBusy || selected.size === 0}
+              onClick={() => void sendSelected()}
             >
-              {["2025-2026","2024-2025","2023-2024"].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-            <button
-              onClick={fetchAlerts}
-              disabled={loading}
-              className="flex items-center gap-1.5 rounded-lg border border-border bg-accent px-3 py-1.5 text-sm hover:bg-accent/80 disabled:opacity-50"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-              تحديث
-            </button>
+              {bulkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              إرسال للمحدد
+            </Button>
           </div>
         </div>
+      )}
 
-        {/* Filter tabs */}
-        <div className="mt-3 flex flex-wrap gap-1">
-          {filterTabs.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setFilter(tab.key)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-all border ${
-                filter === tab.key
-                  ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
-                  : "border-transparent hover:border-border text-muted-foreground hover:text-foreground"
-              } ${tab.color}`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+          <Loader2 className="w-5 h-5 animate-spin" /> جارٍ التحميل…
         </div>
-      </div>
-
-      {/* ── Body ───────────────────────────────────────────────────────────── */}
-      <div className="flex h-[calc(100vh-140px)]">
-        {/* ── Student list ─────────────────────────────────────────────────── */}
-        <div className="flex w-full flex-col border-l border-border lg:w-[420px] flex-shrink-0">
-          {/* Search */}
-          <div className="border-b border-border p-3">
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="بحث بالاسم أو الفوج..."
-                className="w-full rounded-lg border border-border bg-background py-2 pr-9 pl-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500/30"
-              />
-            </div>
-          </div>
-
-          {/* List */}
-          <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <div className="flex items-center justify-center py-20 text-muted-foreground">
-                <RefreshCw className="h-5 w-5 animate-spin ml-2" /> جاري التحميل...
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-20 text-muted-foreground text-sm">
-                <CheckCheck className="h-8 w-8 text-emerald-500/40" />
-                {students.length === 0
-                  ? "لا توجد بيانات نتائج أو غياب لهذه السنة."
-                  : "لا توجد تنبيهات في هذه الفئة."}
-              </div>
-            ) : (
-              <ul className="divide-y divide-border">
-                {filtered.map(s => (
-                  <li key={s.id}>
-                    <button
-                      onClick={() => handleSelect(s)}
-                      className={`w-full text-right px-4 py-3 transition-colors hover:bg-accent/50 ${
-                        selected?.id === s.id ? "bg-emerald-500/10 border-r-2 border-emerald-500" : ""
-                      }`}
-                    >
-                      {/* Top row */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{s.nomPrenom}</p>
-                          {/* ✅ FIX: explicit "·" separators so classe and
-                              avg never visually run together (was showing
-                              e.g. "116.38/20" for classe "1" + avg 16.38) */}
-                          <p className="text-xs text-muted-foreground mt-0.5 flex items-center flex-wrap gap-x-1.5">
-                            <span>{s.niveau} · الفوج {s.classe}</span>
-                            {s.annualAvg !== null && (
-                              <span className={`font-mono font-semibold ${
-                                s.annualAvg < 9 ? "text-red-400" : s.annualAvg < 10 ? "text-amber-400" : "text-emerald-400"
-                              }`}>
-                                · {s.annualAvg.toFixed(2)}/20
-                              </span>
-                            )}
-                            {s.unjustifiedHours > 0 && (
-                              <span className="text-orange-400">· {s.unjustifiedHours}س غياب</span>
-                            )}
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                          {s.reasons.map(r => <ReasonBadge key={r} reason={r} />)}
-                        </div>
-                      </div>
-
-                      {/* Phone row */}
-                      <div className="mt-2" onClick={e => e.stopPropagation()}>
-                        {s.parentPhone ? (
-                          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
-                            <Phone className="h-3 w-3" />
-                            <span className="font-mono">{s.parentPhone}</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <Phone className="h-3 w-3 text-destructive/60 flex-shrink-0" />
-                            <input
-                              type="tel"
-                              value={phoneEdit[s.id] ?? ""}
-                              onChange={e => setPhoneEdit(p => ({ ...p, [s.id]: e.target.value }))}
-                              placeholder="أدخل رقم الهاتف..."
-                              className="flex-1 min-w-0 rounded-md border border-border bg-background px-2 py-1 text-xs font-mono outline-none focus:ring-1 focus:ring-emerald-500/40 placeholder:text-muted-foreground/50"
-                            />
-                            <button
-                              onClick={() => savePhone(s.id)}
-                              disabled={!phoneEdit[s.id]?.trim() || phoneSaving[s.id]}
-                              className="flex items-center gap-0.5 rounded-md bg-emerald-600/20 border border-emerald-600/30 px-2 py-1 text-xs text-emerald-400 hover:bg-emerald-600/30 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-                            >
-                              {phoneSaved[s.id]
-                                ? <><CheckCheck className="h-3 w-3" /> تم</>
-                                : phoneSaving[s.id]
-                                ? <RefreshCw className="h-3 w-3 animate-spin" />
-                                : <><Save className="h-3 w-3" /> حفظ</>}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-
-        {/* ── Compose panel ────────────────────────────────────────────────── */}
-        <div className="hidden lg:flex flex-1 flex-col">
-          {!selected ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-              <ChevronLeft className="h-10 w-10 opacity-20" />
-              <p className="text-sm">اختر تلميذاً من القائمة لإعداد رسالته</p>
-            </div>
-          ) : (
-            <div className="flex flex-1 flex-col p-5 gap-4 overflow-y-auto">
-              {/* Student header */}
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="font-semibold text-base">{selected.nomPrenom}</h2>
-                  <p className="text-xs text-muted-foreground">
-                    {selected.niveau} · الفوج {selected.classe}
-                    {selected.annualAvg !== null && ` · معدّل ${selected.annualAvg.toFixed(2)}/20`}
-                    {selected.unjustifiedHours > 0 && ` · ${selected.unjustifiedHours}س غياب`}
-                  </p>
-                  <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                    {selected.reasons.map(r => <ReasonBadge key={r} reason={r} />)}
+      ) : filtered.length === 0 && !error ? (
+        <p className="text-center text-sm text-muted-foreground py-16">
+          لا توجد حالات تحتاج إلى رسائل في هذا الاختيار.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(row => {
+            const phone = phoneOf(row);
+            const phoneDirty = (phones[row.id] ?? row.parentPhone ?? "") !== (row.parentPhone ?? "");
+            const busy = busyIds.has(row.id);
+            const result = results[row.id];
+            const isOpen = openId === row.id;
+            const message = messageOf(row);
+            return (
+              <div key={row.id} className="rounded-xl border p-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(row.id)}
+                    onChange={() => toggle(row.id)}
+                    aria-label={`تحديد ${row.nomPrenom}`}
+                  />
+                  <div className="min-w-[180px] flex-1">
+                    <p className="font-semibold text-sm">{row.nomPrenom}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {row.niveau} · {row.classe}
+                      {row.annualAvg !== null && ` · المعدل ${row.annualAvg.toFixed(2)}`}
+                      {row.unjustifiedHours > 0 && ` · غياب غير مبرر ${row.unjustifiedHours}س`}
+                    </p>
                   </div>
-                </div>
-                <button
-                  onClick={() => setSelected(null)}
-                  className="rounded-lg p-1.5 hover:bg-accent text-muted-foreground"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Reason tabs (pick message topic) */}
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <Edit3 className="h-3.5 w-3.5" /> موضوع الرسالة
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {selected.reasons.map(r => {
-                    const m = REASON_META[r];
-                    return (
-                      <button
-                        key={r}
-                        onClick={() => setActiveReason(r)}
-                        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-sm transition-all ${
-                          activeReason === r
-                            ? "border-emerald-500 bg-emerald-500/10 text-emerald-300 shadow-sm"
-                            : `${m.color} hover:opacity-80`
-                        }`}
-                      >
-                        {m.icon} {m.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Phone row in compose panel */}
-              {!selected.parentPhone && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
-                  <p className="text-xs text-amber-400 mb-2 flex items-center gap-1.5">
-                    <Phone className="h-3.5 w-3.5" /> لا يوجد رقم هاتف — أدخله هنا ثم احفظه
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="tel"
-                      value={phoneEdit[selected.id] ?? ""}
-                      onChange={e => {
-                        setPhoneEdit(p => ({ ...p, [selected.id]: e.target.value }));
-                        setSelected(s => s ? { ...s, parentPhone: null } : s);
-                      }}
-                      placeholder="0550 000 000"
-                      className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  <div className="flex flex-wrap gap-1">
+                    {row.reasons.map(reason => (
+                      <Badge key={reason} variant="outline" className={`text-[10px] ${REASON_CLASS[reason]}`}>
+                        {REASON_LABEL[reason]}
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      value={phones[row.id] ?? row.parentPhone ?? ""}
+                      onChange={e => setPhones(prev => ({ ...prev, [row.id]: e.target.value }))}
+                      placeholder="هاتف الولي"
+                      className="h-8 w-36 text-xs" dir="ltr"
+                      aria-label={`هاتف ولي ${row.nomPrenom}`}
                     />
-                    <button
-                      onClick={() => savePhone(selected.id)}
-                      disabled={!phoneEdit[selected.id]?.trim() || phoneSaving[selected.id]}
-                      className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {phoneSaved[selected.id]
-                        ? <><CheckCheck className="h-4 w-4" /> تم</>
-                        : phoneSaving[selected.id]
-                        ? <RefreshCw className="h-4 w-4 animate-spin" />
-                        : <><Save className="h-4 w-4" /> حفظ</>}
-                    </button>
+                    {phoneDirty && (
+                      <Button size="icon" variant="outline" className="h-8 w-8" disabled={busy} onClick={() => void savePhone(row)} title="حفظ الرقم">
+                        <Save className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
                   </div>
-                </div>
-              )}
-
-              {/* Message textarea */}
-              <div className="flex flex-col flex-1 gap-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-muted-foreground">نص الرسالة</p>
-                  <span className="text-xs text-muted-foreground">{message.length} حرف</span>
-                </div>
-                <textarea
-                  value={message}
-                  onChange={e => setMessage(e.target.value)}
-                  disabled={!activeReason}
-                  rows={8}
-                  className="w-full flex-1 resize-none rounded-xl border border-border bg-background px-4 py-3 text-sm leading-relaxed outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-40"
-                  placeholder={activeReason ? "" : "اختر موضوع الرسالة أعلاه..."}
-                />
-              </div>
-
-              {/* Send result banner */}
-              <AnimatePresence>
-                {sendResultMsg && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                    className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs border ${
-                      sendState === "sent"
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                        : "bg-red-500/10 border-red-500/30 text-red-400"
-                    }`}
+                  <Button
+                    size="sm" variant={isOpen ? "default" : "outline"} className="gap-1.5 h-8"
+                    onClick={() => setOpenId(isOpen ? null : row.id)}
                   >
-                    {sendState === "sent" ? <CheckCheck className="h-3.5 w-3.5 shrink-0" /> : <AlertCircle className="h-3.5 w-3.5 shrink-0" />}
-                    <span className="flex-1">{sendResultMsg}</span>
-                    <button onClick={() => setSendResultMsg(null)} className="hover:opacity-70">✕</button>
-                  </motion.div>
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    رسالة
+                  </Button>
+                </div>
+
+                {result && (
+                  <p className={`flex items-center gap-1.5 text-xs ${result.ok ? "text-emerald-500" : "text-red-500"}`}>
+                    {result.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                    {result.text}
+                  </p>
                 )}
-              </AnimatePresence>
 
-              {/* Actions */}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleCopy}
-                  disabled={!message.trim()}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-accent px-4 py-2.5 text-sm font-medium hover:bg-accent/80 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {copied
-                    ? <><CheckCheck className="h-4 w-4 text-emerald-400" /> تم النسخ</>
-                    : <><Copy className="h-4 w-4" /> نسخ</>}
-                </button>
-
-                {/* ✅ Replaces the sms: link (desktop-incompatible) with a
-                    real server-side send — works identically on PC. */}
-                <button
-                  onClick={handleSendNow}
-                  disabled={!message.trim() || !effectivePhone || sendState === "sending"}
-                  className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
-                    message.trim() && effectivePhone && sendState !== "sending"
-                      ? "bg-gradient-to-l from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/30 hover:opacity-90"
-                      : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
-                  }`}
-                >
-                  {sendState === "sending" ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> جارٍ الإرسال...</>
-                  ) : sendState === "sent" ? (
-                    <><CheckCheck className="h-4 w-4" /> تم الإرسال</>
-                  ) : !effectivePhone ? (
-                    <><Send className="h-4 w-4" /> أدخل رقم الهاتف أولاً</>
-                  ) : (
-                    <><Send className="h-4 w-4" /> إرسال الرسالة الآن</>
-                  )}
-                </button>
+                {isOpen && (
+                  <div className="space-y-2">
+                    <textarea
+                      value={message}
+                      onChange={e => setDrafts(prev => ({ ...prev, [row.id]: e.target.value }))}
+                      rows={3}
+                      className="w-full rounded-md border bg-transparent p-2 text-sm"
+                      dir="rtl"
+                      aria-label="نص الرسالة"
+                    />
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-muted-foreground">
+                        {message.length} حرف · {countSegments(message)} {countSegments(message) === 1 ? "رسالة" : "رسائل"}
+                      </span>
+                      <Button
+                        size="sm" className="gap-1.5"
+                        disabled={busy || !phone}
+                        onClick={() => void sendOne(row)}
+                      >
+                        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        إرسال
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
-
-              {/* Tip */}
-              <p className="text-xs text-muted-foreground text-center">
-                يتم إرسال الرسالة عبر بوابة SMS المضبوطة — لا حاجة لأي تطبيق لدى ولي الأمر
-              </p>
-            </div>
-          )}
+            );
+          })}
         </div>
-      </div>
-    </div>
+      )}
+    </motion.div>
   );
 }

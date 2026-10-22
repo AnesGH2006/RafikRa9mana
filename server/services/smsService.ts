@@ -37,6 +37,19 @@ export function isTwilioConfigured(): boolean {
   );
 }
 
+/**
+ * Twilio needs international format (+213...). Parents usually write Algerian numbers
+ * as 05XXXXXXXX / 06XXXXXXXX / 07XXXXXXXX, so convert those before sending.
+ */
+export function toInternationalDz(phone: string): string {
+  const cleaned = phone.replace(/[\s\-().]/g, "");
+  if (cleaned.startsWith("+")) return cleaned;
+  if (cleaned.startsWith("00")) return `+${cleaned.slice(2)}`;
+  if (/^213\d{9}$/.test(cleaned)) return `+${cleaned}`;
+  if (/^0\d{8,9}$/.test(cleaned)) return `+213${cleaned.slice(1)}`;
+  return cleaned;
+}
+
 // ── Individual send ───────────────────────────────────────────────────────────
 
 export interface SmsResult {
@@ -56,7 +69,7 @@ async function sendViaTwilio(to: string, message: string): Promise<SmsResult> {
     const msg = await client.messages.create({
       body: message,
       from: process.env.SMS_SENDER_ID!,
-      to,
+      to: toInternationalDz(to),
     });
     return { phone: to, success: true, sid: msg.sid };
   } catch (err: any) {
@@ -76,7 +89,7 @@ async function sendViaGateway(
     if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
     const body = JSON.stringify({ to, message, phone: to, text: message });
-    const res = await fetch(gatewayUrl, { method: "POST", headers, body });
+    const res = await fetch(gatewayUrl, { method: "POST", headers, body, signal: AbortSignal.timeout(15000) });
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
@@ -125,7 +138,7 @@ export async function sendBulkSms({
     const results = settled.map((r, i) =>
       r.status === "fulfilled"
         ? r.value
-        : { phone: numbers[i], success: false, error: String((r as any).reason) },
+        : { phone: numbers[i]!, success: false, error: String((r as any).reason) },
     );
     const sent   = results.filter(r => r.success).length;
     const failed = results.length - sent;
@@ -140,14 +153,14 @@ export async function sendBulkSms({
     .limit(1);
 
   if (school?.smsGatewayUrl) {
-    logger.info({ count: numbers.length, url: school.smsGatewayUrl }, "Sending SMS via gateway");
+    logger.info({ count: numbers.length }, "Sending SMS via school gateway");
     const settled = await Promise.allSettled(
       numbers.map(to => sendViaGateway(to, message, school.smsGatewayUrl!, school.smsGatewayApiKey ?? undefined)),
     );
     const results = settled.map((r, i) =>
       r.status === "fulfilled"
         ? r.value
-        : { phone: numbers[i], success: false, error: String((r as any).reason) },
+        : { phone: numbers[i]!, success: false, error: String((r as any).reason) },
     );
     const sent   = results.filter(r => r.success).length;
     const failed = results.length - sent;
