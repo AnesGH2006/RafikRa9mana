@@ -59,6 +59,7 @@ import UploadGradesOcrPage from "@/pages/upload-grades-ocr";
 import MembersPage from "@/pages/members";
 import MyChildPage from "@/pages/my-child";
 import ParentRegisterPage from "@/pages/parent-register";
+import SmsPage from "@/pages/sms";
 import PaymentDemoPage from "@/pages/payment-demo";
 import AuditLogPage from "@/pages/audit-log";
 import ClassBalancerPage from "@/pages/class-balancer";
@@ -828,6 +829,7 @@ function AppLayout() {
               <Switch key={loc}>
               <Route path="/"                    component={Dashboard} />
               <Route path="/students"            component={Students} />
+              <Route path="/sms"                 component={SmsPage} />
               <Route path="/results"             component={Results} />
               <Route path="/subjects"            component={SubjectsPage} />
               <Route path="/exam-results"        component={ExamResultsPage} />
