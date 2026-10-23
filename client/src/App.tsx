@@ -10,7 +10,7 @@ import {
   ChevronDown, FileSpreadsheet, BarChart3, UserX, List, CheckSquare,
   User, BarChart2, CalendarOff, UserCheck, RefreshCw, AlertCircle,
   TrendingUp, Star, CreditCard, Upload, FileText, Archive,
-  CircleArrowRight, CircleDot, Trophy, FileBarChart, Bot, Download,
+  CircleArrowRight, MessageSquare, CircleDot, Trophy, FileBarChart, Bot, Download,
   ScanLine, Shield, Calendar, Shuffle,
 } from "lucide-react";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
@@ -76,6 +76,7 @@ interface NavItemDef {
   labelKey: string;
   badge?: string;
   accent?: string;
+  label?: string;
 }
 interface SectionDef {
   id: string;
@@ -94,6 +95,7 @@ const SECTIONS: SectionDef[] = [
     items: [
       { href: "/",         icon: LayoutDashboard, labelKey: "nav.dashboard" },
       { href: "/students", icon: List,            labelKey: "nav.students"  },
+      { href: "/sms", icon: MessageSquare, labelKey: "nav.sms", label: "الرسائل SMS" },
     ],
   },
   {
