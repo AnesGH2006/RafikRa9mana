@@ -1,4 +1,6 @@
 import { Router, type Request, type Response } from "express";
+import { desc, eq } from "drizzle-orm";
+import { db, paymentsTable, schoolInfoTable } from "../../shared/db.js";
 import { generateActivationBatch, redeemActivationCode } from "../services/activationCodeService.js";
 import { activateFreePlan, completeDemoPayment, createDemoCheckout, createChargilyCheckout, settleChargilyPayment, verifyChargilySignature } from "../services/paymentService.js";
 import { PAID_PLAN_PRICES_DZD } from "../../shared/subscription.js";
@@ -23,16 +25,37 @@ function requireAdmin(req: Request, res: Response): boolean {
   return true;
 }
 
-/** إرجاع جميع خيارات الدفع المتاحة لجميع الحسابات دون قيود */
-function purchaseOptions(req: Request): Array<{ plan: string; amountDzd: number }> {
-  const options: Array<{ plan: string; amountDzd: number }> = [
-    { plan: PARENT_PLAN, amountDzd: PARENT_PLAN_PRICE_DZD },
-    { plan: STAFF_PLAN, amountDzd: STAFF_PLAN_PRICE_DZD },
-  ];
-  for (const [plan, amount] of Object.entries(PAID_PLAN_PRICES_DZD)) {
-    options.push({ plan, amountDzd: Number(amount) });
+/** Public origin of this app, used for the page Chargily sends people back to after paying. */
+function appOrigin(req: Request): string {
+  const configured = process.env.PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (configured) return configured;
+  const proto = req.get("x-forwarded-proto")?.split(",")[0]?.trim() || req.protocol;
+  return `${proto}://${req.get("host")}`;
+}
+
+/**
+ * What this logged-in account is allowed to buy. Used by the payments page and by the checkout guard.
+ *  - teacher / supervisor: the 2,000 DZD staff plan
+ *  - registered parent: the parent plan
+ *  - any other account (school owner, or a parent who has not registered with a school yet):
+ *    the school plans, plus the parent plan unless the account already runs a school
+ */
+async function purchaseOptions(req: Request): Promise<Array<{ plan: string; amountDzd: number }>> {
+  const member = req.memberContext;
+  if (member) {
+    if (member.role === "teacher" || member.role === "supervisor") {
+      return [{ plan: STAFF_PLAN, amountDzd: STAFF_PLAN_PRICE_DZD }];
+    }
+    if (member.role === "parent") {
+      return [{ plan: PARENT_PLAN, amountDzd: PARENT_PLAN_PRICE_DZD }];
+    }
+    return [];
   }
-  return options;
+  if (req.user?.role === "admin") return [];
+
+  const schoolOptions = Object.entries(PAID_PLAN_PRICES_DZD).map(([plan, amountDzd]) => ({ plan, amountDzd: Number(amountDzd) }));
+  const [school] = await db.select({ id: schoolInfoTable.id }).from(schoolInfoTable).where(eq(schoolInfoTable.userId, req.user!.id)).limit(1);
+  return school ? schoolOptions : [...schoolOptions, { plan: PARENT_PLAN, amountDzd: PARENT_PLAN_PRICE_DZD }];
 }
 
 /** Is this account's own paid plan currently active? */
@@ -46,10 +69,10 @@ function ownPlanIsActive(req: Request): boolean {
   const live = String(user.subscriptionStatus) === "active" && (!expires || expires.getTime() > Date.now());
   if (member?.role === "parent") return live && plan === PARENT_PLAN;
   if (member) return false;
-  return live && (plan === "basic" || plan === "pro" || plan === "school_full");
+  return live && (plan === "basic" || plan === "pro" || plan === PARENT_PLAN);
 }
 
-// GET /api/payments/me
+// GET /api/payments/me — everything the payments pages need for the logged-in account.
 router.get("/payments/me", async (req, res): Promise<void> => {
   if (!requireAuth(req, res)) return;
   const user = req.user!;
@@ -57,13 +80,25 @@ router.get("/payments/me", async (req, res): Promise<void> => {
   const role = member ? member.role : (user.role === "admin" ? "admin" : "owner");
   const expires = user.subscriptionExpiresAt ? new Date(String(user.subscriptionExpiresAt)) : null;
 
+  const [last] = await db.select({
+    amountDzd: paymentsTable.amountDzd,
+    status: paymentsTable.status,
+    paidAt: paymentsTable.paidAt,
+  })
+    .from(paymentsTable)
+    .where(eq(paymentsTable.userId, user.id))
+    .orderBy(desc(paymentsTable.createdAt))
+    .limit(1);
+
   res.set("Cache-Control", "private, no-store").json({
     role,
+    registered: Boolean(member),
     plan: String(user.subscriptionPlan),
     status: String(user.subscriptionStatus),
     expiresAt: expires && !Number.isNaN(expires.getTime()) ? expires.toISOString() : null,
     active: ownPlanIsActive(req),
-    options: purchaseOptions(req),
+    options: await purchaseOptions(req),
+    lastPayment: last ? { amountDzd: last.amountDzd, status: last.status, paidAt: last.paidAt } : null,
     prices: {
       school: Object.fromEntries(Object.entries(PAID_PLAN_PRICES_DZD).map(([plan, amount]) => [plan, Number(amount)])),
       staff: STAFF_PLAN_PRICE_DZD,
@@ -140,15 +175,19 @@ router.post("/payments/demo/complete", async (req, res): Promise<void> => {
 
 router.post("/payments/chargily/checkout", async (req, res): Promise<void> => {
   if (!requireAuth(req, res)) return;
-  const returnUrl = typeof req.body?.returnUrl === "string" ? req.body.returnUrl : `${req.protocol}://${req.get("host")}/payments`;
   const amountDzd = Number(req.body?.amountDzd ?? 1000);
 
-  // السماح بأي مبلغ صالح ودعم كافة الخطس دون قيود أدوار الحساب
-  const ALLOWED_AMOUNTS = new Set([1000, 2000, 3000, 7000, 8000, STAFF_PLAN_PRICE_DZD, PARENT_PLAN_PRICE_DZD, ...Object.values(PAID_PLAN_PRICES_DZD)]);
-  if (!ALLOWED_AMOUNTS.has(amountDzd) && amountDzd < 100) {
-    res.status(400).json({ error: "مبلغ الدفع غير مدعوم" });
+  // Each kind of account may only buy its own plan.
+  const options = await purchaseOptions(req);
+  if (!options.some(option => option.amountDzd === amountDzd)) {
+    res.status(403).json({ error: "هذه الخطة غير متاحة لهذا الحساب" });
     return;
   }
+
+  // Always send people back to the payment-return page, whatever the client asked for.
+  // That page waits for the webhook to activate the plan, then sends the person to the right screen.
+  // (Ignoring the client's returnUrl also avoids redirects to other sites and to pages that no longer exist.)
+  const returnUrl = `${appOrigin(req)}/payment-return`;
 
   try {
     const payment = await createChargilyCheckout(req.user!.id, returnUrl, amountDzd);
@@ -159,13 +198,17 @@ router.post("/payments/chargily/checkout", async (req, res): Promise<void> => {
   }
 });
 
+// Chargily Pay v2 webhook.
+//  - The signature arrives in the `signature` header (HMAC-SHA256 of the RAW body, keyed with the API secret key).
+//  - The payload is an event: { id, type: "checkout.paid" | ..., data: { id, status, metadata, ... } },
+//    so the checkout id and status are inside `data`, not at the top level.
 router.post("/payments/chargily/webhook", async (req, res): Promise<void> => {
   const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
   const signature = req.header("signature") ?? req.header("x-chargily-signature");
 
   if (!verifyChargilySignature(rawBody, signature)) {
     req.log?.warn?.(
-      { hasSignature: signature ? true : false, hasRawBody: (req as Request & { rawBody?: string }).rawBody ? true : false },
+      { hasSignature: Boolean(signature), hasRawBody: Boolean((req as Request & { rawBody?: string }).rawBody) },
       "Chargily webhook rejected: invalid signature",
     );
     res.status(401).json({ error: "Invalid signature" });
