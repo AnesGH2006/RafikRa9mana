@@ -47,6 +47,8 @@ export default function PaymentReturnPage() {
   const [phase, setPhase] = useState<Phase>("checking");
   const [me, setMe] = useState<Me | null>(null);
   const [message, setMessage] = useState("");
+  // Chargily adds ?checkout_id=... when it sends the person back. Without it, nobody just paid.
+  const [cameFromCheckout] = useState(() => new URLSearchParams(window.location.search).has("checkout_id"));
 
   const check = useCallback(async (): Promise<boolean> => {
     try {
@@ -83,6 +85,11 @@ export default function PaymentReturnPage() {
       const done = await check();
       tries += 1;
       if (stopped || done) return;
+      if (!cameFromCheckout) {
+        // Opened by hand or after logging in: no payment is pending, so don't make the person wait.
+        window.location.replace(BASE);
+        return;
+      }
       if (tries >= 20) {
         setPhase("waiting");
         return;
@@ -94,7 +101,7 @@ export default function PaymentReturnPage() {
       stopped = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [check]);
+  }, [check, cameFromCheckout]);
 
   const target = me ? targetFor(me) : "/";
   const go = useCallback(() => {
