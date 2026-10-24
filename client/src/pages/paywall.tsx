@@ -87,7 +87,14 @@ export default function PaymentReturnPage() {
       if (stopped || done) return;
       if (!cameFromCheckout) {
         // Opened by hand or after logging in: no payment is pending, so don't make the person wait.
-        window.location.replace(BASE);
+        const atRoot = window.location.pathname.replace(/\/$/, "") === BASE.replace(/\/$/, "");
+        if (atRoot) {
+          // Never redirect to the page we are already on (that would reload forever).
+          setPhase("error");
+          setMessage("لا توجد عملية دفع قيد الانتظار.");
+        } else {
+          window.location.replace(BASE);
+        }
         return;
       }
       if (tries >= 20) {
