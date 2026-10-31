@@ -1,0 +1,82 @@
+import type { Request, Response, NextFunction } from "express";
+
+/** Plan value stored in users.subscription_plan for a paying teacher / supervisor. */
+export const STAFF_PLAN = "staff";
+/** Yearly price in DZD. A payment of exactly this amount activates the staff plan. */
+export const STAFF_PLAN_PRICE_DZD = 2000;
+
+export type StaffFeature =
+  | "ocr_grades"
+  | "ocr_absences"
+  | "excel_export"
+  | "average_calculator"
+  | "parent_notifications";
+
+/** What each paying role gets for 2,000 DZD/year. */
+export const STAFF_BUNDLES: Record<"teacher" | "supervisor", StaffFeature[]> = {
+  teacher: ["ocr_grades", "excel_export", "average_calculator"],
+  supervisor: ["ocr_absences", "excel_export", "parent_notifications"],
+};
+
+type SubscriptionFields = {
+  subscriptionPlan?: unknown;
+  subscriptionStatus?: unknown;
+  subscriptionExpiresAt?: unknown;
+};
+
+/** True when this user personally holds an active, unexpired staff subscription. */
+export function hasOwnStaffSubscription(user: SubscriptionFields | undefined | null): boolean {
+  if (!user) return false;
+  if (String(user.subscriptionPlan) !== STAFF_PLAN) return false;
+  if (String(user.subscriptionStatus) !== "active") return false;
+  if (!user.subscriptionExpiresAt) return false;
+  const expires = new Date(String(user.subscriptionExpiresAt)).getTime();
+  return Number.isFinite(expires) && expires > Date.now();
+}
+
+/**
+ * Can the logged-in user use this paid feature?
+ *  - school owner / admin: same rule as before (admin, or an active subscription)
+ *  - parent: never (parents are not part of the staff plan)
+ *  - teacher / supervisor: yes if the SCHOOL has a paid plan (basic/pro),
+ *    or if they personally paid the staff plan and the feature is in their role's bundle
+ *  - counselor and other roles: only through the school's paid plan
+ */
+export function canUseStaffFeature(req: Request, feature: StaffFeature): boolean {
+  if (!req.isAuthenticated() || !req.user) return false;
+
+  const member = req.memberContext;
+  if (!member) {
+    return req.user.role === "admin" || String(req.user.subscriptionStatus) === "active";
+  }
+  if (member.role === "parent") return false;
+
+  const schoolPlan = String(member.schoolSubscriptionPlan);
+  const schoolPaid = String(member.schoolSubscriptionStatus) === "active"
+    && (schoolPlan === "basic" || schoolPlan === "pro");
+  if (schoolPaid) return true;
+
+  const bundle = STAFF_BUNDLES[member.role as "teacher" | "supervisor"];
+  return !!bundle && bundle.includes(feature) && hasOwnStaffSubscription(req.user);
+}
+
+/** Route guard: respond 402 with the staff plan details when the feature is not unlocked. */
+export function requireStaffFeature(feature: StaffFeature) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (canUseStaffFeature(req, feature)) {
+      next();
+      return;
+    }
+    res.status(402).json({
+      error: "هذه الميزة تتطلب اشتراك الأستاذ/المشرف (2000 دج في السنة)",
+      requiredPlan: STAFF_PLAN,
+      priceDzd: STAFF_PLAN_PRICE_DZD,
+      feature,
+    });
+  };
+}
+
+/** Plan value stored in users.subscription_plan for a paying parent (premium student tracking). */
+export const PARENT_PLAN = "parent";
+/** Yearly price in DZD for the parent plan. */
+export const PARENT_PLAN_PRICE_DZD = 1000;
