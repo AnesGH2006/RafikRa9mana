@@ -28,6 +28,7 @@ import pedagogyRouter from "./pedagogy.js";
 import { requirePaidPlan } from "../middlewares/planAccess.js";
 import { memberPermissionMiddleware } from "../middlewares/memberPermissions.js";
 import smsRouter from "./sms.js";
+import parentLinkRouter from "./Parent-link.js";
 const router: IRouter = Router();
 
 router.use(memberPermissionMiddleware);
@@ -35,6 +36,8 @@ router.use(healthRouter);
 
 router.use(authRouter);
 router.use(paymentsRouter);
+// Parents must be able to find a school and link their account before purchasing a plan.
+router.use(parentLinkRouter);
 router.use(requirePaidPlan);
   router.use(smsRouter);
 router.use(schoolRouter);
