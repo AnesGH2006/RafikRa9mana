@@ -1063,6 +1063,7 @@ function AuthGate() {
       }
     </AnimatePresence>
   );
+}
 
 export default function App() {
   return (
